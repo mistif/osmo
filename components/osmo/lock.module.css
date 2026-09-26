@@ -1,0 +1,144 @@
+/* Osmo's lock screen: only his circle, his name and one way in. */
+.lock {
+	--bone: #f3efe8;
+	--aura-a: hsl(172 38% 50%);
+	--base: hsl(172 30% 10%);
+	min-height: 100svh;
+	display: grid;
+	place-items: center;
+	padding: 2rem 1rem;
+	color: var(--bone);
+	background: radial-gradient(circle at 50% 42%, color-mix(in oklab, var(--aura-a) 26%, transparent), transparent 60%), var(--base);
+}
+
+.inner {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 1.1rem;
+	width: min(22rem, 100%);
+	text-align: center;
+}
+
+.circle {
+	width: 7.5rem;
+	aspect-ratio: 1;
+	border-radius: 50%;
+	border: 1px solid color-mix(in oklab, var(--aura-a) 60%, transparent);
+	background: radial-gradient(closest-side, color-mix(in oklab, var(--aura-a) 14%, transparent), transparent 74%);
+	animation: breathe 5.4s ease-in-out infinite;
+}
+
+.name {
+	margin: 0;
+	font-size: clamp(2.2rem, 8vw, 3rem);
+	font-weight: 700;
+	line-height: 1;
+	letter-spacing: -0.035em;
+}
+
+.hint {
+	margin: 0;
+	font-size: 1rem;
+	opacity: 0.72;
+}
+
+.primary {
+	font: inherit;
+	font-weight: 600;
+	color: #0c111b;
+	background: var(--bone);
+	border: 0;
+	border-radius: 999px;
+	padding: 0.8rem 1.5rem;
+	cursor: pointer;
+}
+
+.quiet {
+	font: inherit;
+	font-size: 0.9rem;
+	color: inherit;
+	opacity: 0.7;
+	background: none;
+	border: 0;
+	text-decoration: underline;
+	text-underline-offset: 0.2em;
+	cursor: pointer;
+}
+
+.form {
+	display: flex;
+	flex-direction: column;
+	gap: 0.7rem;
+	width: 100%;
+}
+
+.field {
+	font: inherit;
+	color: var(--bone);
+	background: color-mix(in oklab, #0c111b 70%, transparent);
+	border: 1px solid color-mix(in oklab, var(--bone) 26%, transparent);
+	border-radius: 999px;
+	padding: 0.75rem 1.1rem;
+}
+
+.error {
+	margin: 0;
+	color: #f2b8a2;
+	font-size: 0.95rem;
+}
+
+.primary:focus-visible,
+.quiet:focus-visible,
+.field:focus-visible {
+	outline: 2px solid var(--aura-a);
+	outline-offset: 3px;
+}
+
+.primary:disabled {
+	opacity: 0.55;
+	cursor: wait;
+}
+
+/* The one bold moment: the circle blooms outward and the room takes over. */
+.opening .circle {
+	animation: bloom 0.7s cubic-bezier(0.5, 0, 0.75, 0) forwards;
+}
+.opening .name,
+.opening .hint,
+.opening .primary,
+.opening .quiet,
+.opening .form {
+	opacity: 0;
+	transition: opacity 0.25s ease;
+}
+
+@keyframes breathe {
+	0%,
+	100% {
+		scale: 1;
+		opacity: 0.85;
+	}
+	50% {
+		scale: 1.04;
+		opacity: 1;
+	}
+}
+
+@keyframes bloom {
+	to {
+		scale: 14;
+		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.circle {
+		animation: none;
+	}
+	.opening .circle {
+		animation: none;
+		opacity: 0;
+		transition: opacity 0.2s ease;
+	}
+}
