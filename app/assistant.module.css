@@ -1,0 +1,462 @@
+/* Osmo's room. Everything here is scoped to the assistant page (CSS module). */
+
+/* Registered so the room fades between moods instead of snapping. */
+@property --aura-a {
+	syntax: "<color>";
+	inherits: true;
+	initial-value: hsl(172 38% 50%);
+}
+@property --aura-b {
+	syntax: "<color>";
+	inherits: true;
+	initial-value: hsl(212 38% 50%);
+}
+@property --base {
+	syntax: "<color>";
+	inherits: true;
+	initial-value: hsl(172 30% 12%);
+}
+
+.stage {
+	--bone: #f3efe8;
+	--ink: #0c111b;
+	/* Set from the mood in assistant.tsx: --aura-a, --aura-b, --base, --pulse, --strength. */
+	--pulse: 3.2s;
+	--strength: 0.35;
+	/* 0 at rest; assistant.tsx raises it character by character while Osmo speaks. */
+	--voice: 0;
+	/* Chat shape and motion per emotion, overridden by the data-tone rules below. */
+	--radius: 1.25rem;
+	--enter: rise 0.5s ease-out both;
+
+	position: relative;
+	isolation: isolate;
+	/* The room is one screen tall and stays put; only the conversation inside it scrolls. */
+	overflow: clip;
+	height: calc(100svh - 2.25rem);
+	padding: 0 2rem;
+	background: var(--base);
+	color: var(--bone);
+	transition:
+		--aura-a 1.8s ease,
+		--aura-b 1.8s ease,
+		--base 1.8s ease;
+}
+
+/* ---------- The room: two breathing auras, and a circle that ripples when Osmo speaks ---------- */
+
+.aura {
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	overflow: clip;
+	pointer-events: none;
+}
+
+.orb {
+	position: absolute;
+	border-radius: 50%;
+	will-change: transform, opacity;
+	animation: breathe var(--pulse) ease-in-out infinite;
+}
+
+.orbA {
+	width: 70vmax;
+	height: 70vmax;
+	left: -22vmax;
+	top: -28vmax;
+	background: radial-gradient(
+		closest-side,
+		color-mix(in oklab, var(--aura-a) calc(var(--strength) * 75%), transparent),
+		transparent
+	);
+}
+
+.orbB {
+	width: 62vmax;
+	height: 62vmax;
+	right: -22vmax;
+	bottom: -30vmax;
+	background: radial-gradient(
+		closest-side,
+		color-mix(in oklab, var(--aura-b) calc(var(--strength) * 65%), transparent),
+		transparent
+	);
+	animation-delay: calc(var(--pulse) / -2);
+}
+
+/* Waiting: a circle breathing faintly. Speaking: it swells with the voice, and ripples leave it on each word. */
+.core,
+.wave {
+	position: absolute;
+	left: 50%;
+	top: 40%;
+	width: min(20rem, 70vw);
+	aspect-ratio: 1;
+	translate: -50% -50%;
+	border-radius: 50%;
+}
+
+.core {
+	border: 1px solid color-mix(in oklab, var(--aura-a) 60%, transparent);
+	background: radial-gradient(
+		closest-side,
+		color-mix(in oklab, var(--aura-a) calc(var(--strength) * 20%), transparent),
+		transparent 74%
+	);
+	transform: scale(calc(1 + var(--voice) * 0.22));
+	transition: transform 90ms ease-out;
+	/* Idle breath on `scale`, separate from the voice's `transform`, so the two never fight. */
+	animation: idle var(--pulse) ease-in-out infinite;
+}
+
+/* While Osmo speaks, the voice drives the circle and heart instead. */
+.stage[data-speaking] .core,
+.stage[data-speaking] .heart {
+	animation: none;
+}
+
+.wave {
+	border: 1.5px solid color-mix(in oklab, var(--aura-a) 70%, transparent);
+	opacity: 0;
+	animation: wave 1.5s ease-out forwards;
+}
+
+@keyframes breathe {
+	0%,
+	100% {
+		transform: scale(0.92);
+		opacity: 0.7;
+	}
+	50% {
+		transform: scale(1.1);
+		opacity: 1;
+	}
+}
+
+@keyframes idle {
+	0%,
+	100% {
+		scale: 1;
+		opacity: 0.85;
+	}
+	50% {
+		scale: 1.03;
+		opacity: 1;
+	}
+}
+
+@keyframes idle-heart {
+	0%,
+	100% {
+		scale: 1;
+	}
+	50% {
+		scale: 1.14;
+	}
+}
+
+@keyframes wave {
+	0% {
+		transform: scale(1.02);
+		opacity: calc(0.3 + var(--amp) * 0.6);
+	}
+	100% {
+		transform: scale(calc(1.6 + var(--amp) * 0.9));
+		opacity: 0;
+	}
+}
+
+/* ---------- The conversation ---------- */
+
+.column {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 1.25rem;
+	max-width: 40rem;
+	height: 100%;
+	margin: 0 auto;
+	padding-top: clamp(1.5rem, 4vw, 3rem);
+}
+
+.head {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+}
+
+.heart {
+	flex: none;
+	width: 1rem;
+	height: 1rem;
+	border-radius: 50%;
+	background: var(--aura-a);
+	/* Breathes faintly while waiting; swells with the voice while speaking. */
+	transform: scale(calc(1 + var(--voice) * 0.9));
+	box-shadow: 0 0 calc(var(--voice) * 1.1rem) color-mix(in oklab, var(--aura-a) 75%, transparent);
+	transition:
+		transform 90ms ease-out,
+		box-shadow 90ms ease-out;
+	animation: idle-heart var(--pulse) ease-in-out infinite;
+}
+
+.name {
+	margin: 0;
+	font-size: clamp(2.6rem, 9vw, 4.25rem);
+	font-weight: 700;
+	line-height: 1;
+	letter-spacing: -0.035em;
+}
+
+.mood {
+	margin: 0.35rem 0 0;
+	font-size: 1.05rem;
+	color: color-mix(in oklab, var(--bone) 80%, var(--aura-a));
+}
+
+.log {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 0.7rem;
+	/* The only thing that scrolls. Padding keeps bubble glows from being cut off at the edges. */
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	margin: 0 -0.75rem;
+	padding: 1.25rem 0.75rem 0.5rem;
+	scrollbar-width: thin;
+	scrollbar-color: color-mix(in oklab, var(--bone) 22%, transparent) transparent;
+	/* Older messages fade out under the header instead of being cut off by a hard edge. */
+	mask-image: linear-gradient(to bottom, transparent, #000 1.5rem);
+}
+
+.end {
+	flex: none;
+	scroll-margin-bottom: 0.5rem;
+}
+
+.item {
+	flex: none;
+	display: flex;
+}
+.user {
+	justify-content: flex-end;
+}
+
+.bubble {
+	margin: 0;
+	max-width: 86%;
+	padding: 0.7rem 1rem;
+	font-size: 1rem;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+	border-radius: var(--radius);
+	animation: var(--enter);
+}
+
+.agent .bubble {
+	color: var(--bone);
+	background: color-mix(in oklab, var(--aura-a) calc(var(--strength) * 32%), #10151f);
+	border: 1px solid color-mix(in oklab, var(--aura-a) calc(var(--strength) * 75%), transparent);
+	border-bottom-left-radius: 0.3rem;
+	box-shadow: 0 0 calc(var(--strength) * 1.3rem) color-mix(in oklab, var(--aura-a) 40%, transparent);
+}
+
+.user .bubble {
+	color: var(--ink);
+	background: var(--bone);
+	border-bottom-right-radius: 0.3rem;
+}
+
+.item[hidden] {
+	display: none;
+}
+
+/* The bubble being spoken glows with the voice. */
+.agent.speaking .bubble {
+	box-shadow: 0 0 calc(var(--strength) * 0.9rem + var(--voice) * 1.1rem)
+		color-mix(in oklab, var(--aura-a) calc(30% + var(--voice) * 40%), transparent);
+	transition: box-shadow 90ms ease-out;
+}
+
+/* ---------- Tone: the chat changes shape and motion with the strongest emotion ---------- */
+
+.stage[data-tone="joy"],
+.stage[data-tone="love"],
+.stage[data-tone="hope"],
+.stage[data-tone="trust"] {
+	--radius: 1.7rem;
+	--enter: hop 0.55s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+
+.stage[data-tone="anger"],
+.stage[data-tone="disgust"] {
+	--radius: 0.5rem;
+	--enter: snap 0.16s ease-out both;
+}
+
+.stage[data-tone="sadness"],
+.stage[data-tone="loneliness"],
+.stage[data-tone="guilt"],
+.stage[data-tone="boredom"] {
+	--enter: sink 1s ease-out both;
+}
+
+.stage[data-tone="surprise"] {
+	--enter: pop 0.3s ease-out both;
+}
+
+.stage[data-tone="fear"] {
+	--enter: rise 0.35s ease-out both;
+}
+.stage[data-tone="fear"] .agent.speaking .bubble {
+	animation:
+		var(--enter),
+		tremble 0.18s linear infinite;
+}
+
+@keyframes rise {
+	from {
+		opacity: 0;
+		transform: translateY(0.6rem);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@keyframes hop {
+	from {
+		opacity: 0;
+		transform: translateY(1rem) scale(0.95);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@keyframes snap {
+	from {
+		opacity: 0;
+		transform: translateX(-0.6rem);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@keyframes sink {
+	from {
+		opacity: 0;
+		transform: translateY(-0.7rem);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@keyframes pop {
+	from {
+		opacity: 0;
+		transform: scale(0.8);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@keyframes tremble {
+	0%,
+	100% {
+		translate: 0 0;
+	}
+	25% {
+		translate: 0.6px -0.4px;
+	}
+	75% {
+		translate: -0.6px 0.4px;
+	}
+}
+
+/* ---------- Composer ---------- */
+
+.composer {
+	flex: none;
+	display: flex;
+	gap: 0.6rem;
+	padding: 0.25rem 0 1.25rem;
+}
+
+.field {
+	flex: 1;
+	min-width: 0;
+	font: inherit;
+	color: var(--bone);
+	background: color-mix(in oklab, var(--ink) 72%, transparent);
+	border: 1px solid color-mix(in oklab, var(--bone) 28%, transparent);
+	border-radius: 999px;
+	padding: 0.8rem 1.15rem;
+}
+.field::placeholder {
+	color: color-mix(in oklab, var(--bone) 62%, transparent);
+}
+.field:focus-visible {
+	outline: 2px solid var(--aura-a);
+	outline-offset: 2px;
+	border-color: var(--aura-a);
+}
+
+.send {
+	font: inherit;
+	font-weight: 600;
+	color: var(--ink);
+	background: var(--bone);
+	border: 0;
+	border-radius: 999px;
+	padding: 0.8rem 1.5rem;
+	cursor: pointer;
+	transition: transform 0.15s ease;
+}
+.send:hover:not(:disabled) {
+	transform: translateY(-1px);
+}
+.send:focus-visible {
+	outline: 2px solid var(--aura-a);
+	outline-offset: 3px;
+}
+.send:disabled,
+.field:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+/* ---------- Reduced motion: keep the colors, stop the movement ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+	.stage {
+		transition: none;
+	}
+	.orb,
+	.bubble,
+	.stage[data-tone="fear"] .agent.speaking .bubble {
+		animation: none;
+	}
+	.wave {
+		display: none;
+	}
+	.core,
+	.heart {
+		transform: none;
+		transition: none;
+		animation: none;
+	}
+	.send {
+		transition: none;
+	}
+}
