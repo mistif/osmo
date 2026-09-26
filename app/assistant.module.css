@@ -33,7 +33,7 @@
 	isolation: isolate;
 	/* The room is one screen tall and stays put; only the conversation inside it scrolls. */
 	overflow: clip;
-	height: calc(100svh - 2.25rem);
+	height: 100svh;
 	padding: 0 2rem;
 	background: var(--base);
 	color: var(--bone);

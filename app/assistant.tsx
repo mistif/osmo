@@ -324,7 +324,7 @@ export default function AgentChat() {
 		(async () => {
 			try {
 				if (!(await ensureSession())) {
-					router.replace("/login");
+					router.replace("/lock");
 					return;
 				}
 				const [loaded, facts, history] = await Promise.all([
