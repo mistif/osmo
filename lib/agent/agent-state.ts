@@ -1,8 +1,11 @@
 import { ensureSession, supabase } from "../supabase";
-import { mergeBond, sanitizeBond, type Bond } from "./bond/bond";
+import { localDay, mergeBond, sanitizeBond, type Bond } from "./bond/bond";
+import { foldMood, sanitizeMoodDay } from "./mood-days";
+import { moodTheme } from "./mood-theme";
 import { stateFromRows, type Loaded } from "./load";
 import type { Effect } from "./mind";
 import { defaultState, type AgentState } from "./state";
+import { resolve } from "./personality/assemble";
 
 export async function loadState(): Promise<Loaded> {
 	const failed: Loaded = { state: defaultState(), ok: false, lastAt: null };
@@ -37,6 +40,27 @@ async function bondToSave(bond: Bond): Promise<Bond> {
 	}
 }
 
+// Today's mood row gets one more sample. A failure here is logged and never stops the rest of the save.
+async function saveMoodDay(state: AgentState, userId: string): Promise<void> {
+	try {
+		const day = localDay(Date.now());
+		const { valence, tone } = moodTheme(state.activations, resolve(state.genome).baseline);
+		const { data, error } = await supabase
+			.from("mood_days")
+			.select("day,valence,strongest,tally,samples")
+			.eq("day", day)
+			.maybeSingle();
+		if (error) throw error;
+		const row = foldMood(sanitizeMoodDay(data), day, valence, tone);
+		const saved = await supabase
+			.from("mood_days")
+			.upsert({ user_id: userId, ...row, updated_at: new Date().toISOString() }, { onConflict: "user_id,day" });
+		if (saved.error) throw saved.error;
+	} catch (error) {
+		console.error("Could not save today's mood", error);
+	}
+}
+
 export async function persistTurn(state: AgentState, effects: Effect[]): Promise<void> {
 	try {
 		const session = await ensureSession();
@@ -63,6 +87,8 @@ export async function persistTurn(state: AgentState, effects: Effect[]): Promise
 				{ onConflict: "user_id" },
 			),
 		);
+
+		await saveMoodDay(state, userId);
 
 		for (const effect of effects) {
 			if (effect.type === "event") {
