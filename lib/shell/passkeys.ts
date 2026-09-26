@@ -62,6 +62,12 @@ export async function removeDevice(id: string): Promise<unknown | null> {
 	}
 }
 
-export async function lockOsmo(): Promise<void> {
-	await supabase.auth.signOut({ scope: "local" });
+// Returns the error so Settings can say it couldn't lock instead of pretending.
+export async function lockOsmo(): Promise<unknown | null> {
+	try {
+		const { error } = await supabase.auth.signOut({ scope: "local" });
+		return error;
+	} catch (error) {
+		return error;
+	}
 }
