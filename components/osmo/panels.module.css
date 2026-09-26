@@ -1,0 +1,193 @@
+/* Panels are the inside of Osmo's mind: tinted by his mood, plain lines of text, no cards. */
+.links {
+	margin-left: auto;
+	display: flex;
+	gap: 1.1rem;
+	align-self: flex-start;
+	padding-top: 0.4rem;
+}
+
+.link {
+	font: inherit;
+	font-size: 0.95rem;
+	color: var(--bone);
+	opacity: 0.7;
+	background: none;
+	border: 0;
+	padding: 0.2rem 0;
+	cursor: pointer;
+	border-bottom: 1px solid transparent;
+}
+.link:hover {
+	opacity: 1;
+}
+.link[aria-expanded="true"] {
+	opacity: 1;
+	border-bottom-color: var(--aura-a);
+}
+
+.panel {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 5;
+	width: min(28rem, 50vw);
+	overflow-y: auto;
+	padding: 1.6rem 1.75rem 2rem;
+	color: var(--bone);
+	background: color-mix(in oklab, color-mix(in oklab, var(--aura-a) 16%, var(--base)) 92%, transparent);
+	backdrop-filter: blur(10px);
+	animation: slide-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.top {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 1rem;
+}
+
+.title {
+	margin: 0;
+	font-size: clamp(1.9rem, 4vw, 2.5rem);
+	font-weight: 700;
+	line-height: 1;
+	letter-spacing: -0.035em;
+	outline: none;
+}
+
+.close {
+	font: inherit;
+	font-size: 0.9rem;
+	color: var(--bone);
+	opacity: 0.7;
+	background: none;
+	border: 0;
+	cursor: pointer;
+	padding: 0.3rem 0;
+}
+
+.section {
+	margin-top: 2rem;
+}
+
+.sectionTitle {
+	margin: 0 0 0.4rem;
+	font-size: 0.95rem;
+	font-weight: 600;
+	opacity: 0.72;
+}
+
+.line {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.75rem;
+	padding: 0.5rem 0;
+	font-size: 1rem;
+	line-height: 1.5;
+}
+
+.lineText {
+	font: inherit;
+	color: inherit;
+	text-align: left;
+	background: none;
+	border: 0;
+	padding: 0;
+	cursor: text;
+}
+
+.actions {
+	display: flex;
+	gap: 0.8rem;
+	flex: none;
+}
+
+.action {
+	font: inherit;
+	font-size: 0.85rem;
+	color: var(--bone);
+	opacity: 0.6;
+	background: none;
+	border: 0;
+	padding: 0;
+	cursor: pointer;
+}
+.action:hover {
+	opacity: 1;
+}
+
+.input {
+	font: inherit;
+	color: var(--bone);
+	background: color-mix(in oklab, #0c111b 55%, transparent);
+	border: 1px solid color-mix(in oklab, var(--bone) 28%, transparent);
+	border-radius: 0.6rem;
+	padding: 0.3rem 0.6rem;
+	min-width: 0;
+	flex: 1;
+}
+
+.note {
+	margin: 0.3rem 0 0;
+	font-size: 0.8rem;
+	opacity: 0.6;
+	font-variant-numeric: tabular-nums;
+}
+
+.error {
+	margin: 0.6rem 0 0;
+	color: #f2b8a2;
+	font-size: 0.95rem;
+}
+
+.empty {
+	margin: 1.5rem 0 0;
+	font-size: 1rem;
+	line-height: 1.5;
+	opacity: 0.85;
+	max-width: 32ch;
+}
+
+.link:focus-visible,
+.close:focus-visible,
+.lineText:focus-visible,
+.action:focus-visible,
+.input:focus-visible {
+	outline: 2px solid var(--aura-a);
+	outline-offset: 3px;
+}
+
+@keyframes slide-in {
+	from {
+		translate: 2rem 0;
+		opacity: 0;
+	}
+	to {
+		translate: 0 0;
+		opacity: 1;
+	}
+}
+
+@media (max-width: 40rem) {
+	.panel {
+		width: 100%;
+	}
+	.links {
+		gap: 0.8rem;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.panel {
+		animation: fade-in 0.15s ease both;
+	}
+}
+
+@keyframes fade-in {
+	from {
+		opacity: 0;
+	}
+}

@@ -30,6 +30,8 @@ import { isCrisis } from "@/lib/agent/safety";
 import { defaultState, type AgentState } from "@/lib/agent/state";
 import { cleanMemoryKey, learnFact, learnSlang, type MemoryFact } from "@/lib/facts";
 import { newId } from "@/lib/uuid";
+import { Panel, PanelLinks, usePanels } from "@/components/osmo/panel";
+import { SettingsPanel } from "@/components/osmo/settings-panel";
 
 type ChatMessage = {
 	role: "user" | "agent";
@@ -255,6 +257,7 @@ export default function AgentChat() {
 		{ role: "agent", text: "Hello, I'm Osmo. How can I help?" },
 	]);
 	const router = useRouter();
+	const panels = usePanels();
 	const [input, setInput] = useState("");
 	const [memory, setMemory] = useState<MemoryFact[]>([]);
 	const [pendingLearning, setPendingLearning] = useState<string | null>(null);
@@ -546,6 +549,7 @@ export default function AgentChat() {
 		<div ref={stageRef} className={`${styles.stage} ${font.className}`} style={stageStyle}
 			data-tone={theme.tone}
 			data-speaking={speaking ? "" : undefined}
+			data-panel={panels.panel ?? undefined}
 		>
 			<div className={styles.aura} aria-hidden="true">
 				<span className={`${styles.orb} ${styles.orbA}`} />
@@ -570,6 +574,7 @@ export default function AgentChat() {
 							Feeling {feelingPhrase(agent.activations, baseline)}
 						</p>
 					</div>
+					<PanelLinks panel={panels.panel} toggle={panels.toggle} linkRef={panels.linkRef} />
 				</header>
 
 				<ol
@@ -614,6 +619,12 @@ export default function AgentChat() {
 					</button>
 				</form>
 			</main>
+
+			{panels.panel && (
+				<Panel id={panels.panel} onClose={panels.close}>
+					{panels.panel === "settings" && <SettingsPanel />}
+				</Panel>
+			)}
 		</div>
 	);
 }

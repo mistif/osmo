@@ -436,6 +436,26 @@
 	cursor: not-allowed;
 }
 
+/* A panel is open: Osmo dims and steps aside, and the conversation stays usable beside it. */
+.aura,
+.column {
+	transition:
+		opacity 0.32s ease,
+		translate 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.stage[data-panel] .aura {
+	opacity: 0.55;
+	translate: -6% 0;
+}
+.stage[data-panel] .column {
+	translate: calc(min(28rem, 50vw) / -2) 0;
+}
+@media (max-width: 40rem) {
+	.stage[data-panel] .column {
+		translate: 0 0;
+	}
+}
+
 /* ---------- Reduced motion: keep the colors, stop the movement ---------- */
 
 @media (prefers-reduced-motion: reduce) {
@@ -457,6 +477,10 @@
 		animation: none;
 	}
 	.send {
+		transition: none;
+	}
+	.aura,
+	.column {
 		transition: none;
 	}
 }
