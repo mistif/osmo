@@ -24,6 +24,7 @@ import type { AgentState } from "./state";
 import { CRISIS_REPLY, isCrisis } from "./safety";
 import { vary } from "./lexicon/variety";
 import { causeOf, combineReplies, normalize, respond, understand } from "./talk";
+import { GUEST_DILEMMA, GUEST_NO_CHANGES, GUEST_PRIVATE } from "../voice/guest";
 
 export type Pending = { logId: string; dilemmaId: string; decision: Decision };
 export type Session = {
@@ -54,6 +55,8 @@ export type TurnContext = {
 	recent?: string[];
 	// The user's own words and how often they've used them, so they are never taken for typos.
 	vocabulary?: Record<string, number>;
+	// A voice that isn't Gur's: nothing of his is shared and the bond is left alone. The room discards the result's state.
+	guest?: boolean;
 };
 export type TurnResult = {
 	state: AgentState;
@@ -85,7 +88,12 @@ function acknowledge(event: StoryEvent): string {
 		: "I am so sorry. That is a heavy thing to carry, and I will remember it.";
 }
 
-export function processTurn(
+// A guest's news is acknowledged, but Osmo doesn't promise to remember it.
+function acknowledgeGuest(event: StoryEvent): string {
+	return event.valence === "happy" ? "That is wonderful news. I am glad for you." : "I am so sorry. That is a heavy thing to carry.";
+}
+
+function takeTurn(
 	state: AgentState,
 	session: Session,
 	text: string,
@@ -115,18 +123,23 @@ export function processTurn(
 		};
 	}
 
-	// Bond: every non-crisis message counts. Sharing a feeling, a life event, or a name deepens it.
+	// Bond: every non-crisis message from Gur counts. Sharing a feeling, a life event, or a name deepens it.
+	// A guest's never does.
+	const guest = ctx.guest === true;
 	const hypothetical = WHAT_WOULD_YOU_DO.test(trimmed);
 	const told = hypothetical ? [] : classifyUserEvents(trimmed);
 	const feeling = understand(trimmed, ctx.slang).some((part) => part.intent.type === "userFeeling");
-	s = {
-		...s,
-		bond: recordTurn(s.bond, { now: ctx.now, feeling, event: told.length > 0, nameKnown: !!ctx.userName, demo: DEMO }),
-	};
+	if (!guest) {
+		s = {
+			...s,
+			bond: recordTurn(s.bond, { now: ctx.now, feeling, event: told.length > 0, nameKnown: !!ctx.userName, demo: DEMO }),
+		};
+	}
 
 	// 1. Verdict on a decision. Bare yes/no only counts while a question is pending.
 	const verdict = parseVerdict(trimmed);
-	const target = session.pending ?? (verdict?.explicit ? session.last : null);
+	// Only Gur answers his own dilemmas.
+	const target = guest ? null : (session.pending ?? (verdict?.explicit ? session.last : null));
 	const targetDilemma = target ? DILEMMAS.find((d) => d.id === target.dilemmaId) : undefined;
 	if (verdict && target && targetDilemma) {
 		s = { ...s, weights: applyFeedback(s.weights, targetDilemma, target.decision, verdict.agreed) };
@@ -141,6 +154,13 @@ export function processTurn(
 		};
 	}
 
+	// Guests can't change him, and the bond is private.
+	if (guest && (isConfirmRoll(trimmed) || parseReroll(trimmed))) {
+		return { state: s, session: sess, reply: GUEST_NO_CHANGES, effects };
+	}
+	if (guest && (isAskCloseness(trimmed) || isAskMet(trimmed))) {
+		return { state: s, session: sess, reply: GUEST_PRIVATE, effects };
+	}
 	// Re-rolling the personality needs an explicit "yes, roll" straight after the offer.
 	if (session.awaitingReroll && isConfirmRoll(trimmed)) {
 		const genome = assemble(session.awaitingReroll.seed);
@@ -148,7 +168,7 @@ export function processTurn(
 		return { state: s, session: sess, reply: afterReroll(resolve(genome)), effects };
 	}
 	// A plain "yes" is not enough to re-roll, but it shouldn't quietly cancel the offer either.
-	if (session.awaitingReroll && /^(?:yes|yeah|yep|yup|ya|sure|ok|okay|do it|go for it)\W*$/i.test(trimmed)) {
+	if (!guest && session.awaitingReroll && /^(?:yes|yeah|yep|yup|ya|sure|ok|okay|do it|go for it)\W*$/i.test(trimmed)) {
 		return {
 			state: s,
 			session: { ...sess, awaitingReroll: session.awaitingReroll },
@@ -182,6 +202,7 @@ export function processTurn(
 	// 2. Life events the user tells it about.
 	// A hypothetical ("what would you do if someone died") is not a real event.
 	if (told.length > 0) {
+		if (guest) return { state: s, session: sess, reply: told.map(acknowledgeGuest).join(" "), effects };
 		for (const event of told) {
 			s = applyEvent(s, event, p.reactivity);
 			effects.push({ type: "event", event });
@@ -236,6 +257,7 @@ export function processTurn(
 	// 5. Moral dilemmas.
 	const asked = WHAT_WOULD_YOU_DO.test(trimmed);
 	if (asked || DILEMMA_TRIGGER.test(trimmed)) {
+		if (guest) return { state: s, session: sess, reply: GUEST_DILEMMA, effects };
 		const found = asked ? findDilemma(trimmed) : null;
 		if (asked && !found) {
 			return {
@@ -292,15 +314,16 @@ export function processTurn(
 			turn: session.turns,
 			tone: moodTheme(s.activations, p.baseline).tone,
 			sensitive,
-			bond: s.bond,
-			userName: ctx.userName ?? null,
-			awayMs,
+			// A guest is a stranger: no milestones, shared memories or welcome-backs.
+			bond: guest ? undefined : s.bond,
+			userName: guest ? null : (ctx.userName ?? null),
+			awayMs: guest ? 0 : awayMs,
 		});
 		const said = flavored.mentioned ? mentioned(s.bond, flavored.mentioned) : s.bond;
 		// A first feeling not thanked for this turn (a sad one, say) is not brought up later.
 		const bond = mentioned(said, "firstFeeling");
 		return {
-			state: { ...s, bond },
+			state: guest ? s : { ...s, bond },
 			session: cause ? { ...sess, cause } : sess,
 			reply: flavored.text,
 			effects,
@@ -308,4 +331,10 @@ export function processTurn(
 	}
 
 	return { state: s, session: sess, reply: null, effects };
+}
+
+export function processTurn(state: AgentState, session: Session, text: string, ctx: TurnContext): TurnResult {
+	const result = takeTurn(state, session, text, ctx);
+	// A guest's turn records nothing: no events, dilemmas or verdicts.
+	return ctx.guest ? { ...result, effects: [] } : result;
 }
