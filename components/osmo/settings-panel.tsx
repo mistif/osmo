@@ -23,13 +23,15 @@ export function SettingsPanel() {
 	const [devices, setDevices] = useState<DeviceSource[] | null>(null);
 	// Captured when the list loads rather than read live at render, so render stays pure (no Date.now() there).
 	const [now, setNow] = useState(0);
-	const [error, setError] = useState<string | null>(null);
+	// Kept separate from lockError: a device-list failure must never read as a locking failure.
+	const [deviceError, setDeviceError] = useState<string | null>(null);
+	const [lockError, setLockError] = useState<string | null>(null);
 	const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
 	const [confirming, setConfirming] = useState<string | null>(null);
 
 	async function refresh() {
 		const { devices: list, error: failed } = await listDevices();
-		if (failed) setError(UNREACHABLE);
+		if (failed) setDeviceError(UNREACHABLE);
 		setDevices(list);
 		setNow(Date.now());
 	}
@@ -48,27 +50,27 @@ export function SettingsPanel() {
 		setEditing(null);
 		if (!name) return;
 		const failed = await renameDevice(editing.id, name);
-		setError(failed ? SAVE_FAILED : null);
+		setDeviceError(failed ? SAVE_FAILED : null);
 		await refresh();
 	}
 
 	async function remove(id: string) {
 		setConfirming(null);
 		const failed = await removeDevice(id);
-		setError(failed ? SAVE_FAILED : null);
+		setDeviceError(failed ? SAVE_FAILED : null);
 		await refresh();
 	}
 
 	async function addThisDevice() {
 		const failed = await rememberThisDevice();
-		setError(failed ? DEVICE_SAVE_FAILED : null);
+		setDeviceError(failed ? DEVICE_SAVE_FAILED : null);
 		await refresh();
 	}
 
 	async function lock() {
 		const failed = await lockOsmo();
 		if (failed) {
-			setError("Couldn't lock this device. Check your connection and try again.");
+			setLockError("Couldn't lock this device. Check your connection and try again.");
 			return;
 		}
 		router.replace("/lock");
@@ -79,7 +81,7 @@ export function SettingsPanel() {
 			<section className={styles.section}>
 				<h3 className={styles.sectionTitle}>Devices</h3>
 				{devices === null && <p className={styles.note}>Checking your devices…</p>}
-				{devices?.length === 0 && !error && (
+				{devices?.length === 0 && !deviceError && (
 					<p className={styles.empty}>No device remembers you yet. Remember this one to unlock with your fingerprint or face.</p>
 				)}
 				{devices?.map((device) => {
@@ -97,6 +99,7 @@ export function SettingsPanel() {
 										onKeyDown={(e) => {
 											if (e.key === "Enter") void saveName();
 											if (e.key === "Escape") {
+												e.preventDefault();
 												e.stopPropagation();
 												setEditing(null);
 											}
@@ -135,6 +138,7 @@ export function SettingsPanel() {
 						Remember this device
 					</button>
 				)}
+				{deviceError && <p className={styles.error} role="alert">{deviceError}</p>}
 			</section>
 
 			<section className={styles.section}>
@@ -143,10 +147,8 @@ export function SettingsPanel() {
 				<button type="button" className={styles.action} onClick={() => void lock()}>
 					Lock Osmo
 				</button>
+				{lockError && <p className={styles.error} role="alert">{lockError}</p>}
 			</section>
-
-			{/* One shared alert: a device-save failure and a lock failure both land here, next to whichever action caused it. */}
-			{error && <p className={styles.error} role="alert">{error}</p>}
 		</>
 	);
 }

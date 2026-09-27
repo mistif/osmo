@@ -70,7 +70,9 @@ export function Panel({ id, onClose, children }: { id: PanelId; onClose: () => v
 
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => {
-			if (event.key === "Escape") onClose();
+			// Next's root listens on `document` too; a field that already used Escape (e.g. to cancel
+			// a rename) marks the event defaultPrevented so it doesn't also close the whole panel.
+			if (event.key === "Escape" && !event.defaultPrevented) onClose();
 		};
 		document.addEventListener("keydown", onKey);
 		return () => document.removeEventListener("keydown", onKey);

@@ -437,22 +437,37 @@
 }
 
 /* A panel is open: Osmo dims and steps aside, and the conversation stays usable beside it. */
-.aura,
-.column {
+.aura {
 	transition:
 		opacity 0.32s ease,
 		translate 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.column {
+	transition:
+		max-width 0.32s cubic-bezier(0.2, 0.8, 0.2, 1),
+		margin-left 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .stage[data-panel] .aura {
 	opacity: 0.55;
 	translate: -6% 0;
 }
-.stage[data-panel] .column {
-	translate: calc(min(28rem, 50vw) / -2) 0;
-}
-@media (max-width: 40rem) {
+/* Above the panel's own full-width breakpoint (panels.module.css), fit the column into the room left of
+   the panel instead of translating a still-40rem-wide column: that pushed it under the panel at mid
+   widths and clipped bubbles, the field and Send. */
+@media (min-width: 40.01rem) {
 	.stage[data-panel] .column {
-		translate: 0 0;
+		--panel-w: min(28rem, 50vw);
+		/* The strip from the stage's left padding to just short of the panel's left edge. */
+		--avail: calc(100vw - var(--panel-w) - 3rem);
+		--fit: min(40rem, var(--avail));
+		max-width: var(--fit);
+		margin-left: calc((var(--avail) - var(--fit)) / 2);
+		margin-right: 0;
+	}
+	/* The header's name/mood text and its nav links don't shrink; once the fitted column is too
+	   narrow for both on one line, wrap instead of letting the links overflow under the panel. */
+	.stage[data-panel] .head {
+		flex-wrap: wrap;
 	}
 }
 
