@@ -4554,6 +4554,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `MicError`, `MIC_BLOCKED`, `NO_MIC`, `MODEL_FAILED` (Task 7);
   - `TEACHING_SENTENCES`, `averagePrint`, `outliers`, `readingDone`, `readingProblem`, `trimSilence`, `MicHandle`.
 - Produces: `VoiceTeaching({ onDone(saved: boolean): void })`.
+- Language session behavior this relies on: `sendText` calls `setInput("")` only when `via === "typed"`. While listening, the composer shows `voice.liveText` read-only, and after a spoken message the half-typed draft reappears untouched.
 
 - [ ] **Step 1: Write the teaching flow**
 
