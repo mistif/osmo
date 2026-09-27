@@ -15,6 +15,14 @@ describe("memoryLine", () => {
 			group: "explained", sentence: 'You explained that "zorp blat" means a kind of snack.',
 		});
 	});
+
+	it("drops one trailing mark from the sentence only, keeping the stored value as it is", () => {
+		expect(memoryLine({ key: "dog", value: "Nala." }).sentence).toBe("You told me your dog is Nala.");
+		expect(memoryLine({ key: "likes", value: "pizza!" }).sentence).toBe("You told me you like pizza.");
+		expect(memoryLine({ key: "likes", value: "pizza?" }).sentence).toBe("You told me you like pizza.");
+		expect(memoryLine({ key: "dog", value: "Nala." }).value).toBe("Nala.");
+		expect(memoryLine({ key: "likes", value: "pizza!" }).value).toBe("pizza!");
+	});
 });
 
 describe("groupMemory", () => {

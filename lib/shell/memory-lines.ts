@@ -20,7 +20,10 @@ function leadFor(fact: MemoryFact): { group: MemoryGroup; lead: string } {
 
 export function memoryLine(fact: MemoryFact): MemoryLine {
 	const { group, lead } = leadFor(fact);
-	return { key: fact.key, group, lead, value: fact.value, sentence: `${lead} ${fact.value}.` };
+	// A value can keep its own closing mark ("Nala.", "pizza!"); drop one so the sentence ends with a single period.
+	// The value itself stays as stored, since it's what the edit field shows and saves.
+	const spoken = fact.value.replace(/[.!?]$/, "");
+	return { key: fact.key, group, lead, value: fact.value, sentence: `${lead} ${spoken}.` };
 }
 
 export function groupMemory(facts: MemoryFact[]): Record<MemoryGroup, MemoryLine[]> {
