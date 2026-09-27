@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { deviceRow } from "@/lib/shell/devices";
 import {
-	DEVICE_SAVE_FAILED,
 	listDevices,
 	lockOsmo,
 	passkeysSupported,
@@ -17,6 +16,8 @@ import styles from "./panels.module.css";
 
 const UNREACHABLE = "I can't reach my memory right now. Try again in a moment.";
 const SAVE_FAILED = "Couldn't save that. Try again.";
+// Gur is already in Settings, so this skips the lock screen's "try again from Settings".
+const PASSKEY_FAILED_HERE = "This device couldn't save a passkey. Try again.";
 
 export function SettingsPanel() {
 	const router = useRouter();
@@ -28,6 +29,8 @@ export function SettingsPanel() {
 	const [lockError, setLockError] = useState<string | null>(null);
 	const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
 	const [confirming, setConfirming] = useState<string | null>(null);
+	// True while the passkey ceremony runs, so a double click can't start a second one.
+	const [adding, setAdding] = useState(false);
 
 	async function refresh() {
 		const { devices: list, error: failed } = await listDevices();
@@ -62,8 +65,10 @@ export function SettingsPanel() {
 	}
 
 	async function addThisDevice() {
+		setAdding(true);
 		const failed = await rememberThisDevice();
-		setDeviceError(failed ? DEVICE_SAVE_FAILED : null);
+		setAdding(false);
+		setDeviceError(failed ? PASSKEY_FAILED_HERE : null);
 		await refresh();
 	}
 
@@ -134,7 +139,7 @@ export function SettingsPanel() {
 				})}
 				{confirming && <p className={styles.note}>That device will need your email and password next time.</p>}
 				{passkeysSupported() && (
-					<button type="button" className={styles.action} onClick={() => void addThisDevice()}>
+					<button type="button" className={styles.action} onClick={() => void addThisDevice()} disabled={adding}>
 						Remember this device
 					</button>
 				)}

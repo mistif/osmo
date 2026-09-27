@@ -41,6 +41,8 @@ export function LockScreen() {
 	}, [router]);
 
 	function open() {
+		// No error line stays visible through the bloom.
+		setError(null);
 		setStep("opening");
 		const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 		window.setTimeout(() => router.replace("/"), reduce ? 200 : 700);
@@ -100,7 +102,7 @@ export function LockScreen() {
 					<form className={styles.form} onSubmit={withPassword}>
 						<p className={styles.hint}>This device doesn&apos;t know you yet.</p>
 						<input className={styles.field} type="email" autoComplete="email" placeholder="Email" aria-label="Email"
-							value={email} onChange={(e) => setEmail(e.target.value)} required />
+							value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
 						<input className={styles.field} type="password" autoComplete="current-password" placeholder="Password" aria-label="Password"
 							value={password} onChange={(e) => setPassword(e.target.value)} required />
 						<button type="submit" className={styles.primary} disabled={busy}>Unlock</button>
@@ -116,12 +118,13 @@ export function LockScreen() {
 					<>
 						<p className={styles.hint}>Remember this device? Next time you can unlock with your fingerprint or face.</p>
 						{error ? (
-							<button type="button" className={styles.primary} onClick={open}>Continue</button>
+							// Distinct keys make Continue a new button, so autoFocus moves focus to it after an error.
+							<button key="continue" type="button" className={styles.primary} onClick={open} autoFocus>Continue</button>
 						) : (
-							<button type="button" className={styles.primary} onClick={remember} disabled={busy}>Remember</button>
+							<button key="remember" type="button" className={styles.primary} onClick={remember} disabled={busy} autoFocus>Remember</button>
 						)}
 						{!error && (
-							<button type="button" className={styles.quiet} onClick={open}>Not now</button>
+							<button type="button" className={styles.quiet} onClick={open} disabled={busy}>Not now</button>
 						)}
 					</>
 				)}
