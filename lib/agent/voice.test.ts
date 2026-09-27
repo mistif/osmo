@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { askedForName } from "./context";
 import { defaultState } from "./state";
-import { fallbackReply, parse, respond } from "./talk";
+import { fallbackReply, GUEST_NO_NOTES, parse, respond } from "./talk";
 
 // Anything Osmo says himself is composed and professional: no slang, internet shorthand or emoji.
 const CASUAL = /\b(?:lol|lmao|ngl|fr|tbh|bet|gonna|wanna|kinda|yo|yeah|nah|oof|wild|stoked|dude|bro|cool cool|wanna)\b|\p{Extended_Pictographic}/iu;
@@ -52,5 +52,22 @@ describe("Osmo never repeats profanity or slang back", () => {
 			}
 		}
 		expect(respond(parse("im gloomy"), { state, cause: null, turn: 0 })).toMatch(/gloomy/);
+	});
+});
+
+describe("Osmo with a guest", () => {
+	it("never promises a guest he'll remember what they teach him", () => {
+		for (let turn = 0; turn < 8; turn++) {
+			const reply = fallbackReply(turn, "blah blah", true);
+			expect(reply, `${turn}`).not.toMatch(/remember|tell me what it means/i);
+			expect(reply, `${turn}`).not.toMatch(CASUAL);
+		}
+		expect([0, 1, 2, 3].some((turn) => /I'll remember/.test(fallbackReply(turn, "blah blah")))).toBe(true);
+	});
+
+	it("tells a guest plainly that he keeps notes only for his owner", () => {
+		expect(GUEST_NO_NOTES).toMatch(/^[A-Z].*\.$/);
+		expect(GUEST_NO_NOTES).not.toMatch(CASUAL);
+		expect(GUEST_NO_NOTES).not.toMatch(/I'll remember/);
 	});
 });

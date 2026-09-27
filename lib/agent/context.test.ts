@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answersPendingLearning, askedForName, nameFromAnswer, recallReply, taughtMeanings, wantsRecall } from "./context";
+import { answersPendingLearning, askedForName, nameFromAnswer, recallReply, taughtMeanings, turnView, wantsRecall } from "./context";
 
 describe("askedForName", () => {
 	it("knows when Osmo's last message asked for the user's name", () => {
@@ -78,5 +78,44 @@ describe("names that look like typos", () => {
 		expect(nameFromAnswer("Jaxson")).toBe("Jaxson");
 		expect(nameFromAnswer("its Kaiden")).toBe("Kaiden");
 		expect(nameFromAnswer("its Byee")).toBe("Byee");
+	});
+});
+
+describe("turnView", () => {
+	const memory = [
+		{ key: "name", value: "Gur" },
+		{ key: "slang:bet", value: "Okay" },
+		{ key: "meaning:zorp", value: "a snack" },
+	];
+	const vocabulary = { zenko: 3 };
+	const messages = [
+		{ role: "agent" as const, text: "What should I call you?" },
+		{ role: "user" as const, text: "gur" },
+		{ role: "agent" as const, text: "Nice to meet you, Gur!" },
+		{ role: "user" as const, text: "the secret password is banana", speaker: "guest" as const },
+		{ role: "agent" as const, text: "Hello. I don't believe we've met.", speaker: "guest" as const },
+	];
+
+	it("gives the owner their memory, name, slang and words, and reads only their own conversation", () => {
+		const view = turnView(messages, memory, vocabulary, false);
+		expect(view.memory).toBe(memory);
+		expect(view.userName).toBe("Gur");
+		expect(view.slang).toEqual({ bet: "okay" });
+		expect(view.vocabulary).toBe(vocabulary);
+		expect(view.history).toHaveLength(3);
+		expect(view.lastAgentText).toBe("Nice to meet you, Gur!");
+		expect(view.recent).toContain("gur");
+		expect(view.recent).not.toContain("banana");
+	});
+
+	it("gives a guest nothing of the owner's", () => {
+		const view = turnView(messages, memory, vocabulary, true);
+		expect(view.memory).toEqual([]);
+		expect(view.userName).toBeNull();
+		expect(view.slang).toEqual({});
+		expect(view.vocabulary).toEqual({});
+		expect(view.history).toEqual([]);
+		expect(view.lastAgentText).toBeUndefined();
+		expect(view.recent).toEqual([]);
 	});
 });

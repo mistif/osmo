@@ -151,3 +151,10 @@ describe("final review fixes", () => {
 		expect((await lookupWord("faggt", { fetch: banned.fetch })).kind).toBe("blocked");
 	});
 });
+
+describe("formatDefinition for a guest", () => {
+	it("never promises to learn a word from someone Osmo doesn't belong to", () => {
+		expect(formatDefinition({ kind: "missing", term: "zorp" }, true)).toBe(`I'm not familiar with "zorp".`);
+		expect(formatDefinition({ kind: "missing", term: "zorp" })).toMatch(/I'll remember/);
+	});
+});

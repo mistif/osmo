@@ -676,7 +676,11 @@ export function respond(parsed: Parsed, ctx: TalkContext): string | null {
 }
 
 // `turn` should step by one per exchange, so consecutive misses never get the same line.
-export function fallbackReply(turn: number, text = ""): string {
+// Said to a guest who tries to teach Osmo a fact or a word: only his owner's notes are kept.
+export const GUEST_NO_NOTES = "I'm afraid I can only remember things for the person I belong to.";
+
+// A guest gets the same fallbacks, minus the offer to learn a word from them.
+export function fallbackReply(turn: number, text = "", guest = false): string {
 	if (/\?\s*$/.test(text.trim())) {
 		return pick(
 			[
@@ -692,7 +696,9 @@ export function fallbackReply(turn: number, text = ""): string {
 			"I'm not sure I follow. Could you rephrase that?",
 			"I didn't quite catch that. Could you say it another way?",
 			"That's new to me. What do you mean?",
-			"I don't recognize that. If it's a word I haven't learned, tell me what it means and I'll remember.",
+			guest
+				? "I don't recognize that, I'm afraid. Could you put it another way?"
+				: "I don't recognize that. If it's a word I haven't learned, tell me what it means and I'll remember.",
 		],
 		turn,
 	);

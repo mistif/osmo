@@ -9,7 +9,7 @@ import { loadState, persistTurn } from "@/lib/agent/agent-state";
 import { moodTheme } from "@/lib/agent/mood-theme";
 import { adoptGenome, assemble, newSeed, resolve } from "@/lib/agent/personality/assemble";
 import { charDelay, speechBeat } from "@/lib/agent/speech";
-import { fallbackReply, feelingPhrase } from "@/lib/agent/talk";
+import { fallbackReply, feelingPhrase, GUEST_NO_NOTES } from "@/lib/agent/talk";
 import { formatDefinition, lookupWord, parseLookup, type Lookup } from "@/lib/agent/dictionary";
 import { getCachedLookup, putCachedLookup } from "@/lib/agent/dictionary-store";
 import { learnFromMessage } from "@/lib/agent/lexicon/vocabulary";
@@ -23,9 +23,11 @@ import {
 	nameFromAnswer,
 	nameFromHistory,
 	recallReply,
+	turnView,
 	wantsNameFromChat,
 	wantsRecall,
 } from "@/lib/agent/context";
+import { greetGuest, type SendOptions, type Via } from "@/lib/voice/guest";
 import { isCrisis } from "@/lib/agent/safety";
 import { defaultState, type AgentState } from "@/lib/agent/state";
 import { cleanMemoryKey, learnFact, learnSlang, type MemoryFact } from "@/lib/facts";
@@ -38,6 +40,8 @@ import { SettingsPanel } from "@/components/osmo/settings-panel";
 type ChatMessage = {
 	role: "user" | "agent";
 	text: string;
+	// Set on a guest's line and on Osmo's reply to it; unset means Gur.
+	speaker?: "guest";
 };
 
 const font = Bricolage_Grotesque({ subsets: ["latin"], display: "swap" });
@@ -136,7 +140,7 @@ function describeFact(fact: MemoryFact): string {
 }
 
 // Greetings, feelings and small talk are handled by the conversation layer (lib/agent/talk.ts).
-function answerFromMemory(text: string, memory: MemoryFact[], turn: number) {
+function answerFromMemory(text: string, memory: MemoryFact[], turn: number, guest = false) {
 	const normalizedText = text.toLowerCase();
 
 	if (/what do you know|what have you remembered|list my memories/.test(normalizedText)) {
@@ -152,14 +156,15 @@ function answerFromMemory(text: string, memory: MemoryFact[], turn: number) {
 	if (fact) return `Your ${fact.key} is ${fact.value}.`;
 
 	if (/\b(?:what(?:'s| is)?|whats|do you know|remember) my name\b/.test(normalizedText)) {
-		return "I don't know your name yet. What should I call you?";
+		// A guest's name can't be saved, so Osmo doesn't ask for it.
+		return guest ? "I'm afraid I don't know your name." : "I don't know your name yet. What should I call you?";
 	}
 
 	const builtInFact = agentKnowledge.find((item) => normalizedText.includes(item.key));
 	if (builtInFact) return `About ${builtInFact.key}: ${builtInFact.value}.`;
 
 	// Each exchange adds two messages, so halve the count to step through the fallbacks one by one.
-	return fallbackReply(Math.floor(turn / 2), text);
+	return fallbackReply(Math.floor(turn / 2), text, guest);
 }
 
 function findUnknownTopic(text: string, memory: MemoryFact[]) {
@@ -335,7 +340,7 @@ export default function AgentChat() {
 				const [loaded, facts, history] = await Promise.all([
 					loadState(),
 					supabase.from("memory_facts").select("key,value"),
-					supabase.from("messages").select("role,text").order("created_at").order("id"),
+					supabase.from("messages").select("role,text,speaker").order("created_at").order("id"),
 				]);
 				canSaveRef.current = loaded.ok;
 				lastAtRef.current = loaded.lastAt;
@@ -349,7 +354,11 @@ export default function AgentChat() {
 				setAgent(state);
 				if (facts.data) setMemory(facts.data as MemoryFact[]);
 				if (history.data?.length) {
-					setMessages((current) => [...current, ...(history.data as ChatMessage[])]);
+					// A null speaker is Gur's line; only "guest" is kept as a marker.
+					const saved = (history.data as { role: ChatMessage["role"]; text: string; speaker: string | null }[]).map(
+						({ role, text, speaker }): ChatMessage => (speaker === "guest" ? { role, text, speaker } : { role, text }),
+					);
+					setMessages((current) => [...current, ...saved]);
 				}
 			} catch (error) {
 				console.error("Could not load saved memory", error);
@@ -380,32 +389,44 @@ export default function AgentChat() {
 		if (error) console.error("Could not save messages", error);
 	}
 
+	// The voice calls the latest sendText through sendTextRef, so a spoken message never runs on an old
+	// render's memory or conversation, and hears every reply through onReplyRef.
+	const sendTextRef = useRef<((text: string, options: SendOptions) => boolean) | null>(null);
+	const onReplyRef = useRef<((reply: string, via: Via) => void) | null>(null);
+
 	function sendMessage(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		const text = input.trim();
-		if (!text || thinking) return;
+		sendText(input, { via: "typed", speaker: "you" });
+	}
 
-		const slangMap = Object.fromEntries(
-			memory
-				.filter((fact) => fact.key.startsWith("slang:"))
-				.map((fact) => [fact.key.slice("slang:".length), fact.value.toLowerCase()]),
-		);
+	// One path for every message, typed or spoken. Returns false when the message can't be taken now
+	// (empty, Osmo still waking up, or a word lookup in flight), so the voice knows it was dropped.
+	function sendText(raw: string, options: SendOptions): boolean {
+		const text = raw.trim();
+		if (!text || !ready || thinking) return false;
+		const { via } = options;
+		// A guest (a voice that isn't Gur's) reads nothing of Gur's, and nothing is learned or saved from
+		// their turn except the conversation itself.
+		const guest = options.speaker === "guest";
+		const view = turnView(messages, memory, vocabulary, guest);
+
 		const taughtSlang = learnSlang(text);
 		const now = Date.now();
 		// A crisis message is never treated as an answer to "what does X mean?" or "what's your name?".
 		const crisis = isCrisis(text);
-		// A new question is answered, not saved as the explanation Osmo asked for.
-		const learning = crisis || !answersPendingLearning(text) ? null : pendingLearning;
-		if (!learning) setPendingLearning(null);
-		// Read the reply in light of what Osmo just asked.
-		const lastAgentText = messages.at(-1)?.role === "agent" ? messages.at(-1)?.text : undefined;
-		const correctedName = crisis ? null : nameCorrection(text, lastAgentText);
-		const answeredName = crisis || correctedName || !askedForName(lastAgentText) ? null : nameFromAnswer(text);
+		// A new question is answered, not saved as the explanation Osmo asked for. A guest's words never
+		// answer Gur's pending question, and leave it waiting for him.
+		const learning = guest || crisis || !answersPendingLearning(text) ? null : pendingLearning;
+		if (!learning && !guest) setPendingLearning(null);
+		// Read the reply in light of what Osmo just asked this speaker.
+		const lastAgentText = view.lastAgentText;
+		const correctedName = guest || crisis ? null : nameCorrection(text, lastAgentText);
+		const answeredName = guest || crisis || correctedName || !askedForName(lastAgentText) ? null : nameFromAnswer(text);
 		// "whats my name" or "cant u see my name in the chat" when Osmo never saved it: look back through the chat.
-		const knownName = memory.find((fact) => fact.key === "name")?.value ?? null;
+		const knownName = view.userName;
 		const asksOwnName =
-			!crisis && !knownName && (wantsNameFromChat(text) || /\b(?:what(?:'s| is)?|whats|do you know|remember) my name\b/i.test(text));
-		const foundName = asksOwnName ? nameFromHistory(messages) : null;
+			!guest && !crisis && !knownName && (wantsNameFromChat(text) || /\b(?:what(?:'s| is)?|whats|do you know|remember) my name\b/i.test(text));
+		const foundName = asksOwnName ? nameFromHistory(view.history) : null;
 		const rememberName = (name: string) => {
 			const nameFact = { key: "name", value: name };
 			setMemory((current) => [...current.filter((fact) => fact.key !== "name"), nameFact]);
@@ -418,13 +439,14 @@ export default function AgentChat() {
 					lastAt: lastAtRef.current,
 					uuid: newId,
 					seed: newSeed(),
-					userName: memory.find((fact) => fact.key === "name")?.value ?? null,
-					slang: slangMap,
-					// The last few messages, so typos can be read in context.
-					recent: messages.slice(-6).flatMap((m) => m.text.toLowerCase().match(/[a-z]+/g) ?? []),
-					vocabulary,
+					userName: view.userName,
+					slang: view.slang,
+					recent: view.recent,
+					vocabulary: view.vocabulary,
+					guest,
 				});
-		lastAtRef.current = now;
+		// The gap since Gur last spoke drives his heart, so a guest's turn doesn't reset it.
+		if (!guest) lastAtRef.current = now;
 
 		const learnedFact = learnFact(text);
 		const mathResult = learnedFact ? null : calculateMath(text);
@@ -435,8 +457,8 @@ export default function AgentChat() {
 
 		// Learn the user's own words (names, in-jokes, jargon). Not from a crisis message, and not from a
 		// word question, whose term goes to the dictionary (a misspelled one must never become "theirs").
-		if (!crisis && !askedTerm) {
-			const changed = learnFromMessage(text, vocabulary, slangMap);
+		if (!guest && !crisis && !askedTerm) {
+			const changed = learnFromMessage(text, vocabulary, view.slang);
 			if (Object.keys(changed).length > 0) {
 				setVocabulary((current) => ({ ...current, ...changed }));
 				if (canSaveRef.current) void saveVocabulary(changed);
@@ -467,9 +489,12 @@ export default function AgentChat() {
 		} else if (asksOwnName && wantsNameFromChat(text)) {
 			response = "I looked back but couldn't find it. What's your name?";
 		} else if (!crisis && wantsRecall(text)) {
-			response = recallReply(messages);
+			response = recallReply(view.history);
 		} else if (turn?.reply != null) {
 			response = turn.reply;
+		} else if (guest && (taughtSlang || learnedFact)) {
+			// Nothing a guest says is kept, so Osmo says so rather than pretending to note it.
+			response = GUEST_NO_NOTES;
 		} else if (taughtSlang) {
 			const slangFact = { key: `slang:${taughtSlang.word}`, value: taughtSlang.meaning };
 			setMemory((current) => [...current.filter((fact) => fact.key !== slangFact.key), slangFact]);
@@ -487,16 +512,19 @@ export default function AgentChat() {
 		} else if (lookupTerm) {
 			response = ""; // filled in when the lookup finishes, below
 		} else {
-			const unknownTopic = findUnknownTopic(text, memory);
-			if (unknownTopic) {
+			const unknownTopic = findUnknownTopic(text, view.memory);
+			if (unknownTopic && guest) {
+				response = formatDefinition({ kind: "missing", term: unknownTopic }, true);
+			} else if (unknownTopic) {
 				setPendingLearning(unknownTopic);
-				response = `I'm not familiar with "${unknownTopic}". Could you explain it? I'll remember.`;
+				response = formatDefinition({ kind: "missing", term: unknownTopic });
 			} else {
-				response = answerFromMemory(text, memory, messages.length);
+				response = answerFromMemory(text, view.memory, guest ? messages.length : view.history.length, guest);
 			}
 		}
 
-		if (turn) {
+		// A guest's turn is for its reply only: his mood, bond and session stay exactly as they were.
+		if (turn && !guest) {
 			if (turn.state.genome && turn.state.genome !== agent.genome) {
 				try {
 					window.localStorage.setItem("osmo-seed", String(turn.state.genome.seed));
@@ -514,38 +542,48 @@ export default function AgentChat() {
 			}
 		}
 
-		const userMessage: ChatMessage = { role: "user", text };
-		setInput("");
-		// Every reply ends here: typed out and spoken by the circle. A future voice hooks in here too.
+		// A guest's line and Osmo's reply to it are marked, so they never feed Gur's context later.
+		const mark = guest ? ({ speaker: "guest" } as const) : {};
+		const userMessage: ChatMessage = { role: "user", text, ...mark };
+		// A spoken message leaves a half-typed draft alone.
+		if (via === "typed") setInput("");
+		// Every reply ends here: typed out by the circle, and handed to the voice.
 		// The user's message sits at messages.length, so the reply is at messages.length + 1; the
 		// composer is locked during a lookup, so nothing can land in between.
 		const deliver = (reply: string) => {
-			const agentMessage: ChatMessage = { role: "agent", text: reply };
+			const agentMessage: ChatMessage = { role: "agent", text: greetGuest(reply, guest && (options.greet ?? false), crisis), ...mark };
 			// Cut off any reply still being spoken, then speak the new one (or show it at once).
 			stageRef.current?.style.setProperty("--voice", "0");
 			setSpeaking(reduceMotionRef.current ? null : { index: messages.length + 1, chars: 0 });
 			setMessages((current) => [...current, agentMessage]);
 			void saveMessages([userMessage, agentMessage]);
+			// Handed over once sendText has returned, so the voice always knows its message was taken
+			// before the reply arrives, even when the reply is ready at once.
+			queueMicrotask(() => onReplyRef.current?.(agentMessage.text, via));
 		};
 		setMessages((current) => [...current, userMessage]);
 		if (lookupTerm && response === "") {
 			setThinking(true);
 			void lookupWord(lookupTerm, {
 				fetch: (url, init) => fetch(url, init),
-				taught: taughtMeanings(memory),
+				taught: taughtMeanings(view.memory),
 				cacheGet: canSaveRef.current ? getCachedLookup : undefined,
-				cachePut: canSaveRef.current ? putCachedLookup : undefined,
+				cachePut: canSaveRef.current && !guest ? putCachedLookup : undefined,
 			})
 				.catch((): Lookup => ({ kind: "missing", term: lookupTerm }))
 				.then((result) => {
-					if (result.kind === "missing") setPendingLearning(result.term);
+					if (result.kind === "missing" && !guest) setPendingLearning(result.term);
 					setThinking(false);
-					deliver(formatDefinition(result));
+					deliver(formatDefinition(result, guest));
 				});
-			return;
+			return true;
 		}
 		deliver(response);
+		return true;
 	}
+	useEffect(() => {
+		sendTextRef.current = sendText;
+	});
 
 	const stageStyle = {
 		"--aura-a": theme.colorA,

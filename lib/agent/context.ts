@@ -1,9 +1,37 @@
+import type { MemoryFact } from "../facts";
+import { GUEST_MEMORY, ownerHistory } from "../voice/guest";
 import { parseLookup } from "./dictionary";
 import { normalize, parse } from "./talk";
 
 // What Osmo reads from the conversation so far, so a short answer can be understood in context.
 
 type Line = { role: "user" | "agent"; text: string };
+
+// Everything a turn may read. The owner gets their memory and their own conversation, never a
+// guest's lines; a guest gets nothing of the owner's (no name, facts, slang, words or history).
+export function turnView<T extends Line & { speaker?: "guest" }>(
+	messages: T[],
+	memory: MemoryFact[],
+	vocabulary: Record<string, number>,
+	guest: boolean,
+) {
+	const mine = guest ? GUEST_MEMORY : memory;
+	const history = guest ? [] : ownerHistory(messages);
+	const last = history.at(-1);
+	return {
+		memory: mine,
+		history,
+		userName: mine.find((fact) => fact.key === "name")?.value ?? null,
+		slang: Object.fromEntries(
+			mine.filter((fact) => fact.key.startsWith("slang:")).map((fact) => [fact.key.slice("slang:".length), fact.value.toLowerCase()]),
+		),
+		vocabulary: guest ? {} : vocabulary,
+		// Osmo's last message to this speaker, to read a short answer in light of what he asked.
+		lastAgentText: last?.role === "agent" ? last.text : undefined,
+		// The last few messages, so typos can be read in context.
+		recent: history.slice(-6).flatMap((line) => line.text.toLowerCase().match(/[a-z]+/g) ?? []),
+	};
+}
 
 // True when Osmo's last message asked the user for their name.
 export function askedForName(lastAgentText: string | undefined): boolean {
