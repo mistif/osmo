@@ -78,7 +78,11 @@ export function InsightsPanel({ agent }: { agent: AgentState }) {
 							strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
 					))}
 					{series.map((d, i) =>
-						d.valence === null ? null : <circle key={d.day} cx={x(i)} cy={y(d.valence)} r="2.5" fill="var(--aura-b)" />,
+						// A zero-length round-capped line stays a true circle under preserveAspectRatio="none"; a <circle> would stretch into an oval.
+						d.valence === null ? null : (
+							<line key={d.day} x1={x(i)} y1={y(d.valence)} x2={x(i)} y2={y(d.valence)}
+								stroke="var(--aura-b)" strokeWidth="5" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+						),
 					)}
 				</svg>
 				<div className={styles.days}>
