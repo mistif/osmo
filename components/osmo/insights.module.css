@@ -1,0 +1,54 @@
+.chart {
+	display: block;
+	width: 100%;
+	height: 5.5rem;
+	margin: 0.4rem 0 0.2rem;
+	overflow: visible;
+}
+
+.days {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 0.2rem;
+}
+
+.day {
+	font: inherit;
+	font-size: 0.8rem;
+	color: var(--bone);
+	opacity: 0.6;
+	background: none;
+	border: 0;
+	padding: 0.3rem 0;
+	cursor: pointer;
+	font-variant-numeric: tabular-nums;
+}
+.day[aria-pressed="true"] {
+	opacity: 1;
+	text-decoration: underline;
+	text-decoration-color: var(--aura-a);
+	text-underline-offset: 0.3em;
+}
+.day:focus-visible {
+	outline: 2px solid var(--aura-a);
+	outline-offset: 2px;
+}
+
+.story {
+	list-style: none;
+	margin: 0.4rem 0 0;
+	padding: 0 0 0 0.9rem;
+	border-left: 1px solid color-mix(in oklab, var(--aura-a) 55%, transparent);
+}
+
+.moment {
+	padding: 0.35rem 0;
+	line-height: 1.45;
+}
+
+.when {
+	display: block;
+	font-size: 0.8rem;
+	opacity: 0.6;
+	font-variant-numeric: tabular-nums;
+}

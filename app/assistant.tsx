@@ -32,6 +32,7 @@ import { cleanMemoryKey, learnFact, learnSlang, type MemoryFact } from "@/lib/fa
 import { newId } from "@/lib/uuid";
 import { Panel, PanelLinks, usePanels } from "@/components/osmo/panel";
 import { MemoryPanel } from "@/components/osmo/memory-panel";
+import { InsightsPanel } from "@/components/osmo/insights-panel";
 import { SettingsPanel } from "@/components/osmo/settings-panel";
 
 type ChatMessage = {
@@ -624,6 +625,7 @@ export default function AgentChat() {
 			{panels.panel && (
 				<Panel id={panels.panel} onClose={panels.close}>
 					{panels.panel === "memory" && <MemoryPanel memory={memory} onChange={setMemory} />}
+					{panels.panel === "insights" && <InsightsPanel agent={agent} />}
 					{panels.panel === "settings" && <SettingsPanel />}
 				</Panel>
 			)}
