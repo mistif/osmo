@@ -4,6 +4,8 @@
 	--aura-a: hsl(172 38% 50%);
 	--base: hsl(172 30% 10%);
 	min-height: 100svh;
+	/* The bloom scales the circle far past the screen; clip it so it never grows the page or flashes scrollbars. */
+	overflow: clip;
 	display: grid;
 	place-items: center;
 	padding: 2rem 1rem;

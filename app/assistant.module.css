@@ -470,6 +470,13 @@
 		flex-wrap: wrap;
 	}
 }
+/* On narrow phones the name, mood line and three links don't fit on one line either, panel or not:
+   the links wrap to their own line instead of running off the screen. */
+@media (max-width: 40rem) {
+	.head {
+		flex-wrap: wrap;
+	}
+}
 
 /* ---------- Reduced motion: keep the colors, stop the movement ---------- */
 
