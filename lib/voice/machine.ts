@@ -50,6 +50,10 @@ function rest(s: VoiceState, now: number): VoiceState {
 	return { ...s, mode: s.listening ? "sleeping" : "off", since: now, heard: false, owner: false, greeted: false, conversation: false };
 }
 
+// A conversation runs from waking (or the mic button) until he rests again.
+const inConversation = (s: VoiceState) =>
+	s.mode === "awake" || s.mode === "thinking" || s.mode === "speaking" || s.mode === "followup";
+
 export const detectorOn = (s: VoiceState) => s.mode === "sleeping";
 export const recognizerOn = (s: VoiceState) => s.mode === "awake" || s.mode === "followup";
 // The microphone, and the listening line under the text box, are on exactly when one of them runs.
@@ -58,7 +62,7 @@ export const micOpen = (s: VoiceState) => detectorOn(s) || recognizerOn(s);
 export function step(s: VoiceState, e: VoiceEvent): VoiceState {
 	switch (e.type) {
 		case "listen": {
-			if (!e.on) return rest({ ...s, listening: false }, e.now);
+			if (!e.on) return s.mode === "off" && !s.listening ? s : rest({ ...s, listening: false }, e.now);
 			if (s.listening) return s;
 			return s.mode === "off" ? { ...s, listening: true, mode: "sleeping", since: e.now } : { ...s, listening: true };
 		}
@@ -71,9 +75,9 @@ export function step(s: VoiceState, e: VoiceEvent): VoiceState {
 			if (s.mode === "followup") return { ...s, mode: "awake", since: e.now, heard: true };
 			return s;
 		case "judged":
-			return e.speaker === "you" && !s.owner ? { ...s, owner: true } : s;
+			return inConversation(s) && e.speaker === "you" && !s.owner ? { ...s, owner: true } : s;
 		case "greeted":
-			return s.greeted ? s : { ...s, greeted: true };
+			return inConversation(s) && !s.greeted ? { ...s, greeted: true } : s;
 		case "sent":
 			return s.mode === "awake" ? { ...s, mode: "thinking", since: e.now } : s;
 		case "dropped":

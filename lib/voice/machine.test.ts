@@ -125,6 +125,21 @@ describe("step", () => {
 		expect(step(s, { type: "tick", now: 5 })).toBe(s);
 		expect(step(s, { type: "judged", speaker: "guest" })).toBe(s);
 	});
+
+	it("ignores a late voice check once the conversation is over", () => {
+		const sleeping = listening();
+		expect(step(sleeping, { type: "judged", speaker: "you" })).toBe(sleeping);
+		expect(step(sleeping, { type: "greeted" })).toBe(sleeping);
+		const off = initialVoice();
+		expect(step(off, { type: "judged", speaker: "you" })).toBe(off);
+	});
+
+	it("leaves an already-off state alone when listening is switched off, but still ends a mic conversation", () => {
+		const off = initialVoice();
+		expect(step(off, { type: "listen", on: false, now: 5 })).toBe(off);
+		const micOnly = step(initialVoice(), { type: "mic", now: 0 });
+		expect(step(micOnly, { type: "listen", on: false, now: 5 }).mode).toBe("off");
+	});
 });
 
 describe("what runs in each mode", () => {
