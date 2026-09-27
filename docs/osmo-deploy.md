@@ -32,7 +32,7 @@ Until passkeys are turned on (step 1 here), the Devices list in Settings shows "
 3. Choose "This device doesn't have my passkey", then sign in with your email and password.
 4. When Osmo asks "Remember this device?", choose **Remember** and confirm with Windows Hello, Face ID or your fingerprint.
 5. You are in his room. Open **Settings**: your device is listed. Rename it (for example "Home PC").
-6. Choose **Lock Osmo**. On the lock screen, choose **Unlock with fingerprint or face**. You are back in without a password.
+6. Open the address in a second tab too. In the first tab, choose **Lock Osmo**: both tabs go to the lock screen. Choose **Unlock with fingerprint or face**. You are back in without a password.
 7. On your phone, open the same address. If your passkeys sync (iCloud Keychain or Google Password Manager), the fingerprint or face button works right away. If not, repeat steps 3 and 4 there.
 8. Open **Memory**, change one small thing and change it back. Open **Insights** and tap today.
 9. In **Settings**, choose **Remove** on a test or old device, confirm, and check it's gone from the list. If you remove the device you're using, it will need your email and password next time.
