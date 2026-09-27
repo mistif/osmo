@@ -360,6 +360,14 @@ export default function AgentChat() {
 		})();
 	}, []);
 
+	// Locking in another tab, or a session ending, sends this tab to the lock screen too.
+	useEffect(() => {
+		const { data } = supabase.auth.onAuthStateChange((event) => {
+			if (event === "SIGNED_OUT") router.replace("/lock");
+		});
+		return () => data.subscription.unsubscribe();
+	}, [router]);
+
 	async function saveFact(fact: MemoryFact) {
 		const { error } = await supabase
 			.from("memory_facts")
