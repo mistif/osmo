@@ -2,6 +2,8 @@
 
 A briefing for any agent picking up Osmo. It covers what the "language session" (the Claude session that owns how Osmo reads and answers messages) has built, how the project runs, the rules both sessions follow, and what's still open. Written 2026-09-28.
 
+The last section, "From another agent", was written by a different agent. It has review findings and a plan to have Claude write Osmo's replies. Read the note at its top first: that agent worked from GitHub, which is behind the local `main`.
+
 ## What Osmo is
 
 Osmo is a rule-based chat companion for one person, Gur. There is no LLM: every reply comes from code in `lib/agent/`. Osmo has:
@@ -180,3 +182,91 @@ The language session approved every shared edit for the shell (lock, panels, sig
   - shell;
   - voice.
 - Deploying: `docs/osmo-deploy.md`. Voice models: `docs/osmo-voice-models.md`. Demo mode: `docs/osmo-demo-mode.md`.
+
+## From another agent: review findings and the agent plan (2026-09-28)
+
+This section was written by a different agent, not by the language session, and Gur passed it on. It is copied as given below this note.
+
+**Note from the language session, before you act on it:**
+- **It was written from GitHub, which is behind the local `main`.** That agent read `mistif/osmo` at `b5785ec`, the shell. The local `main` has about 20 more commits: the whole voice feature and this handoff. So:
+  - the local test count is 606, not 449;
+  - `messages.speaker` and `voiceprints` *do* have code locally: the guest path in `sendText`, `lib/voice/*` and `components/osmo/use-voice.ts`;
+  - `app/assistant.tsx` has changed a lot: `sendMessage` is now a thin wrapper around `sendText`.
+
+  Check its file references and its Phase 2 deletion list against the local `main` before building.
+- **Its draft PR #1 is on the branch `claude/compassionate-sagan-x1teq9`** and is docs only.
+- **Who owns the Phase 0 findings.** Follow the ownership rules above:
+  - findings 1, 2, 4, 8 and 10 are in the language session's part of `assistant.tsx`;
+  - finding 5 is in `mind.ts`, which is shared;
+  - findings 3, 7 and 9 are in the brain session's files;
+  - finding 6 is in the load effect, which the brain session last changed.
+- **The plan replaces most of the rule-based language chain with Claude.** Confirm with Gur that he has approved it before building.
+- **It would break two current rules:**
+  - it sends messages to an outside service, while Osmo's self-description says the internet is used only for word definitions;
+  - it adds a paid API key.
+
+  Both need Gur's OK.
+
+---
+
+### Osmo handoff: review findings and the agent plan (2026-09-28)
+
+Repo: mistif/osmo. Branch `claude/compassionate-sagan-x1teq9`, draft PR #1 (docs only).
+Full spec: `docs/superpowers/specs/2026-09-28-osmo-agent-design.md`. Read it before building.
+
+#### Where things stand
+- Osmo is fully rule-based. No language model anywhere. `lib/agent/talk.ts` recognizes 26 intents by regex; everything else falls to "I'm not sure I follow" or "explain it and I'll remember". That is the ceiling on "answers almost all questions".
+- Heart (`heart.ts`, `cues.ts`, `events.ts`), brain (`brain.ts`, `dilemmas.ts`), bond (`bond/`), genome (`personality/`), crisis check (`safety.ts`) are pure, tested, and stay as code.
+- 449 tests pass. Lint: one warning (`router` dep in `assistant.tsx`). `tsc` needs `npx next typegen` first.
+- Supabase project `agent-memory` (jtkeljvldtngkrftzwdm). Tables: messages, memory_facts, agent_state, event_log, emotion_associations, dilemma_log, user_words, word_lookups, mood_days, voiceprints. All RLS "own rows only".
+
+#### The decision
+Claude writes his words. His state stays code and is fed to the model as a prompt.
+- Server route `app/api/chat/route.ts` on Vercel holds `ANTHROPIC_API_KEY` (server-only, never NEXT_PUBLIC_).
+- Browser sends its Supabase access token as a bearer; the route builds a Supabase client with it, so RLS applies as the user. No service-role key.
+- Per turn, in order: crisis check (returns CRISIS_REPLY, model not called) -> heart step -> bond recordTurn -> pending verdict / "yes, roll" handled by code -> build prompt (`lib/agent/prompt.ts`, pure) -> Claude with tools -> persist (`persistTurn` moved server-side) -> stream text.
+- Fallback: on any model error, answer with today's `processTurn`. `talk.ts` stays for that and stops growing.
+- Tools (each a schema + handler taking a Supabase client, tested with a fake): remember(key,value), forget(key), search_past(query,days), define(term) = existing lookupWord, experience_story, pose_dilemma, note_shared(kind), web_search (server tool, max_uses 3, Settings switch).
+
+#### Phases
+0. Fix the 10 review findings below.
+1. Route + model, no tools. Fallback works. Vercel: add ANTHROPIC_API_KEY.
+2. Tools. Delete from assistant.tsx: agentKnowledge, answerFromMemory, findUnknownTopic, calculateMath, pendingLearning, name-from-history hacks. Add: full-text index on messages(text), agent_state.settings jsonb, usage_log table + daily cost cap.
+3. web_search + episodes table (3-sentence first-person summaries every ~20 turns, optional follow_up_at). Full-text retrieval first, pgvector later if needed.
+4. Generated welcome-backs, weekly mood patterns, a 40-conversation eval set, panels show episodes and spend.
+
+#### API facts (current shapes; older patterns 400)
+- Model `claude-opus-5-5`. Thinking always on; do not send `thinking`. Depth via `output_config: { effort: "low" }` for chat.
+- Streaming via `client.messages.stream`, `finalMessage()`. `max_tokens` ~1024 (replies are short and speakable).
+- `cache_control` on the stable system-prompt prefix (persona, donors, values, memory). Mood/bond/history go after it. Verify `usage.cache_read_input_tokens > 0`.
+- Tools: JSON schema with `strict: true`, `tool_choice` auto only (forcing a tool is rejected on this model).
+- `fallbacks: "default"` with beta `server-side-fallback-2026-07-01`.
+- Store assistant turns as plain text; never replay thinking blocks.
+- Catch typed SDK errors most-specific first; all of them fall back to processTurn.
+- Cost ~1 to 2 cents per message on Opus 5.5; Sonnet 5.5 (`claude-sonnet-5-5`) about half.
+
+#### Phase 0: review findings (all small)
+1. `assistant.tsx` answerFromMemory: substring match on fact keys ("age" fires on "message"). Use word boundaries.
+2. `assistant.tsx` findUnknownTopic accepts pronouns ("what is it" -> learns meaning:it). Reuse parseLookup's term rules.
+3. `settings-panel.tsx` rename: Escape then blur still saves; Enter saves twice. Reuse memory-panel's committingRef pattern.
+4. `assistant.tsx` "Noted. Your likes is cats." Use describeFact.
+5. `mind.ts` runs understand() twice (once without spell context for the bond). Compute once before recordTurn.
+6. `assistant.tsx` load effect appends history with no cancel flag; StrictMode doubles the chat in dev.
+7. `settings-panel.tsx` refresh never clears deviceError on success.
+8. "what's my name" regex duplicated in sendMessage and answerFromMemory.
+9. `mood-days.ts` re-declares the emotion adjective table from talk.ts with different words.
+10. `assistant.tsx` calculateMath evaluates bare numbers ("2024" -> "That comes to 2024"). Require an operator.
+
+#### Findings that change the plan
+- `personality/modern.ts` limits voice/humor/slang/quirks to 12 present-day donors. Not in any spec.
+- Of those 12, only 2 have dry humor, and `flavor.ts` speaks no other style. `voice.openers`, `voice.elaboration`, `slang.says`, `quirks.phrases` are stored for all 100 donors and used by no code path. All of it goes into the prompt as guidance instead.
+- Personality "piece 2" (topics, follow-ups, short-term memory) was never written and is absorbed by phases 1 to 3. Do not build it rule-based.
+- `messages.speaker` and `voiceprints` exist in the DB with no code (voice work, being written elsewhere). Leave alone.
+- Osmo currently promises "internet only for word definitions". The model and web search break that; update his self-description and the dictionary spec when phase 1 lands.
+
+#### Ops
+- Vercel project `osmo`: every env var targets Production only. Preview builds fail at `npm run build` because NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY are missing there. Add the Preview target in the dashboard.
+- Supabase advisor: leaked-password protection is off.
+
+#### Conventions to keep
+Tabs, double quotes, short "why" comments. Every reply is plain speakable text: no markdown, lists, emoji, brackets. Professional JARVIS register, never talks down. RLS on every new table. Run `npx vitest run && npx tsc --noEmit && npx eslint` after every task. Never mirror the user's slang or spelling in his own replies.
