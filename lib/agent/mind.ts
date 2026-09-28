@@ -289,12 +289,21 @@ function takeTurn(
 	// A message can say several things ("im good and i made you"), so answer each part.
 	const spell = {
 		recent: ctx.recent,
-		protect: ctx.userName ? new Set([ctx.userName.toLowerCase()]) : undefined,
+		protect: ctx.userName && !guest ? new Set([ctx.userName.toLowerCase()]) : undefined,
 		personal: ctx.vocabulary ? new Map(Object.entries(ctx.vocabulary)) : undefined,
 	};
 	const parts = understand(trimmed, ctx.slang, spell);
+	// A guest hears how he feels, but never why (that's Gur's history), never Gur's name, and never a welcome back.
 	const spoken = parts
-		.map((parsed) => respond(parsed, { state: s, cause: sess.cause, turn: session.turns, userName: ctx.userName, baseline: p.baseline }))
+		.map((parsed) =>
+			respond(parsed, {
+				state: s,
+				cause: guest ? null : sess.cause,
+				turn: guest ? 0 : session.turns,
+				userName: guest ? null : ctx.userName,
+				baseline: p.baseline,
+			}),
+		)
 		.filter((r): r is string => r !== null);
 	if (spoken.length > 0) {
 		const cause = parts.map((x) => causeOf(x.intent)).find((c) => c !== null) ?? null;

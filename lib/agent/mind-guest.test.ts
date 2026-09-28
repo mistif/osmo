@@ -62,4 +62,17 @@ describe("processTurn for someone who isn't Gur", () => {
 	it("changes nothing for Gur himself", () => {
 		expect(processTurn(withBond(), newSession(), "how close are we", ctx({ guest: false })).reply).not.toBe(GUEST_PRIVATE);
 	});
+
+	it("never says why he feels the way he does, even after Gur told him something painful", () => {
+		const after = processTurn(defaultState(), newSession(), "i want to kill myself", ctx({ guest: false }));
+		for (const ask of ["how are you feeling", "why are you sad", "why do you feel that way"]) {
+			const r = processTurn(after.state, after.session, ask, ctx());
+			expect(r.reply ?? "").not.toMatch(/because|hurting|told me|shared with me/i);
+		}
+	});
+
+	it("is never welcomed back", () => {
+		const r = processTurn(withBond(), { ...newSession(), turns: 2 }, "hello", ctx());
+		expect(r.reply ?? "").not.toMatch(/welcome back|good to see you|good to have you back|there you are/i);
+	});
 });
