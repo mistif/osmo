@@ -32,5 +32,5 @@ Osmo's ear for his name is a small file, `osmo.onnx`, that you train once with o
 
 ## If he wakes too often, or not enough
 
-- **Wakes by mistake** (TV, conversation): first raise `threshold` in `lib/voice/wake.ts` (0.7 → 0.8). If that isn't enough, train again with the phrase "hey osmo" (`target_phrase` and `model_name` both "hey_osmo"), which wakes by mistake far less.
+- **Wakes by mistake** (TV, conversation): first raise `threshold` in `lib/voice/wake.ts` (0.7 → 0.8). If that isn't enough, train again with the phrase "hey osmo" — set `config["target_phrase"] = ["hey osmo"]` and `config["model_name"] = "hey_osmo"` — which wakes by mistake far less. The downloaded file is `hey_osmo.onnx`; rename it to `osmo.onnx` before giving it to Claude. Claude must also regenerate the voice-check clips to say "Hey Osmo" (they currently say "Osmo.").
 - **Doesn't wake when you say it:** lower `threshold` a little (0.7 → 0.6), or train again with `n_samples` at 10000.

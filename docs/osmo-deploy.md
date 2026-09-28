@@ -39,14 +39,15 @@ Until passkeys are turned on (step 1 here), the Devices list in Settings shows "
 
 ## 5. Voice (after the voice update is live)
 
-1. Open **Settings**. The Voice section names the voice he speaks with. Turn on "Speak typed replies too", send a message, and listen. The text types out with his words. Tap the square Stop button once to check it stops him. Turn the switch off again if you prefer silence for typed messages.
-2. Choose **Teach Osmo my voice**, allow the microphone, and read the five sentences in a normal voice. You should see "I know your voice now."
-3. Tap the mic button and ask something. Your words appear in the text box, he answers aloud, and for about 6 seconds he listens for a follow-up without the mic.
-4. Once his wake word is trained (`docs/osmo-wake-word.md`), turn on **Listen for "Osmo"**. The line under the text box says `Listening for "Osmo"`. From across the room, say "Osmo", wait for the chime, and ask something.
-5. Leave the TV or music on for an evening with listening on, and count how often he wakes by mistake. More than once or twice an hour means the threshold needs raising (see the training guide).
-6. Ask a friend to talk to him. Their line is labelled **Someone else**. He doesn't use your name or say anything he remembers about you, and "how close are we" gets "That's between me and the person I belong to."
-7. On your iPhone in Safari, repeat steps 2–4. If Teach again on this device makes him recognize you better on the phone, keep it.
-8. Choose **Forget my voice**, then **Forget my voice** again to confirm. Listening turns off, and the button reads "Teach Osmo my voice" again. Teach it once more if you want to keep using voice.
+1. Open `https://osmo-xyz.vercel.app/ort/ort.wasm.min.mjs` in a tab. It should show JavaScript code, not an error page. Then open `https://osmo-xyz.vercel.app/models/wake/melspectrogram.onnx`: it should download a small file.
+2. Open **Settings**. The Voice section names the voice he speaks with. Turn on "Speak typed replies too", send a message, and listen. The text types out with his words. Tap the square Stop button once to check it stops him. Turn the switch off again if you prefer silence for typed messages.
+3. Choose **Teach Osmo my voice**, allow the microphone, and read the five sentences in a normal voice. You should see "I know your voice now."
+4. Tap the mic button and ask something. Your words appear in the text box, he answers aloud, and for about 6 seconds he listens for a follow-up without the mic.
+5. Once his wake word is trained (`docs/osmo-wake-word.md`), turn on **Listen for "Osmo"**. The line under the text box says `Listening for "Osmo"`. From across the room, say "Osmo", wait for the chime, and ask something.
+6. Leave the TV or music on for an evening with listening on, and count how often he wakes by mistake. More than once or twice an hour means the threshold needs raising (see the training guide).
+7. Ask a friend to talk to him. Their line is labelled **Someone else**. He doesn't use your name or say anything he remembers about you, and "how close are we" gets "That's between me and the person I belong to." Have your friend also ask "how are you feeling" and "why do you feel that way". He says how he feels, but never why, and never anything you told him.
+8. On your iPhone in Safari, repeat steps 3–5. If Teach again on this device makes him recognize you better on the phone, keep it. If a message you speak with the mic button on the phone is labelled Someone else, Safari isn't sharing the microphone with its recognizer; tell Claude.
+9. Choose **Forget my voice**, then **Forget my voice** again to confirm. Listening turns off, and the button reads "Teach Osmo my voice" again. Teach it once more if you want to keep using voice.
 
 ## Your password is the real key
 The email and password path works on every device, so use a long, unique password for it. If your Supabase plan offers leaked-password protection, turn it on.

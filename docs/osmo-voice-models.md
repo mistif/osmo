@@ -33,7 +33,9 @@ Planning run on 2026-09-27, with the Windows voices David, Mark and Zira (a 4-re
 - different voices scored at most 0.38;
 - each judgement took about 0.25 s.
 
-`MATCH_THRESHOLD` (0.5) and `READING_AGREEMENT` (0.5) in `lib/voice/voiceprint.ts` start from these numbers. Tune them after real-voice checks.
+The repeatable check (`npm run voice:check`, below) gave the same voice 0.91–0.92, and different voices at most 0.41.
+
+Across both runs, the same voice scored 0.91–0.93, and different voices at most 0.41. `MATCH_THRESHOLD` (0.5) and `READING_AGREEMENT` (0.5) in `lib/voice/voiceprint.ts` start from these numbers. Tune them after real-voice checks.
 
 To run it again:
 
