@@ -6,18 +6,19 @@ Date: 2026-09-28. Status: draft for review.
 Osmo answers almost any question and talks like a person, while staying the same Osmo: his mood, values, personality donors, bond and memories keep shaping what he says. A language model (Claude) writes his words. His heart, brain and bond stay rule-based and run on every turn, because they are what make him consistent, learnable and his. Everything he knows about Gur lives in Supabase and he reads and writes it himself through tools, so he becomes an agent that runs off the database rather than a page that pattern-matches sentences.
 
 ## Non-goals
-- Voice (speaking and listening). The `messages.speaker` column and the `voiceprints` table already exist in the database from that work, but no code uses them yet. This plan leaves them alone.
+- Changing the voice (spec `2026-09-27-osmo-voice-design.md`, shipped). He speaks, wakes to his name and tells Gur from a guest. This plan fits inside it: the route is called from the same `sendText` path, and a guest gets exactly what the voice spec allows.
 - More than one user.
 - Replacing the heart, brain, bond or genome with the model's own guesses about how Osmo feels. They stay as code.
 - Letting the model change its own state directly. It sees his state and can ask for memories to be saved; the code decides what his mood and bond do.
 
 ## Where Osmo stands today
-Read for this plan: every file under `app/`, `components/`, `lib/`, the five earlier specs, the live Supabase schema (project `agent-memory`) and the Vercel project `osmo`. Tests: 449 pass. Lint: one warning. Typecheck passes after `next typegen`.
+Read for this plan: every file under `app/`, `components/`, `lib/agent/`, `lib/shell/`, all six specs, the language session's handoff (`docs/handoff-language-session.md`), the live Supabase schema (project `agent-memory`) and the Vercel project `osmo`. Checked against `main` at `8b50b4f`, which carries the voice. Tests: 612 pass. Lint: one warning. Typecheck passes after `next typegen`.
 
 What works well and should be kept:
 - The heart (`heart.ts`, `cues.ts`, `events.ts`), the brain (`brain.ts`, `dilemmas.ts`), the bond (`bond/`), the genome (`personality/`) and the mood theme. All pure, all tested, all cheap to run every turn.
 - The crisis check (`safety.ts`). It must stay deterministic and run before anything else.
 - Persistence (`agent-state.ts`, `load.ts`), the lock, the panels, and the room itself.
+- The voice (`lib/voice/`), and with it two things the route inherits: one message path, `sendText(text, { via, speaker })`, for typed and spoken words alike; and the guest rules in `lib/voice/guest.ts`, where a voice that is not Gur's sees nothing of his and changes nothing.
 
 What holds him back:
 - Every reply is a template chosen by a regular expression. `talk.ts` recognizes about 25 intents; anything else falls through to "I'm not sure I follow" or "Could you explain it? I'll remember." That is why he cannot answer most questions.
@@ -39,6 +40,8 @@ browser (room)  --->  POST /api/chat (Vercel, holds the API key)  --->  Claude
 2. **The route acts as Gur, not as an admin.** The browser sends its Supabase access token in the `Authorization` header. The route builds a Supabase client with that token, so every read and write still goes through the same row-level security as today. No service-role key anywhere. A request without a valid token gets 401, so nobody else can spend the API budget.
 3. **The turn moves to the server.** The route loads his state and memory, runs the deterministic steps (crisis, cues, heart step, bond), builds a system prompt from the result, calls Claude with his tools, runs the tools against Supabase, saves everything, and streams the reply back. The browser becomes what it should be: a room that shows the words and the mood.
 4. **The old chain becomes the fallback.** When the model is unreachable (no key, rate limit, outage) the route answers with today's `processTurn` and template replies. Osmo gets duller, never silent. `talk.ts` stays for that reason and stops growing.
+5. **`sendText` stays the one door.** Typed and spoken messages already arrive through it, and every reply already leaves through `deliver`, which hands the text to the voice. The route call goes inside `sendText`, so the voice engine, the guest marking and the "Someone else" label keep working unchanged.
+6. **A guest gets a guest.** The request carries `speaker`. For a guest the route builds the prompt from the guest view (no name, no memory, no history, no bond, no cause), tells the model it is speaking with someone who is not its owner, offers no tool that writes, discards the turn's state and effects, and saves both lines with `speaker = 'guest'`. That is the voice spec's Part 2, applied to the model.
 
 ## What the model is told, every turn
 The system prompt is assembled from his state by a pure function, `lib/agent/prompt.ts`, so it can be tested without the API. In order, stable content first so it caches:
@@ -51,7 +54,7 @@ The system prompt is assembled from his state by a pure function, `lib/agent/pro
 6. **How he feels right now, and why.** `feelingPhrase`, the dominant emotions, `session.cause`, today's mood so far from `mood_days`, and what happened last time they talked. This block changes every turn, so it goes last.
 7. **The rules that stay code.** He is told which things are handled for him and not to improvise them: the crisis reply, re-rolling, saving memories (use the tool, do not claim to remember without it).
 
-The conversation itself is the last 30 messages from `messages`, stored as plain text. Thinking blocks are never stored or replayed, so there is no history-editing problem.
+The conversation itself is the last 30 of Gur's messages from `messages` (guest lines excluded, as `ownerHistory` does today), stored as plain text. Thinking blocks are never stored or replayed, so there is no history-editing problem.
 
 ## What stays deterministic, in order
 Before the model sees anything, the route runs what `mind.ts` does today, in this order:
@@ -111,7 +114,8 @@ Small, mechanical, keeps every test green. Ships on its own first so the later p
 - `app/api/chat/route.ts`: verify the token, load state and memory, run the deterministic steps, build the prompt, call Claude, stream text, save.
 - `lib/agent/prompt.ts` (pure) and its tests.
 - `lib/agent/turn.ts`: the deterministic steps lifted out of `mind.ts` so both the route and the fallback share them.
-- The browser sends `{ text }` with the token and renders the stream through the existing typewriter, which already paces itself by mood. The mood theme updates from the state the route returns at the end of the stream.
+- The browser sends `{ text, speaker }` with the token from inside `sendText`. The route streams from the model so the first words are not held back, but the browser hands `deliver` one finished string, because the voice speaks a reply as one utterance and the typewriter already follows its word timing. The "One moment…" line covers the wait. Speaking sentence by sentence as they arrive is a later refinement, not phase 1.
+- The mood theme updates from the state the route returns with the reply.
 - Fallback to `processTurn` when the model call fails.
 - Vercel: add `ANTHROPIC_API_KEY`. Nothing changes in Supabase.
 
@@ -119,7 +123,7 @@ After phase 1 he answers most questions. He does not yet remember anything new b
 
 ### Phase 2. Tools, and the old chain retired
 - The tools above, except `web_search`. Each with its own tests.
-- Delete from `assistant.tsx`: `agentKnowledge`, `answerFromMemory`, `findUnknownTopic`, `calculateMath`, the pending-learning flow and the name-from-history hacks. Delete `lib/facts.ts` regexes once `remember` covers them. `context.ts` shrinks to what the fallback needs.
+- Delete from `sendText` in `assistant.tsx` (checked against `main` at `8b50b4f`, all still present): `agentKnowledge`, `answerFromMemory`, `findUnknownTopic`, `calculateMath`, the pending-learning flow and the name-from-history hacks. Delete `lib/facts.ts` regexes once `remember` covers them. `context.ts` keeps `turnView` and shrinks otherwise to what the fallback needs.
 - Supabase: a full-text index on `messages.text`, and `settings jsonb` on `agent_state`.
 - A `usage_log` table (day, input tokens, output tokens) written by the route, so Insights can show what he cost this week and a daily cap can stop a runaway. The cap is a number in `settings`.
 
@@ -166,7 +170,12 @@ Every new table gets the same "own rows only" row-level security as the others. 
 - `lib/agent/tools/*.ts`: one file per tool, each a schema plus a handler that takes a Supabase client. Tested with a fake.
 - `lib/agent/mind.ts` and `talk.ts`: the fallback. Unchanged except that `turn.ts` is extracted from `mind.ts`.
 - `lib/server/supabase.ts`: the per-request client from a bearer token.
-- `app/assistant.tsx`: loses its language chain, keeps the room, the typewriter and the panels.
+- `app/assistant.tsx`: `sendText` loses its language chain and calls the route; the room, the typewriter, the voice wiring and the panels stay as they are.
+
+## Coordination
+- **Two sessions share the tree** (see the handoff). The route, `prompt.ts`, `turn.ts` and `tools/` are new files about understanding and answering, so they sit with the language session. Extracting `turn.ts` from `mind.ts` and the `sendText` edit are shared changes, agreed with the brain session first, as the handoff requires. `lib/voice/` is not touched.
+- **Two current rules change, and both need Gur's explicit yes** before phase 1 is built: his messages leave the device for Vercel and Anthropic, where today only a looked-up word leaves it; and a paid API key is added. His self-description and the dictionary spec are updated in the same change.
+- **Nothing is pushed without Gur's OK.** A push to `main` is a deploy.
 
 ## Testing
 - All 449 existing tests keep passing at every phase.
@@ -183,10 +192,10 @@ Every new table gets the same "own rows only" row-level security as the others. 
 - **Invented memories.** The strongest rule in the prompt: never claim to remember something that is not in the memory block or a tool result. The eval checks it.
 - **Privacy.** Messages now leave the browser to Vercel and to Anthropic. That is a change from "internet only for word definitions" and his self-description must say so plainly. Supabase rows stay as private as before.
 - **Cost.** Bounded by the daily cap in phase 2. Until then the risk is a few dollars.
-- **Two orphan migrations.** `messages.speaker` and `voiceprints` exist in the database with no code behind them, from voice work that was never committed. Harmless, but worth knowing before the voice spec resumes.
+- **Guest leakage.** The model is the one place a guest could be told something of Gur's, because it answers freely. The guest prompt must contain nothing of his, and the route test for a guest turn asserts that no memory sentence, name or history line reaches the model. The voice check itself (who is speaking) stays on the device and is untouched.
 
 ## Appendix: code review findings, 2026-09-28
-Static review of `app/`, `components/`, `lib/`, `scripts/`, plus the test suite, lint and typecheck. Most severe first. All are small and become phase 0.
+Static review of `app/`, `components/`, `lib/`, `scripts/`, plus the test suite, lint and typecheck. Re-checked against `main` at `8b50b4f` after the voice landed: all ten are still there. Most severe first. All are small and become phase 0. Ownership follows the handoff: findings 1, 2, 4, 8 and 10 are in the language session's part of `assistant.tsx`; 5 is in the shared `mind.ts`; 3, 7 and 9 are the brain session's; 6 is in the load effect, which the brain session last changed.
 
 1. **`app/assistant.tsx` `answerFromMemory`: substring matching on fact keys.** Saving "my age is 30" makes every later message containing "age" ("send me a message") answer "Your age is 30." Same for `meaning:` keys. Needs word-boundary matching.
 2. **`app/assistant.tsx` `findUnknownTopic` accepts pronouns.** "what is it" asks Gur to explain "it", then saves whatever he types next as its meaning, after which every message containing "it" gets that reply. Reuse `parseLookup`'s term rules.
