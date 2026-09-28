@@ -2,6 +2,7 @@
 // Audio is 16 kHz int16 in any chunk sizes. Every 1280 samples (80 ms), the mel model sees 480 samples of
 // context plus the new chunk, giving 8 frames. The embedding model sees the last 76 frames (transformed x / 10 + 2),
 // and once 16 embeddings exist the wake-word model scores them.
+// `push` must not be called again before its promise settles; callers serialize their calls.
 
 export type WakeModels = {
 	mel(samples: Float32Array): Promise<Float32Array>;
@@ -18,13 +19,26 @@ const FEATURE_FRAMES = 16;
 
 export class WakeStream {
 	private readonly models: WakeModels;
-	private pending = new Float32Array(0);
-	private context = new Float32Array(CONTEXT);
-	private mels: Float32Array[] = Array.from({ length: MEL_WINDOW }, () => new Float32Array(MEL_BINS).fill(1));
-	private features: Float32Array[] = [];
+	private pending!: Float32Array;
+	private context!: Float32Array;
+	private mels!: Float32Array[];
+	private features!: Float32Array[];
 
 	constructor(models: WakeModels) {
 		this.models = models;
+		this.clear();
+	}
+
+	private clear(): void {
+		this.pending = new Float32Array(0);
+		this.context = new Float32Array(CONTEXT);
+		this.mels = Array.from({ length: MEL_WINDOW }, () => new Float32Array(MEL_BINS).fill(1));
+		this.features = [];
+	}
+
+	// Forgets whatever audio came before, as if freshly constructed.
+	reset(): void {
+		this.clear();
 	}
 
 	// Scores for every whole chunk now available, oldest first.

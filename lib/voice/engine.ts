@@ -4,7 +4,7 @@
 
 import type { SendOptions, Speaker, Via } from "./guest";
 import { speechSeconds, trimSilence } from "./levels";
-import { detectorOn, initialVoice, micOpen, recognizerOn, step, type VoiceEvent, type VoiceState } from "./machine";
+import { detectorOn, inConversation, initialVoice, micOpen, recognizerOn, step, type VoiceEvent, type VoiceState } from "./machine";
 import type { SampleRing } from "./ring";
 import { messageFrom, spokenSeconds } from "./utterance";
 import { bestScore, judge, type Voiceprint } from "./voiceprint";
@@ -46,7 +46,7 @@ export type HearHooks = {
 };
 export type Hearing = { stop(): void; abort(): void };
 export type MicHandle = { readonly ring: SampleRing; close(): void };
-export type Detector = { feed(samples: Int16Array): void };
+export type Detector = { feed(samples: Int16Array): void; reset(): void };
 export type SayHooks = { onWord(start: number, end: number): void; onEnd(): void };
 export type Spoken = { cancel(): void };
 
@@ -230,6 +230,10 @@ export class VoiceEngine {
 
 	// Opens and closes what each mode needs.
 	private sync(before: VoiceState, next: VoiceState): void {
+		// A conversation that ends gives the shared microphone another chance: one glitch shouldn't degrade the whole visit.
+		if (inConversation(before) && !inConversation(next)) this.exclusive = false;
+		// Waiting for his name again: forget the audio that woke him, or it wakes him twice.
+		if (next.mode === "sleeping" && before.mode !== "sleeping") this.detector?.reset();
 		if (this.wantsMic(next)) {
 			if (!this.mic && !this.micOpening) void this.openMic();
 		} else if (this.mic) {
@@ -374,8 +378,9 @@ export class VoiceEngine {
 	private async whoSpoke(message: string): Promise<Speaker | null> {
 		const pcm = this.ring ? this.ring.since(this.mark) : new Int16Array(0);
 		const audio = trimSilence(Float32Array.from(pcm, (sample) => sample / 32768));
-		// No audio at all (an exclusive recognizer that never fed the ring) isn't the same as a short reading.
-		const seconds = pcm.length === 0 ? spokenSeconds(message) : speechSeconds(audio);
+		// No speech audio to measure (an exclusive recognizer that never fed the ring, or a ring of pure silence
+		// trimmed away to nothing) isn't the same as a short reading: fall back to the word-count estimate.
+		const seconds = audio.length === 0 ? spokenSeconds(message) : speechSeconds(audio);
 		let score = -1;
 		if (audio.length >= MIN_EMBED_SAMPLES) {
 			try {

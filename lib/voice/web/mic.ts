@@ -33,8 +33,14 @@ export async function openMic(onAudio: (samples: Int16Array) => void): Promise<M
 		source.connect(tap);
 		// The tap's output is silence; connecting it keeps the browser pulling audio through it.
 		tap.connect(context.destination);
-		if (context.state === "suspended") await context.resume().catch(() => undefined);
 		const audio = context;
+		// A context that isn't allowed to start yet keeps its resume promise pending, so never wait on it:
+		// ask now, and again on the next tap, which is what unlocks it.
+		const wake = () => {
+			if (audio.state === "suspended") void audio.resume().catch(() => undefined);
+		};
+		wake();
+		document.addEventListener("pointerdown", wake);
 		return {
 			ring,
 			close() {
@@ -42,6 +48,7 @@ export async function openMic(onAudio: (samples: Int16Array) => void): Promise<M
 				source.disconnect();
 				tap.disconnect();
 				stream.getTracks().forEach((track) => track.stop());
+				document.removeEventListener("pointerdown", wake);
 				void audio.close();
 			},
 		};

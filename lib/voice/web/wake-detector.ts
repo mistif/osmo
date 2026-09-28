@@ -35,5 +35,8 @@ export async function createDetector(onWake: () => void): Promise<Detector> {
 				})
 				.catch(() => undefined);
 		},
+		reset() {
+			queue = queue.then(() => { stream.reset(); gate.reset(); }).catch(() => undefined);
+		},
 	};
 }

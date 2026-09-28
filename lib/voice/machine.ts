@@ -51,7 +51,7 @@ function rest(s: VoiceState, now: number): VoiceState {
 }
 
 // A conversation runs from waking (or the mic button) until he rests again.
-const inConversation = (s: VoiceState) =>
+export const inConversation = (s: VoiceState) =>
 	s.mode === "awake" || s.mode === "thinking" || s.mode === "speaking" || s.mode === "followup";
 
 export const detectorOn = (s: VoiceState) => s.mode === "sleeping";

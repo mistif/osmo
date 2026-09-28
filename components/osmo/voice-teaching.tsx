@@ -25,6 +25,8 @@ export function VoiceTeaching({ onDone }: { onDone(saved: boolean): void }) {
 	const micRef = useRef<MicHandle | null>(null);
 	const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 	const finishRef = useRef<(() => void) | null>(null);
+	// Cancelled mid-flight (unmounted, or Cancel pressed): every step still in the air becomes a no-op.
+	const cancelledRef = useRef(false);
 	const next = readings.findIndex((r) => r === null);
 	const current = next === -1 ? TEACHING_SENTENCES.length - 1 : next;
 
@@ -36,11 +38,19 @@ export function VoiceTeaching({ onDone }: { onDone(saved: boolean): void }) {
 		micRef.current = null;
 	}
 
-	useEffect(() => release, []);
+	useEffect(
+		() => () => {
+			cancelledRef.current = true;
+			release();
+		},
+		[],
+	);
 
 	async function save(filled: number[][]) {
 		setPhase("saving");
-		if (await saveVoiceprint(averagePrint(filled))) {
+		const saved = await saveVoiceprint(averagePrint(filled));
+		if (cancelledRef.current) return;
+		if (saved) {
 			onDone(true);
 			return;
 		}
@@ -53,6 +63,10 @@ export function VoiceTeaching({ onDone }: { onDone(saved: boolean): void }) {
 		setPhase("recording");
 		try {
 			const mic = await openMic(() => {});
+			if (cancelledRef.current) {
+				mic.close();
+				return;
+			}
 			micRef.current = mic;
 			const start = mic.ring.total;
 			const heard = () => Float32Array.from(mic.ring.since(start), (s) => s / 32768);
@@ -64,6 +78,7 @@ export function VoiceTeaching({ onDone }: { onDone(saved: boolean): void }) {
 				finishRef.current = () => resolve(heard());
 			});
 			release();
+			if (cancelledRef.current) return;
 			if (readingProblem(samples)) {
 				setError(TOO_QUIET);
 				setPhase("ready");
@@ -71,6 +86,7 @@ export function VoiceTeaching({ onDone }: { onDone(saved: boolean): void }) {
 			}
 			setPhase("learning");
 			const embedding = await voiceEmbedding(trimSilence(samples));
+			if (cancelledRef.current) return;
 			const updated = readings.map((r, i) => (i === current ? embedding : r));
 			if (updated.some((r) => r === null)) {
 				setReadings(updated);
@@ -95,6 +111,7 @@ export function VoiceTeaching({ onDone }: { onDone(saved: boolean): void }) {
 	}
 
 	function cancel() {
+		cancelledRef.current = true;
 		release();
 		onDone(false);
 	}

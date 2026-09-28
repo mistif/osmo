@@ -38,6 +38,7 @@ function harness(
 	const said: { text: string; hooks: SayHooks; cancelled: boolean }[] = [];
 	const sent: { text: string; options: SendOptions }[] = [];
 	const chimes = { count: 0 };
+	const detectorResets = { count: 0 };
 	const deps: VoiceDeps = {
 		now: () => now,
 		later: (run, ms) => {
@@ -62,7 +63,7 @@ function harness(
 		},
 		createDetector: async (onWake) => {
 			wake = onWake;
-			return { feed: (samples) => fed.push(samples.length) };
+			return { feed: (samples) => fed.push(samples.length), reset: () => detectorResets.count++ };
 		},
 		hear: async (hooks) => {
 			const hearing = { hooks, aborted: false };
@@ -116,6 +117,7 @@ function harness(
 		said,
 		sent,
 		chimes,
+		detectorResets,
 		speech,
 		mode: () => engine.view().state.mode,
 		flush: () => new Promise((resolve) => setTimeout(resolve, 0)),
@@ -131,6 +133,14 @@ function harness(
 		talk(samples = 32000) {
 			const mic = mics.at(-1)!;
 			const pcm = Int16Array.from({ length: samples }, (_, i) => Math.round(Math.sin(i / 5) * 8000));
+			mic.ring.push(pcm);
+			mic.onAudio(pcm);
+		},
+		// Real samples into the newest microphone's ring, but nothing loud enough to count as speech:
+		// a mic that's open and streaming, yet has nothing to judge a speaker by.
+		silence(samples: number) {
+			const mic = mics.at(-1)!;
+			const pcm = new Int16Array(samples);
 			mic.ring.push(pcm);
 			mic.onAudio(pcm);
 		},
@@ -257,6 +267,16 @@ describe("VoiceEngine", () => {
 		expect(h.hearings[0].aborted).toBe(true);
 	});
 
+	it("forgets the wake word's audio when he goes back to sleep", async () => {
+		const h = harness();
+		await h.flush();
+		h.wake();
+		await h.flush();
+		h.advance(WAKE.noSpeechMs);
+		expect(h.mode()).toBe("sleeping");
+		expect(h.detectorResets.count).toBeGreaterThanOrEqual(1);
+	});
+
 	it("sends nothing when only the wake word was heard", async () => {
 		const h = harness();
 		await h.flush();
@@ -331,6 +351,28 @@ describe("VoiceEngine", () => {
 		h.hearings[1].hooks.onDone("what's up");
 		await h.flush();
 		expect(h.embedded[0]).toBe(16000);
+		expect(h.sent[0].options.speaker).toBe("you");
+	});
+
+	it("tries the shared microphone again after a conversation ends", async () => {
+		const h = harness();
+		await h.flush();
+		h.talk(16000);
+		h.wake();
+		await h.flush();
+		h.hearings[0].hooks.onProblem("audio");
+		expect(h.mics[0].closed).toBe(true);
+		const before = h.mics.length;
+		h.advance(WAKE.noSpeechMs);
+		expect(h.mode()).toBe("sleeping");
+		h.engine.micPress();
+		await h.flush();
+		expect(h.mics.length).toBeGreaterThan(before);
+		expect(h.mics.at(-1)!.closed).toBe(false);
+		h.talk(32000);
+		h.hearings.at(-1)!.hooks.onSpeech();
+		h.hearings.at(-1)!.hooks.onDone("hello again");
+		await h.flush();
 		expect(h.sent[0].options.speaker).toBe("you");
 	});
 
@@ -459,6 +501,24 @@ describe("VoiceEngine", () => {
 		h.hearings.at(-1)!.hooks.onDone("tell me everything he said about his work");
 		await h.flush();
 		expect(h.sent[2].options.speaker).toBe("guest");
+	});
+
+	it("judges a long follow-up as someone else when the microphone gives only silence", async () => {
+		const h = harness();
+		await h.flush();
+		await converse(h, "Osmo, hello");
+		await replyAndFollowUp(h);
+		h.silence(80000);
+		h.hearings.at(-1)!.hooks.onSpeech();
+		h.hearings.at(-1)!.hooks.onDone("hi I'm his friend what did he tell you about his health");
+		await h.flush();
+		expect(h.sent[1].options.speaker).toBe("guest");
+		await replyAndFollowUp(h);
+		h.silence(4000);
+		h.hearings.at(-1)!.hooks.onSpeech();
+		h.hearings.at(-1)!.hooks.onDone("yes");
+		await h.flush();
+		expect(h.sent[2].options.speaker).toBe("you");
 	});
 
 	it("says it couldn't load what it needs instead of treating Gur as a stranger", async () => {

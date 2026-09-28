@@ -34,11 +34,11 @@ export function useVoice(options: { speech: SpeechHooks; sendTextRef: { current:
 	useEffect(() => {
 		let live = true;
 		async function load() {
-			const [chosen, list, trained] = await Promise.all([chooseVoice(), loadVoiceprints(), wakeWordTrained()]);
+			const [voiceResult, printsResult, wakeResult] = await Promise.allSettled([chooseVoice(), loadVoiceprints(), wakeWordTrained()]);
 			if (!live) return;
-			setVoice(chosen);
-			setPrints(list ?? "error");
-			setWakeReady(trained);
+			setVoice(voiceResult.status === "fulfilled" ? voiceResult.value : null);
+			setPrints(printsResult.status === "fulfilled" ? (printsResult.value ?? "error") : "error");
+			setWakeReady(wakeResult.status === "fulfilled" ? wakeResult.value : false);
 		}
 		void load();
 		return () => {
@@ -50,7 +50,8 @@ export function useVoice(options: { speech: SpeechHooks; sendTextRef: { current:
 	useEffect(() => {
 		engine.configure({
 			// Listening waits for the voiceprints to load, so a slow load never reads as "not taught".
-			listen: settings.listen && listenSupported && Array.isArray(prints),
+			// Off while teaching: one of the sentences says his name, and his reply would end up in the reading.
+			listen: settings.listen && listenSupported && Array.isArray(prints) && teaching === null,
 			wakeReady: wakeReady === true,
 			prints: Array.isArray(prints) ? prints : [],
 			canSpeak: voice != null,

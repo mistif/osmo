@@ -6,6 +6,7 @@ export function chime(): void {
 	try {
 		context ??= new AudioContext();
 		const ctx = context;
+		if (ctx.state === "suspended") void ctx.resume().catch(() => undefined);
 		const start = ctx.currentTime;
 		[660, 880].forEach((hz, i) => {
 			const osc = ctx.createOscillator();

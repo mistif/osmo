@@ -1,5 +1,5 @@
-// Telling Gur's voice from anyone else's. The numbers come from the planning check with 3D-Speaker CAM++:
-// the same voice scored 0.92 or more, and different voices at most 0.38 (see docs/osmo-voice-models.md).
+// Telling Gur's voice from anyone else's. The numbers come from checks with 3D-Speaker CAM++:
+// the same voice scored 0.91-0.93, and different voices at most 0.41 (see docs/osmo-voice-models.md).
 
 import type { Speaker } from "./guest";
 

@@ -56,4 +56,14 @@ describe("WakeStream", () => {
 		expect(calls.score[0][0]).toBe(1);
 		expect(calls.score[0][16 * 96 - 1]).toBe(16);
 	});
+
+	it("starts over after a reset", async () => {
+		const { models, calls } = fakeModels();
+		const stream = new WakeStream(models);
+		await stream.push(ramp(CHUNK));
+		stream.reset();
+		await stream.push(ramp(CHUNK));
+		expect(Array.from(calls.mel[1].subarray(0, CONTEXT))).toEqual(new Array(CONTEXT).fill(0));
+		expect(calls.embed[1][0]).toBe(1);
+	});
 });
