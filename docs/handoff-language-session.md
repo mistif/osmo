@@ -58,7 +58,7 @@ Osmo is a rule-based chat companion for one person, Gur. There is no LLM: every 
 
 ## Current state (2026-09-28)
 
-- **Local vs live:** local `main` is at `7fa6a25`, **19 commits ahead of GitHub**, and not pushed. Those commits are the voice feature. The live site runs `b5785ec`, the shell.
+- **Local vs live:** local `main` holds the voice feature (from `d2eab2e` on) and isn't pushed. The live site runs `b5785ec`, the shell. Check the current gap with `git fetch && git log --oneline origin/main..main`.
 - **Voice plan** (`docs/superpowers/plans/2026-09-27-osmo-voice.md`): all tasks that touch code are done. The brain session is finishing the docs task and the final whole-plan review. It will send an `app/assistant.tsx` diff first if that review needs one.
 - **The wake word:** it needs a trained `osmo` model that Gur makes in Google Colab (see `docs/osmo-voice-models.md` and the plan's Task 12). Until then, the mic button still works.
 - **Supabase tables** (all per-user row-level security, `(select auth.uid()) = user_id`): `agent_state`, `dilemma_log`, `emotion_associations`, `event_log`, `memory_facts`, `messages` (new `speaker` column: null for Gur, `'guest'` for anyone else), `mood_days`, `user_words`, `voiceprints`, `word_lookups`.
