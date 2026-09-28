@@ -44,7 +44,7 @@ browser (room)  --->  POST /api/chat (Vercel, holds the API key)  --->  Claude
 The system prompt is assembled from his state by a pure function, `lib/agent/prompt.ts`, so it can be tested without the API. In order, stable content first so it caches:
 
 1. **Who he is.** Osmo, one person's companion, built by students, professional and composed like JARVIS, with dry wit. Everything he says is plain speakable text: no markdown, lists, emoji, brackets or symbols, because a voice will read it aloud later. Short replies by default, one question at a time. He has opinions and defends them, gently. He never talks down.
-2. **His personality donors.** The six donor names and their organs, written as guidance rather than data: "Your voice comes from The Victorian Butler: formal, full sentences, no contractions. Your humor comes from The Grumpy Professor: dry, rare." This is where the donors finally sound different.
+2. **His personality donors.** The six donor names and their organs, written as guidance rather than data: "Your voice comes from The Victorian Butler: formal, full sentences, no contractions. Your humor comes from The Grumpy Professor: dry, rare." Every organ's written material goes in: the voice openers and elaboration, the humor lines whatever their style, the slang tags, the catchphrases. Today all of that is stored on all 100 donors and used by nothing (see "Personality piece 2, absorbed"). The model is told to use it sparingly and in the professional register, which is a judgement a template could not make. This is where the donors finally sound different.
 3. **His values.** The five moral weights in words ("you weigh honesty most, then kindness"), and his outlook ("you lean toward hope, because of what you have experienced").
 4. **His memory of Gur.** Every `memory_facts` row as a sentence, the same sentences the Memory panel shows. Words Gur taught him. Gur's own frequent words, so the model knows "valo" is not a typo.
 5. **The relationship.** The bond stage, how many days they have talked, milestones reached, any milestone due to be mentioned, and how long Gur has been away. Written as instructions per stage, matching the bond spec's table: a stranger gets formal precision, an old friend gets easy familiarity.
@@ -86,6 +86,21 @@ Web search changes a promise he makes today ("internet access is used only to lo
 - Remember the thread of their life together, not only facts: "You mentioned the exam last Tuesday. How did it go?" comes from `search_past` in phase 2 and from episodes in phase 3.
 - Sound like his donors. A Victorian Butler Osmo and a Skater Osmo will read differently for the first time.
 - Have an opinion in his own voice about a dilemma, a story or a piece of news, weighted by his values and mood.
+
+## Personality piece 2, absorbed
+The personality spec promised a "piece 2": about 25 topics with follow-ups, short-term memory, and a larger slang dictionary. It was never written. Where it stands:
+
+- **The slang dictionary shipped** with the dictionary spec. Done.
+- **Topics with follow-ups were never built.** The nearest things are the 20 one-line facts in `agentKnowledge` (matched by substring, which the review found buggy) and the "explain it and I'll remember" flow. Twenty-five hand-written topics would be twenty-five more regexes and templates, and the replayed chat log in `chatlog.test.ts` shows real messages ("do it jiggle when you walk") do not fit templates. The model makes topics free and unlimited (phase 1), and web search covers the present (phase 3). Follow-ups become `search_past` (phase 2) and episodes with a follow-up date (phase 3).
+- **Short-term memory exists in fragments**, each solving one incident: `session.cause` (why he feels this way), the pending dilemma, the last question he asked (so "Gur" is read as a name), the words of the last six messages (for typos only), and `recallReply`, which quotes the last two lines back verbatim. Nothing tracks what was talked about. In the route, the conversation window in the prompt gives all of this for free; `cause` and the pending dilemma are kept as named lines in the prompt because they are state the model cannot see otherwise.
+
+One more thing piece 2 would have run into. The material meant to give each personality "more to say" is already written and already dead:
+
+- Only 12 of the 100 donors may supply voice, humor, slang or quirks (`personality/modern.ts`, not recorded in any spec).
+- Of those 12, only two have dry humor, and `flavor.ts` speaks no other style. So ten of the twelve have no humor at all.
+- `voice.openers`, `voice.elaboration`, `slang.says` and `quirks.phrases` are stored for every donor and read by no code path since the professional-voice change.
+
+So today a donor's "voice" amounts to dropping a trailing question when verbosity is low, plus a rare framed slang joke from a hand-picked list of seven donors in `bond/lines.ts`. Piece 2 as designed would have poured more templates into that same narrow pipe. In this plan the donor material becomes prompt guidance instead, which is the only way a teasing or punning donor can be funny without being tone-deaf: the model reads the mood and the stage before it decides whether a line fits. The present-day restriction can then be reconsidered as a register rule ("sound like now") rather than a roster cut.
 
 ## Phases
 
