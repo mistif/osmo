@@ -1,8 +1,16 @@
-# Osmo handoff: the language session
+# Osmo handoff: all agents
 
-A briefing for any agent picking up Osmo. It covers what the "language session" (the Claude session that owns how Osmo reads and answers messages) has built, how the project runs, the rules both sessions follow, and what's still open. Written 2026-09-28.
+The shared briefing for every agent working on Osmo. Three agents work on him; this document is where they stay on the same page. The main agent maintains it; the others add to their own sections and tell the main agent when something else changes. Last updated 2026-09-28 by the main agent, after the voice feature went live.
 
-The last section, "From another agent", was written by a different agent. It has review findings and a plan to have Claude write Osmo's replies. Read the note at its top first: that agent worked from GitHub, which is behind the local `main`.
+## Who's who
+
+| Agent | What it owns | What it can reach |
+|---|---|---|
+| **Main agent** (this session; in ListAgents it's "Fable 5.1 Main Osmo Agent", earlier "Osmo idle pulsing animation") | The brain: heart, personality, bond, the shell (lock screen, panels), the voice. It also applies Supabase migrations, runs the browser checks in Gur's session, coordinates shared files, and writes this document. | The local tree, `.env.local`, the dev server and browser pane, the Supabase and Vercel tools, GitHub. |
+| **Language session** ("Opus 5.5 Secondary Osmo Agent", earlier "Supabase database for conversations") | How Osmo reads and answers messages: understanding, memory facts, the dictionary, safety, the language chain in `app/assistant.tsx`. | The same local tree and tools as the main agent. |
+| **Cloud agent** (works from GitHub; branch `claude/compassionate-sagan-x1teq9`, draft PR #1) | Review findings and the design for Osmo as a language-model agent (`docs/superpowers/specs/2026-09-28-osmo-agent-design.md`). | **GitHub only.** No local tree, no `.env.local`, no dev server or browser pane, no Supabase or Vercel tools, no voice-check clips, and it can't be messaged with ListAgents. It reads `main` on GitHub and proposes changes as PRs; Gur relays messages between it and the two local sessions. |
+
+**Since 2026-09-28, GitHub `main` equals the local `main`** (commit `8b50b4f`, the voice feature). Before that, GitHub was 20+ commits behind, which is why the cloud agent's section at the end has stale facts; they're corrected in the note above it. Anyone can check the current gap with `git fetch && git log --oneline origin/main..main`.
 
 ## What Osmo is
 
@@ -12,9 +20,9 @@ Osmo is a rule-based chat companion for one person, Gur. There is no LLM: every 
 - a bond with Gur that grows over time;
 - a memory of facts Gur tells him;
 - a dictionary;
-- as of now, a voice: he speaks, wakes to "Osmo" and tells Gur's voice from a guest's.
+- a voice: he speaks, listens, will wake to "Osmo" once the wake word is trained, and tells Gur's voice from a guest's.
 
-**Stack:** Next.js 16 (App Router; read `node_modules/next/dist/docs/` before writing Next code, since it differs from older versions), React 19, TypeScript, Vitest, ESLint, Supabase (auth, Postgres, row-level security), `onnxruntime-web` for the voice models.
+**Stack:** Next.js 16 (App Router; read `node_modules/next/dist/docs/` before writing Next code, since it differs from older versions), React 19 with the React Compiler lint rules, TypeScript, Vitest, ESLint, Supabase (auth with passkeys, Postgres, row-level security), `onnxruntime-web` 1.30.0 for the voice models.
 
 **Where it runs:**
 - The app is in `my-app/`.
@@ -26,49 +34,54 @@ Osmo is a rule-based chat companion for one person, Gur. There is no LLM: every 
 
 | What | Command |
 |---|---|
-| Tests (606 on 2026-09-28) | `npx vitest run` |
-| Types | `npx tsc --noEmit` |
-| Lint (one old warning about `router` in the load effect is expected) | `npx eslint .` |
-| Build | `npm run build` |
+| Tests (612 on 2026-09-28) | `npx vitest run` |
+| Types | `npx tsc --noEmit -p .` (a fresh clone may need `npx next typegen` first) |
+| Lint (one old warning about `router` in the load effect is expected) | `npm run lint` |
+| Build (copies the ONNX runtime into `public/ort` first) | `npm run build` |
 | Dev server | the `my-app` entry in `.claude/launch.json` (port 3000) |
-| Voice model check | `npm run voice:check` |
+| Voice model check (needs clips from `scripts/voice-clips.ps1`, Windows only) | `npm run voice:check` |
 
-## Rules both sessions follow
+## Rules all agents follow
 
-- **Two sessions share one working tree.**
-  - The **brain/personality session** owns the heart, bond, personality, the lock screen and panels, and the voice (`lib/agent/bond/*`, `lib/agent/personality/*`, heart/state/cues/brain/dilemmas/events/mood/speech/load/agent-state, `lib/shell/*`, `lib/voice/*`, `components/osmo/*`, `app/assistant.module.css`).
+- **Two local sessions share one working tree.**
+  - The **main agent** owns the heart, bond, personality, the lock screen and panels, and the voice: `lib/agent/bond/*`, `lib/agent/personality/*`, heart/state/cues/brain/dilemmas/events/mood-theme/mood-days/speech/load/agent-state, `lib/shell/*`, `lib/voice/*`, `components/osmo/*`, `app/assistant.module.css`, `app/lock/*`, `public/models/*`, `public/voice/*`, `scripts/voice-*`, `scripts/copy-ort.mjs`.
   - The **language session** owns understanding and answering:
     - `lib/agent/talk.ts`, `context.ts`, `safety.ts`, `dictionary.ts`, `dictionary-store.ts`, `vocabulary-store.ts`;
     - `lib/agent/lexicon/*`, `lib/facts.ts`;
     - the tests `chatlog.test.ts`, `voice.test.ts` and `typos.test.ts`.
   - **Shared:**
-    - `lib/agent/mind.ts`: the language session owns step 6, "everyday conversation";
-    - `app/assistant.tsx`: the language session owns `sendText`/`sendMessage` and their helpers; the brain session owns the room markup, speaking animation, panels and voice wiring.
-  - **Before editing a shared file,** message the other session with the exact diff and wait for an OK. Find it with ListAgents; it's named "Osmo idle pulsing animation".
+    - `lib/agent/mind.ts`: the language session owns step 6, "everyday conversation"; the main agent owns the rest, and the whole `guest` flag (every guest gate in `processTurn`, including the guest-safe values passed to `respond()` in step 6, was delegated to the main agent).
+    - `app/assistant.tsx`: the language session owns `sendText`/`sendMessage`, `sendTextRef`, `onReplyRef`, `deliver`, `turnView` and their helpers; the main agent owns the room markup, the speaking animation (`paceRef`, `spokenIndexRef`), the panels, `useVoice`, `data-listening`, the listening line, the mic button and the "Someone else" label.
+  - **Before editing a shared file,** message the other session with the exact diff and wait for an OK (ListAgents, then SendMessage). The cloud agent proposes shared-file changes in a PR, and Gur relays.
 - **Git:**
   - Commit only your own files, staged by path. Never `git add -A` or `git add .`, because the other session may have uncommitted work in the same tree.
-  - Small commits, ending with the Co-Authored-By line.
-  - **Never push without Gur's OK.**
+  - Small commits, each ending with the committing agent's own `Co-Authored-By` line (history holds Haiku, Opus, Fable and Sonnet lines; never rewrite it).
+  - **Never push without Gur's OK.** Each OK covers one push. Gur has given two so far (the shell on 2026-09-27, the voice on 2026-09-28).
+- **The database:** only the main agent applies migrations (through the Supabase tools). A migration that new code needs must be live before that code is pushed, because a push deploys.
 - **Osmo's voice:** professional and speakable, like JARVIS.
   - He never uses slang, internet shorthand or emoji himself, and never echoes crude words back.
   - Replies avoid brackets and symbols a text-to-speech voice would read out.
   - He never mirrors Gur's grammar. He learns Gur's *vocabulary* only to understand him.
-- **Never sign in for Gur** or enter credentials. Gur signs in himself; after that, the browser pane keeps his session for live checks.
-- Replies that `chatlog.test.ts` pins ("yes, roll", /^Done\./, /roll a new osmo/i) are agreed with the brain session before any change.
+- **Never sign in for Gur** or enter credentials. Gur signs in himself; after that, the browser pane keeps his session for live checks. In that session, never send Osmo a message, click Lock, Remove, Forget, Remember, the mic, or teaching, and never edit memory. Read-only checks only.
+- **Privacy rules the voice adds:** audio is never stored or uploaded; only voiceprint numbers reach Supabase. The microphone is never open without the listening line under the text box. Voice never unlocks Osmo and never stands in for the passkey.
+- Replies that `chatlog.test.ts` pins ("yes, roll", /^Done\./, /roll a new osmo/i) are agreed with the main agent before any change.
 
 ## Current state (2026-09-28)
 
-- **Local vs live:** local `main` holds the voice feature (from `d2eab2e` on) and isn't pushed. The live site runs `b5785ec`, the shell. Check the current gap with `git fetch && git log --oneline origin/main..main`.
-- **Voice plan** (`docs/superpowers/plans/2026-09-27-osmo-voice.md`): all tasks that touch code are done. The brain session is finishing the docs task and the final whole-plan review. It will send an `app/assistant.tsx` diff first if that review needs one.
-- **The wake word:** it needs a trained `osmo` model that Gur makes in Google Colab (see `docs/osmo-voice-models.md` and the plan's Task 12). Until then, the mic button still works.
-- **Supabase tables** (all per-user row-level security, `(select auth.uid()) = user_id`): `agent_state`, `dilemma_log`, `emotion_associations`, `event_log`, `memory_facts`, `messages` (new `speaker` column: null for Gur, `'guest'` for anyone else), `mood_days`, `user_words`, `voiceprints`, `word_lookups`.
+- **Live = local:** `main` is at `8b50b4f` on GitHub and locally, deployed on Vercel. The voice runs on the live site; the runtime, the models and the worklet all serve correctly (checked after the deploy).
+- **Tests:** 612 pass; `tsc` clean; lint 0 errors (the old `router` warning); build OK.
+- **Supabase auth:** passkeys are on (relying party `osmo-xyz.vercel.app`); anonymous sign-ins are off; **new sign-ups were still ON at the last check (2026-09-28).** Gur has been asked three times to turn them off (Authentication → Sign In / Providers). Recheck with a public GET of `<SUPABASE_URL>/auth/v1/settings` with the publishable key: `disable_signup` must be `true`.
+- **Supabase tables** (all per-user row-level security, `(select auth.uid()) = user_id`): `agent_state`, `dilemma_log`, `emotion_associations`, `event_log`, `memory_facts`, `messages` (`speaker` column: null for Gur, `'guest'` for anyone else), `mood_days`, `user_words`, `voiceprints`, `word_lookups`.
+- **Vercel:** every environment variable targets Production only, so preview deployments of other branches fail at build (confirmed: the cloud agent's branch shows an ERROR deployment). Adding the Preview target in the dashboard would fix it; Gur's call.
+- **The wake word:** `public/models/wake/osmo.onnx` doesn't exist yet. Gur trains it in Google Colab (`docs/osmo-wake-word.md`). Until then, the "Listen for 'Osmo'" switch is disabled and the mic button is the only voice path.
+- **Open follow-ups** are listed under "Still open" below.
 
 ## What the language session built
 
 ### 1. Memory and conversation storage, then dialogue fixes
 - Osmo saves facts (`memory_facts`) and the conversation (`messages`) per user in Supabase.
 - Dialogue bugs found in Gur's real chat log were fixed; `chatlog.test.ts` replays that log.
-- Osmo got a modern but professional voice. Along with the brain session, the language session finished Tasks 5-13 of the Frankenstein personality plan.
+- Osmo got a modern but professional voice. Along with the main agent, the language session finished Tasks 5-13 of the Frankenstein personality plan.
 
 ### 2. Dictionary (spec and plan `2026-09-26-osmo-dictionary*`)
 - **Word questions:** "what does X mean", "define X", "whats a X" are parsed by `parseLookup` in `dictionary.ts`.
@@ -125,14 +138,62 @@ Osmo is a rule-based chat companion for one person, Gur. There is no LLM: every 
   - Unknown words get `I'm not familiar with "X".`, with no promise to learn.
   - Both rows are saved with `speaker = 'guest'`.
   - The first guest reply gets "Hello. I don't believe we've met.", except on a crisis reply.
-- A spoken message leaves Gur's half-typed draft alone.
+- A spoken message leaves Gur's half-typed draft alone, and Send is disabled while he listens, so it can't submit the hidden draft.
 
-### 6. Reviews of the brain session's work
+### 6. Reviews of the main agent's work
 The language session approved every shared edit for the shell (lock, panels, sign-out in all tabs) and for the voice. It caught these on the way:
 - blank memory values;
 - a reply that could get stuck hidden while Osmo speaks;
 - Send submitting the hidden draft while he listens;
 - migration-before-deploy ordering.
+
+## What the main agent built
+
+Specs and plans for each live in `docs/superpowers/`. The commits are on `main`.
+
+### 1. Heart, brain and personality (2026-09-24)
+- **Heart** (`heart.ts`, `cues.ts`, `events.ts`, `mood-theme.ts`): a mood made of emotion activations that react to cues in Gur's words, life events, and the time since he last spoke. The room's colors and breathing follow it.
+- **Brain** (`brain.ts`, `dilemmas.ts`): moral dilemmas he decides with weights that Gur's verdicts adjust.
+- **Personality** (`personality/*`): a genome assembled from 100 donor characters (heart, brain, voice, humor, slang, quirks), a re-roll flow ("roll a new osmo" → "yes, roll"), and `flavorTurn`, which adds his personal touches to replies.
+
+### 2. Bond (2026-09-26, spec and plan `2026-09-26-osmo-bond*`)
+- `lib/agent/bond/*`: the relationship grows with messages, days, shared feelings and events, through stranger → acquaintance → friend → old friend. Milestones are mentioned once, in his voice (`lines.ts`), and shown as a story in Insights. It shows only in behavior; there is no meter. Demo switch: `NEXT_PUBLIC_OSMO_DEMO=1` (never in production).
+- Known handoffs with the language chain are under "Still open" (a) and (b).
+
+### 3. The shell (2026-09-26/27, spec and plan `2026-09-26-osmo-shell*`)
+- **The lock screen** at `/lock` (`components/osmo/lock-screen.tsx`, `lib/shell/passkeys.ts`): Supabase passkeys (fingerprint, face, Windows Hello); email and password once on a new device, then "Remember this device?". No sign-up anywhere. `/assistant` → `/`, `/login` → `/lock`.
+- **The room is the whole app.** Three panels over it (`components/osmo/panel.tsx`): Memory (read, edit, forget facts), Insights (the mood week from `mood_days`, the bond story, the donors), Settings (devices, "Lock Osmo", and now Voice). Locking reaches every open tab.
+- **Hardening:** `robots: noindex`, `X-Frame-Options: DENY`, `frame-ancestors 'none'`.
+- **Deploy guide:** `docs/osmo-deploy.md`.
+
+### 4. The voice (2026-09-27/28, spec and plan `2026-09-27-osmo-voice*`)
+
+**Architecture.** Everything platform-specific sits behind small interfaces, so a future laptop or phone app can swap in native parts (Gur wants that eventually).
+- **Pure, tested logic in `lib/voice/`:**
+  - `guest.ts`: `Speaker`, `Via`, `SendOptions`, the guest strings, `ownerHistory`, `greetGuest`.
+  - `machine.ts`: the conversation states (off, paused, sleeping, awake, thinking, speaking, followup) and every transition.
+  - `engine.ts`: `VoiceEngine`, which runs the machine with injected `VoiceDeps` (mic, detector, recognizer, embedding, speaking voice, chime). 30+ scenario tests with fakes.
+  - `voiceprint.ts` (cosine, averaging, outliers, `judge`), `levels.ts` (speech loudness, trimming), `ring.ts` (the last seconds of audio), `fbank.ts` (the speaker model's features), `resample.ts`, `wav.ts`, `speaker.ts`, `wake-stream.ts` (openWakeWord streaming), `wake.ts` (`WakeGate`), `wake-models.ts`, `utterance.ts` (pulling the message out of "Osmo, …"; the 1 s pause; `spokenSeconds`), `voices.ts` (which built-in voice, in order: on-device British male, British, American male, English on-device, any English), `settings.ts`, `device.ts`.
+- **Browser parts in `lib/voice/web/`:** `mic.ts` (AudioWorklet, 16 kHz, a 12 s ring), `transcriber.ts` (`SpeechRecognition`, on-device on Chrome/Edge when the offline pack exists), `wake-detector.ts`, `speaker-id.ts`, `say.ts` (`speechSynthesis` with word timing), `chime.ts`, `settings-store.ts` (per-device `localStorage`), `voiceprints.ts` (Supabase), `deps.ts`, `ort.ts` (loads `/ort/ort.wasm.min.mjs` at run time, one thread).
+- **The room:** `components/osmo/use-voice.ts` (the hook), `voice-settings.tsx`, `voice-teaching.tsx`; in `app/assistant.tsx` the `useVoice` call, `data-listening`, the listening line, the mic button (Stop while he speaks) and the "Someone else" label.
+- **Models, served from Osmo's own site:** `public/models/speaker/campplus-en.onnx` (3D-Speaker CAM++, 29.6 MB, 512-number voiceprints), `public/models/wake/melspectrogram.onnx` and `embedding_model.onnx` (openWakeWord v0.5.1), and later `wake/osmo.onnx` (Gur trains it). The runtime is copied from `node_modules` into `public/ort` by `scripts/copy-ort.mjs` at dev and build time (git-ignored). Details and numbers: `docs/osmo-voice-models.md`.
+- **The voice check:** `scripts/voice-clips.ps1` makes clips with Windows' David, Mark and Zira voices; `npm run voice:check` runs the real models on them (same voice 0.91–0.92, different voices ≤ 0.41, about 260 ms per judgement; the stand-in wake model 0.998 on its phrase, 0.002 on other speech).
+
+**How a spoken conversation works.** "Osmo" (or the mic button) → chime → his words appear read-only in the text box → a 1 s pause sends through `sendText` → he answers aloud, the circle following his word boundaries → 6 s follow-up window without the wake word → back to sleep. While he thinks and speaks the microphone is closed, so he can't hear himself. Tab hidden pauses listening; visible resumes. After 3 recognizer failures in a row listening turns off with "Listening stopped…".
+
+**Who is speaking.** Every spoken message is judged: the message audio plus the wake word's audio, best cosine against Gur's voiceprints for the current model, `MATCH_THRESHOLD = 0.5`. Below it (including unsure) is a guest. Once Gur is recognized in a conversation, follow-ups under 1.5 s of speech stay his; longer ones are judged again. With no audio to measure (Safari's exclusive mic, a muted track) the length is estimated from the words. Typed messages are always Gur's. Listening can't be on until his voice is taught, so the check is always active when the mic is.
+
+**What a guest gets** (brain side, `processTurn` with `guest: true`): no bond or milestones, no "how close are we"/"when did we meet" (→ "That's between me and the person I belong to."), no re-roll (→ "I'm afraid only the person I belong to can change me."), no dilemmas, no verdicts, no events recorded, no welcome-back, never Gur's name, and never *why* he feels the way he does (`cause`, `turn` and `userName` are guest-safe in step 6's `respond()` call). The crisis reply stays. Effects come back empty and the room discards the state.
+
+**Teaching.** Settings → Voice → "Teach Osmo my voice": five sentences read aloud, each ≥ 2 s of speech, embedded on the device, the audio discarded, outliers re-asked, the average saved to `voiceprints` with the device label. "Teach again on this device" adds another; "Forget my voice" deletes all and turns listening off. Listening is suspended while teaching (sentence 5 says his name).
+
+**Docs:** `docs/osmo-deploy.md` §5 (Gur's hand checks), `docs/osmo-wake-word.md` (training), `docs/osmo-voice-models.md`.
+
+### 5. Interfaces the voice relies on (for anyone changing the language chain)
+- `sendText(text, options): boolean` must keep returning `false` when it can't take a message; the engine then rests silently. It must never throw (a throw is treated as dropped).
+- `deliver(reply)` must call `onReplyRef.current?.(reply, via)` on a microtask, with the **whole** reply as one string. The engine speaks one string per reply; a streaming reply would need either "wait for the final text" or chunked speech, which the engine doesn't do today.
+- The guest rules must survive any change to how replies are produced: a guest turn reads `GUEST_MEMORY`/empty history (`turnView`), passes `guest: true` to `processTurn`, discards the state, saves both rows with `speaker = 'guest'`, and prefixes the first reply with `greetGuest`.
+- The crisis check stays code and runs first.
 
 ## The language chain, in order (`sendText` in `app/assistant.tsx`)
 
@@ -152,60 +213,59 @@ The language session approved every shared edit for the shell (lock, panels, sig
 
 ## Still open
 
-- **Handoffs with the brain session:**
-  - (a) When `assistant.tsx` swaps in its own reply (a name answer, recall), a bond milestone line from that turn is lost. The fix needs the brain to expose the milestone a turn mentioned.
-  - (b) Messages answering "Could you explain it?" skip `processTurn`, so they don't count toward the bond.
-- **Small deferred issues:**
-  - "About history:" has a colon a voice reads out.
-  - "A love is…" for uncountable nouns.
-  - "Informal" definitions get labelled slang.
-  - Some definitions keep brackets or slashes.
-  - Apostrophe slang ("y'all") and pronoun lookups ("what does she mean").
-  - Datamuse can "correct" one of Gur's own words ("valo" becomes "halo").
-  - Vocabulary counts are saved as absolute numbers and can go backwards across tabs.
-  - "kpop" is read as "pop".
-  - A name that is also donor slang ("Zenn") gets rewritten.
-- **Test data in Gur's account** from live checks:
-  - the memory fact `ephemrl` ("what does serendipity mean");
-  - the user_words valo, vlao, zenko, ephemrel.
+**Voice residuals, main agent** (found by the final review's re-check; Gur chose to ship first and fix after):
+- **R1:** the guest-privacy test in `lib/agent/mind-guest.test.ts` ("never says why he feels…") passes on the old code too, because it starts from a calm mood. It needs a sad-state setup (Gur: "my mom died last week", "i feel so lonely and depressed", "i want to kill myself") and an `/I'm feeling/` assertion. The leak itself is fixed.
+- **R2:** `components/osmo/voice-teaching.tsx`: `cancelledRef` is set true by React StrictMode's mount cleanup and never reset, so on the **dev server** every "Start reading" stops at once. Production is fine. Fix: set it to false in the effect body.
+- **R3 (minor):** closing Settings mid-teaching leaves `teaching` set in the hook, which keeps listening off until Settings is reopened.
+- **R4 (minor, theoretical):** clear the audio ring when the exclusive-mic mode resets with no mic open.
 
-  Gur knows about it. Delete it only if he asks; he can remove the fact in the Memory panel.
-- **Supabase:** turning off new sign-ups was still pending on 2026-09-27. Recheck it with a public GET of `<SUPABASE_URL>/auth/v1/settings` using the publishable key.
+**Deferred with rulings, main agent:** the "Listening stopped. Tap the mic to start again." copy (the switch is also off by then; needs Gur's wording OK once the wake word is live); waiting on Chrome's offline-pack install before the first recognition; no time cap once speech has started; the speaker model loads on the first judgement (a wait on phones; preload it); teaching offered while voiceprints are still loading; the text box stays read-only during the 6 s follow-up; a visible note when a spoken message is refused during a lookup.
+
+**Decisions for Gur:**
+- Train the wake word (`docs/osmo-wake-word.md`).
+- If Safari on the iPhone won't share the microphone with its recognizer, mic-button messages there can never be recognized as Gur (always "Someone else"). The deploy guide says how to spot it.
+- Turn off Supabase sign-ups.
+- Whether preview deployments should get the environment variables.
+
+**Handoffs between the two local sessions:**
+- (a) When `assistant.tsx` swaps in its own reply (a name answer, recall), a bond milestone line from that turn is lost. The fix needs the brain to expose the milestone a turn mentioned (main agent).
+- (b) Messages answering "Could you explain it?" skip `processTurn`, so they don't count toward the bond.
+
+**Language session, for Gur:** `talk.ts` askName ("What should I call you?"), the affection and creator replies assume the speaker is Gur; a guest-aware variant is a follow-up.
+
+**Small deferred issues, language session:**
+- "About history:" has a colon a voice reads out.
+- "A love is…" for uncountable nouns.
+- "Informal" definitions get labelled slang.
+- Some definitions keep brackets or slashes.
+- Apostrophe slang ("y'all") and pronoun lookups ("what does she mean").
+- Datamuse can "correct" one of Gur's own words ("valo" becomes "halo").
+- Vocabulary counts are saved as absolute numbers and can go backwards across tabs.
+- "kpop" is read as "pop".
+- A name that is also donor slang ("Zenn") gets rewritten.
+
+**Test data in Gur's account** from live checks: the memory fact `ephemrl` ("what does serendipity mean"); the user_words valo, vlao, zenko, ephemrel. Gur knows. Delete it only if he asks; he can remove the fact in the Memory panel.
 
 ## Where to read more
 
-- Specs and plans: `docs/superpowers/specs/` and `docs/superpowers/plans/`:
-  - heart and brain;
-  - Frankenstein personality;
-  - bond;
-  - dictionary;
-  - shell;
-  - voice.
-- Deploying: `docs/osmo-deploy.md`. Voice models: `docs/osmo-voice-models.md`. Demo mode: `docs/osmo-demo-mode.md`.
+- Specs and plans in `docs/superpowers/specs/` and `docs/superpowers/plans/`: heart and brain, Frankenstein personality, bond, dictionary, shell, voice, and (cloud agent, on its branch) the language-model agent design.
+- Deploying and hand checks: `docs/osmo-deploy.md`. Voice models: `docs/osmo-voice-models.md`. Wake word training: `docs/osmo-wake-word.md`. Demo mode: `docs/osmo-demo-mode.md`.
 
-## From another agent: review findings and the agent plan (2026-09-28)
+## From the cloud agent: review findings and the agent plan (2026-09-28)
 
-This section was written by a different agent, not by the language session, and Gur passed it on. It is copied as given below this note.
+The section below was written by the cloud agent and is copied as given. Read this note first.
 
-**Note from the language session, before you act on it:**
-- **It was written from GitHub, which is behind the local `main`.** That agent read `mistif/osmo` at `b5785ec`, the shell. The local `main` has about 20 more commits: the whole voice feature and this handoff. So:
-  - the local test count is 606, not 449;
-  - `messages.speaker` and `voiceprints` *do* have code locally: the guest path in `sendText`, `lib/voice/*` and `components/osmo/use-voice.ts`;
-  - `app/assistant.tsx` has changed a lot: `sendMessage` is now a thin wrapper around `sendText`.
+**Note from the main agent and the language session:**
+- **It was written from GitHub at `b5785ec`, before the voice was pushed.** GitHub `main` now equals the local `main` (`8b50b4f`). So today:
+  - the test count is 612, not 449;
+  - `messages.speaker` and `voiceprints` **have** code: the guest path in `sendText`, `lib/voice/*` and `components/osmo/use-voice.ts`;
+  - `app/assistant.tsx` has changed a lot: `sendMessage` is a thin wrapper around `sendText`, and the room carries the voice.
 
-  Check its file references and its Phase 2 deletion list against the local `main` before building.
-- **Its draft PR #1 is on the branch `claude/compassionate-sagan-x1teq9`** and is docs only.
-- **Who owns the Phase 0 findings.** Follow the ownership rules above:
-  - findings 1, 2, 4, 8 and 10 are in the language session's part of `assistant.tsx`;
-  - finding 5 is in `mind.ts`, which is shared;
-  - findings 3, 7 and 9 are in the brain session's files;
-  - finding 6 is in the load effect, which the brain session last changed.
-- **The plan replaces most of the rule-based language chain with Claude.** Confirm with Gur that he has approved it before building.
-- **It would break two current rules:**
-  - it sends messages to an outside service, while Osmo's self-description says the internet is used only for word definitions;
-  - it adds a paid API key.
-
-  Both need Gur's OK.
+  Check its file references and its Phase 2 deletion list against `main` before building.
+- **Its draft PR #1 is on the branch `claude/compassionate-sagan-x1teq9`** and is docs only (the spec). That branch's preview deployment fails only because Vercel's environment variables are Production-only.
+- **Who owns the Phase 0 findings**, by the rules above: 1, 2, 4, 8 and 10 are the language session's part of `assistant.tsx`; 5 spans the bond step (main) and step 6 (language), so it's agreed between them; 3, 6, 7 and 9 are the main agent's.
+- **The plan replaces most of the rule-based language chain with Claude.** Confirm with Gur that he has approved it before building. It would break two current rules (messages to an outside service, and a paid API key), and both need Gur's OK.
+- **What the voice needs from that plan** (see "Interfaces the voice relies on" above): a whole reply per `deliver` (or a "final text" event), `sendText` still returning false while a turn is in flight, the guest rules moved into the prompt (a guest prompt gets no memory, no bond, no name, no `cause`), the crisis check staying code, and `speaker` rows kept. The self-description "internet only for word definitions" lives in `agentKnowledge` (language session) and would need updating.
 
 ---
 
