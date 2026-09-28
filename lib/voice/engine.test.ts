@@ -3,6 +3,10 @@ import {
 	LISTENING_STOPPED,
 	MIC_BLOCKED,
 	MicError,
+	MODEL_FAILED,
+	NO_MIC,
+	SPEECH_WATCHDOG_EXTRA_MS,
+	SPEECH_WATCHDOG_MS_PER_CHAR,
 	VoiceEngine,
 	WORD_TIMING_WAIT_MS,
 	type HearHooks,
@@ -19,7 +23,10 @@ import { WAKE } from "./wake";
 
 type FakeMic = { ring: SampleRing; closed: boolean; onAudio: (s: Int16Array) => void; close(): void };
 
-function harness(over: Partial<VoiceConfig> = {}, options: { micFailure?: MicError } = {}) {
+function harness(
+	over: Partial<VoiceConfig> = {},
+	options: { micFailure?: MicError; embedFailure?: boolean; endAtOnce?: boolean } = {},
+) {
 	let now = 1000;
 	let embedding = [1, 0];
 	let wake: (() => void) | null = null;
@@ -63,12 +70,14 @@ function harness(over: Partial<VoiceConfig> = {}, options: { micFailure?: MicErr
 			return { stop() {}, abort: () => void (hearing.aborted = true) };
 		},
 		embed: async (samples) => {
+			if (options.embedFailure) throw new Error("embed failed");
 			embedded.push(samples.length);
 			return embedding;
 		},
 		say: (text, hooks) => {
 			const line = { text, hooks, cancelled: false };
 			said.push(line);
+			if (options.endAtOnce) hooks.onEnd();
 			return {
 				cancel() {
 					line.cancelled = true;
@@ -305,7 +314,8 @@ describe("VoiceEngine", () => {
 		h.hearings[1].hooks.onProblem("network");
 		h.hearings[2].hooks.onProblem("network");
 		expect(h.engine.view().error).toBe(LISTENING_STOPPED);
-		expect(h.mode()).toBe("sleeping");
+		expect(h.mode()).toBe("off");
+		expect(h.config.listenOff).toHaveBeenCalled();
 	});
 
 	it("gives the recognizer the microphone to itself when it needs it, judging the wake word's audio", async () => {
@@ -413,5 +423,119 @@ describe("VoiceEngine", () => {
 		expect(h.config.listenOff).toHaveBeenCalled();
 		expect(h.mode()).toBe("off");
 		expect(h.mics[0].closed).toBe(true);
+	});
+
+	it("opens the microphone when listening was switched on while the page was hidden", async () => {
+		const h = harness({ listen: false });
+		await h.flush();
+		h.engine.visibility(true);
+		h.engine.configure({ ...h.config, listen: true });
+		await h.flush();
+		expect(h.mics).toHaveLength(0);
+		h.engine.visibility(false);
+		await h.flush();
+		expect(h.mode()).toBe("sleeping");
+		expect(h.mics).toHaveLength(1);
+	});
+
+	it("judges a long follow-up as someone else when there's no audio to check it by", async () => {
+		const h = harness();
+		await h.flush();
+		h.talk(16000);
+		h.wake();
+		await h.flush();
+		h.hearings[0].hooks.onProblem("audio");
+		h.hearings[1].hooks.onSpeech();
+		h.hearings[1].hooks.onDone("hello there");
+		await h.flush();
+		expect(h.sent[0].options.speaker).toBe("you");
+		await replyAndFollowUp(h);
+		h.hearings.at(-1)!.hooks.onSpeech();
+		h.hearings.at(-1)!.hooks.onDone("yes");
+		await h.flush();
+		expect(h.sent[1].options.speaker).toBe("you");
+		await replyAndFollowUp(h);
+		h.hearings.at(-1)!.hooks.onSpeech();
+		h.hearings.at(-1)!.hooks.onDone("tell me everything he said about his work");
+		await h.flush();
+		expect(h.sent[2].options.speaker).toBe("guest");
+	});
+
+	it("says it couldn't load what it needs instead of treating Gur as a stranger", async () => {
+		const h = harness({}, { embedFailure: true });
+		await h.flush();
+		await converse(h, "Osmo, hello");
+		expect(h.sent).toEqual([]);
+		expect(h.engine.view().error).toBe(MODEL_FAILED);
+		expect(h.mode()).toBe("sleeping");
+	});
+
+	it("doesn't stay speaking when the device ends at once", async () => {
+		const h = harness({ speakTyped: true }, { endAtOnce: true });
+		await h.flush();
+		h.engine.onReply("Hello.", "typed");
+		expect(h.mode()).toBe("sleeping");
+		expect(h.speech.onSpeechEnd).toHaveBeenCalled();
+	});
+
+	it("stops speaking after the watchdog if the device never reports the end", async () => {
+		const h = harness({ speakTyped: true });
+		await h.flush();
+		h.engine.onReply("Hello.", "typed");
+		h.advance("Hello.".length * SPEECH_WATCHDOG_MS_PER_CHAR + SPEECH_WATCHDOG_EXTRA_MS);
+		expect(h.mode()).toBe("sleeping");
+		expect(h.said[0].cancelled).toBe(true);
+	});
+
+	it("keeps a message the recognizer finished without reporting speech", async () => {
+		const h = harness();
+		await h.flush();
+		h.wake();
+		await h.flush();
+		h.talk(32000);
+		h.hearings[0].hooks.onDone("Osmo, what time is it");
+		h.advance(WAKE.noSpeechMs);
+		await h.flush();
+		expect(h.sent).toHaveLength(1);
+	});
+
+	it("drops the message when sendText throws", async () => {
+		const h = harness({
+			sendText: () => {
+				throw new Error("boom");
+			},
+		});
+		await h.flush();
+		await converse(h, "Osmo, hello");
+		expect(h.mode()).toBe("sleeping");
+	});
+
+	it("shows no-microphone when there is none", async () => {
+		const h = harness({}, { micFailure: new MicError("unavailable") });
+		await h.flush();
+		expect(h.engine.view().error).toBe(NO_MIC);
+	});
+
+	it("turns listening off when the recognizer is blocked", async () => {
+		const h = harness();
+		await h.flush();
+		h.wake();
+		await h.flush();
+		h.hearings[0].hooks.onProblem("blocked");
+		expect(h.engine.view().error).toBe(MIC_BLOCKED);
+		expect(h.config.listenOff).toHaveBeenCalled();
+		expect(h.mode()).toBe("off");
+	});
+
+	it("starts cleanly again after being disposed and configured, as React does in development", async () => {
+		const h = harness();
+		await h.flush();
+		h.engine.dispose();
+		expect(h.mics[0].closed).toBe(true);
+		h.engine.configure(h.config);
+		await h.flush();
+		expect(h.mode()).toBe("sleeping");
+		expect(h.mics).toHaveLength(2);
+		expect(h.mics[1].closed).toBe(false);
 	});
 });

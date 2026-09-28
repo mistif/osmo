@@ -6,7 +6,7 @@ import type { SendOptions, Speaker, Via } from "./guest";
 import { speechSeconds, trimSilence } from "./levels";
 import { detectorOn, initialVoice, micOpen, recognizerOn, step, type VoiceEvent, type VoiceState } from "./machine";
 import type { SampleRing } from "./ring";
-import { messageFrom } from "./utterance";
+import { messageFrom, spokenSeconds } from "./utterance";
 import { bestScore, judge, type Voiceprint } from "./voiceprint";
 
 export const MIC_BLOCKED = "I can't hear you. Allow the microphone for this site in your browser settings, then try again.";
@@ -20,6 +20,10 @@ export const WAKE_AUDIO_SAMPLES = 16000;
 export const MAX_FAILURES = 3;
 // How long to wait for word timing before his text types out at speaking pace instead.
 export const WORD_TIMING_WAIT_MS = 800;
+// If the device never reports the end of speech (an iPhone that blocked speech, a stuck voice), a watchdog
+// ends it after roughly how long the text should take to say, so he doesn't stay "speaking" forever.
+export const SPEECH_WATCHDOG_MS_PER_CHAR = 150;
+export const SPEECH_WATCHDOG_EXTRA_MS = 5000;
 // The speaker model needs at least one 25 ms frame.
 const MIN_EMBED_SAMPLES = 400;
 
@@ -112,6 +116,8 @@ export class VoiceEngine {
 	private speakingNow: object | null = null;
 	private liveText: string | null = null;
 	private error: string | null = null;
+	// Bumped by dispose(), so a mic or detector still loading from before it can't land on the fresh instance.
+	private generation = 0;
 
 	constructor(deps: VoiceDeps, emit: (view: VoiceView) => void) {
 		this.deps = deps;
@@ -159,6 +165,9 @@ export class VoiceEngine {
 	readonly visibility = (hidden: boolean): void => {
 		this.hidden = hidden;
 		this.send({ type: hidden ? "hidden" : "visible", now: this.deps.now() });
+		// Listening may have been switched on while hidden, leaving "sleeping" with no microphone open;
+		// this opens what the mode needs now that the "visible" event alone may not have changed anything.
+		if (!hidden) this.sync(this.state, this.state);
 	};
 
 	readonly onReply = (reply: string, via: Via): void => {
@@ -178,15 +187,25 @@ export class VoiceEngine {
 		this.publish();
 	};
 
-	// Closes everything and starts over as "off"; the next configure reopens what's needed.
+	// Closes everything and starts over as "off"; the next configure reopens what's needed. The loaded
+	// detector is kept (reloading the model is wasted when React StrictMode remounts the same engine).
 	readonly dispose = (): void => {
+		this.generation += 1;
 		this.stopHearing();
 		this.mic?.close();
 		this.mic = null;
+		this.micOpening = false;
+		this.ring = null;
+		// Cleared before cancelling, so the cancel's onEnd sees a stale token and does nothing.
+		this.speakingNow = null;
 		const spoken = this.spoken;
 		this.spoken = null;
 		spoken?.cancel();
-		this.detector = null;
+		this.exclusive = false;
+		this.failures = 0;
+		this.hidden = false;
+		this.error = null;
+		this.liveText = null;
 		this.state = initialVoice(this.deps.now());
 	};
 
@@ -216,6 +235,9 @@ export class VoiceEngine {
 		} else if (this.mic) {
 			this.mic.close();
 			this.mic = null;
+			// The next message never reads the previous conversation's audio before a new microphone opens.
+			// Exclusive mode keeps its ring, since it holds the wake audio judged with the next message.
+			if (!this.exclusive) this.ring = null;
 		}
 		if (recognizerOn(before) && !recognizerOn(next)) this.stopHearing();
 		if (before.mode === "speaking" && next.mode !== "speaking" && this.spoken) {
@@ -227,11 +249,17 @@ export class VoiceEngine {
 	}
 
 	private async openMic(): Promise<void> {
+		const generation = this.generation;
 		this.micOpening = true;
 		try {
 			const mic = await this.deps.openMic((samples) => {
 				if (detectorOn(this.state) && !this.hidden) this.detector?.feed(samples);
 			});
+			// A dispose() moved on while this was in flight; leave its bookkeeping alone, a fresh attempt owns it now.
+			if (generation !== this.generation) {
+				mic.close();
+				return;
+			}
 			this.micOpening = false;
 			if (!this.wantsMic(this.state) || this.mic) {
 				mic.close();
@@ -240,17 +268,20 @@ export class VoiceEngine {
 			this.mic = mic;
 			this.ring = mic.ring;
 		} catch (error) {
+			if (generation !== this.generation) return;
 			this.micOpening = false;
 			this.fail(error instanceof MicError && error.problem === "blocked" ? MIC_BLOCKED : NO_MIC);
 		}
 	}
 
 	private async loadDetector(): Promise<void> {
+		const generation = this.generation;
 		this.detectorLoading = true;
 		try {
+			// Keep the detector even if dispose() ran meanwhile: the loaded model is still good, and reloading it is wasted.
 			this.detector = await this.deps.createDetector(() => this.onWake());
 		} catch {
-			this.fail(MODEL_FAILED);
+			if (generation === this.generation) this.fail(MODEL_FAILED);
 		} finally {
 			this.detectorLoading = false;
 		}
@@ -309,35 +340,51 @@ export class VoiceEngine {
 		if (id !== this.hearingId) return;
 		this.hearing = null;
 		this.liveText = null;
+		// Any hearing that finishes at all ends a run of recognizer failures.
+		this.failures = 0;
 		const message = messageFrom(text);
 		if (!message) {
 			this.send({ type: "dropped", now: this.deps.now() });
 			this.publish();
 			return;
 		}
-		this.failures = 0;
-		if (this.state.mode === "followup") this.send({ type: "speech", now: this.deps.now() });
-		const speaker = await this.whoSpoke();
+		// Speech has clearly started; this also stops the no-speech timer resting the conversation mid-judgement.
+		this.send({ type: "speech", now: this.deps.now() });
+		const speaker = await this.whoSpoke(message);
 		if (id !== this.hearingId || this.state.mode !== "awake") return;
+		if (speaker === null) {
+			this.error = MODEL_FAILED;
+			this.send({ type: "dropped", now: this.deps.now() });
+			this.publish();
+			return;
+		}
 		this.send({ type: "judged", speaker });
 		const greet = speaker === "guest" && !this.state.greeted;
 		if (greet) this.send({ type: "greeted" });
-		const accepted = this.config?.sendText(message, { via: "voice", speaker, greet }) ?? false;
+		let accepted: boolean;
+		try {
+			accepted = this.config?.sendText(message, { via: "voice", speaker, greet }) ?? false;
+		} catch {
+			accepted = false;
+		}
 		this.send({ type: accepted ? "sent" : "dropped", now: this.deps.now() });
 	}
 
-	private async whoSpoke(): Promise<Speaker> {
+	// null means the speaker model couldn't run at all (not "unsure", which still returns "guest").
+	private async whoSpoke(message: string): Promise<Speaker | null> {
 		const pcm = this.ring ? this.ring.since(this.mark) : new Int16Array(0);
 		const audio = trimSilence(Float32Array.from(pcm, (sample) => sample / 32768));
+		// No audio at all (an exclusive recognizer that never fed the ring) isn't the same as a short reading.
+		const seconds = pcm.length === 0 ? spokenSeconds(message) : speechSeconds(audio);
 		let score = -1;
 		if (audio.length >= MIN_EMBED_SAMPLES) {
 			try {
 				score = bestScore(await this.deps.embed(audio), this.config?.prints ?? []);
 			} catch {
-				// Unsure counts as someone else.
+				return null;
 			}
 		}
-		return judge({ score, speechSeconds: speechSeconds(audio), ownerSoFar: this.state.owner });
+		return judge({ score, speechSeconds: seconds, ownerSoFar: this.state.owner });
 	}
 
 	private heardProblem(id: number, problem: HearProblem): void {
@@ -357,9 +404,8 @@ export class VoiceEngine {
 		this.failures += 1;
 		if (this.failures >= MAX_FAILURES) {
 			this.failures = 0;
-			this.error = LISTENING_STOPPED;
-			this.send({ type: "dropped", now: this.deps.now() });
-			this.publish();
+			// Listening really turns off here, rather than just resting this one conversation.
+			this.fail(LISTENING_STOPPED);
 			return;
 		}
 		if (recognizerOn(this.state)) this.startHearing(this.mark);
@@ -382,24 +428,34 @@ export class VoiceEngine {
 		const cancelWait = this.deps.later(() => {
 			if (this.speakingNow === token && !timed) speech.onNoWordTiming();
 		}, WORD_TIMING_WAIT_MS);
-		let spoken: Spoken | null = null;
-		spoken = this.deps.say(text, {
+		// Ends this speech exactly once, however it ends: the device's own onEnd, stop()/hidden moving the
+		// machine on and cancelling it, or the watchdog below giving up on a device that never reports the end.
+		const ended = (): void => {
+			if (this.speakingNow !== token) return;
+			this.speakingNow = null;
+			cancelWait();
+			cancelWatchdog();
+			this.spoken = null;
+			speech.onSpeechEnd();
+			// A stop or a hidden page has already moved the machine on; only report the end here otherwise.
+			if (this.state.mode === "speaking") this.send({ type: "spoken", now: this.deps.now() });
+		};
+		// If the device never reports the end (an iPhone that blocked speech, a stuck voice), he doesn't stay "speaking" forever.
+		const cancelWatchdog = this.deps.later(() => {
+			if (this.speakingNow !== token) return;
+			const current = this.spoken;
+			ended();
+			current?.cancel();
+		}, text.length * SPEECH_WATCHDOG_MS_PER_CHAR + SPEECH_WATCHDOG_EXTRA_MS);
+		const spoken = this.deps.say(text, {
 			onWord: (_start, end) => {
 				if (this.speakingNow !== token) return;
 				timed = true;
 				speech.onWord(end);
 			},
-			onEnd: () => {
-				if (this.speakingNow !== token) return;
-				this.speakingNow = null;
-				cancelWait();
-				speech.onSpeechEnd();
-				if (spoken && this.spoken === spoken) {
-					this.spoken = null;
-					this.send({ type: "spoken", now: this.deps.now() });
-				}
-			},
+			onEnd: ended,
 		});
-		this.spoken = spoken;
+		// A device that ends synchronously (inside the say() call above) no longer strands "speaking".
+		if (this.speakingNow === token) this.spoken = spoken;
 	}
 }

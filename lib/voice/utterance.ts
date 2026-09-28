@@ -13,3 +13,8 @@ export const SILENCE_MS = 1000;
 export function heardEnough(lastChangeAt: number | null, now: number): boolean {
 	return lastChangeAt !== null && now - lastChangeAt >= SILENCE_MS;
 }
+
+// Roughly how long a transcript took to say (about 2.5 words a second), for when there's no audio to measure.
+export function spokenSeconds(text: string): number {
+	return text.trim().split(/\s+/).filter(Boolean).length * 0.4;
+}
