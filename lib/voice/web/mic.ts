@@ -17,35 +17,38 @@ export async function openMic(onAudio: (samples: Int16Array) => void): Promise<M
 		const name = error instanceof DOMException ? error.name : "";
 		throw new MicError(name === "NotAllowedError" || name === "SecurityError" ? "blocked" : "unavailable");
 	}
-	const context = new AudioContext();
+	let context: AudioContext | null = null;
 	try {
+		context = new AudioContext();
 		await context.audioWorklet.addModule("/voice/pcm-worklet.js");
+		const source = context.createMediaStreamSource(stream);
+		const tap = new AudioWorkletNode(context, "pcm-tap");
+		const down = new Downsampler(context.sampleRate);
+		const ring = new SampleRing(16000 * 12);
+		tap.port.onmessage = (event: MessageEvent<Float32Array>) => {
+			const samples = toInt16(down.push(event.data));
+			ring.push(samples);
+			onAudio(samples);
+		};
+		source.connect(tap);
+		// The tap's output is silence; connecting it keeps the browser pulling audio through it.
+		tap.connect(context.destination);
+		if (context.state === "suspended") await context.resume().catch(() => undefined);
+		const audio = context;
+		return {
+			ring,
+			close() {
+				tap.port.onmessage = null;
+				source.disconnect();
+				tap.disconnect();
+				stream.getTracks().forEach((track) => track.stop());
+				void audio.close();
+			},
+		};
 	} catch {
+		// Whatever failed after permission was granted, the microphone must not stay open.
 		stream.getTracks().forEach((track) => track.stop());
-		void context.close();
+		void context?.close();
 		throw new MicError("unavailable");
 	}
-	const source = context.createMediaStreamSource(stream);
-	const tap = new AudioWorkletNode(context, "pcm-tap");
-	const down = new Downsampler(context.sampleRate);
-	const ring = new SampleRing(16000 * 12);
-	tap.port.onmessage = (event: MessageEvent<Float32Array>) => {
-		const samples = toInt16(down.push(event.data));
-		ring.push(samples);
-		onAudio(samples);
-	};
-	source.connect(tap);
-	// The tap's output is silence; connecting it keeps the browser pulling audio through it.
-	tap.connect(context.destination);
-	if (context.state === "suspended") await context.resume().catch(() => undefined);
-	return {
-		ring,
-		close() {
-			tap.port.onmessage = null;
-			source.disconnect();
-			tap.disconnect();
-			stream.getTracks().forEach((track) => track.stop());
-			void context.close();
-		},
-	};
 }
