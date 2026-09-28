@@ -244,3 +244,15 @@
 		transition: none;
 	}
 }
+
+.teach {
+	display: grid;
+	gap: 0.6rem;
+	justify-items: start;
+}
+.sentence {
+	margin: 0;
+	max-width: 30ch;
+	font-size: 1.15rem;
+	line-height: 1.45;
+}

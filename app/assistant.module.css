@@ -435,6 +435,32 @@
 	opacity: 0.55;
 	cursor: not-allowed;
 }
+.mic {
+	flex: none;
+	display: grid;
+	place-items: center;
+	width: 3rem;
+	color: var(--bone);
+	background: transparent;
+	border: 1px solid color-mix(in oklab, var(--bone) 35%, transparent);
+	border-radius: 999px;
+	cursor: pointer;
+}
+.mic:hover:not(:disabled) {
+	border-color: var(--aura-a);
+}
+.mic:focus-visible {
+	outline: 2px solid var(--aura-a);
+	outline-offset: 3px;
+}
+.mic:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+.stage[data-listening] .mic {
+	border-color: var(--aura-a);
+	background: color-mix(in oklab, var(--aura-a) 22%, transparent);
+}
 
 /* A panel is open: Osmo dims and steps aside, and the conversation stays usable beside it. */
 .aura {

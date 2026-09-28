@@ -3,6 +3,7 @@
 import { Bricolage_Grotesque } from "next/font/google";
 import { useRouter } from "next/navigation";
 import { type CSSProperties, FormEvent, useEffect, useRef, useState } from "react";
+import { Mic, Square } from "lucide-react";
 import styles from "./assistant.module.css";
 import { ensureSession, supabase } from "@/lib/supabase";
 import { loadState, persistTurn } from "@/lib/agent/agent-state";
@@ -704,13 +705,25 @@ export default function AgentChat() {
 				<form onSubmit={sendMessage} className={styles.composer}>
 					<input
 						className={styles.field}
-						value={input}
+						value={voice.liveText ?? input}
 						onChange={(event) => setInput(event.target.value)}
 						placeholder={ready ? "Tell Osmo how you're doing" : "Osmo is waking up…"}
 						aria-label="Message"
 						disabled={!ready || thinking}
+						readOnly={voice.liveText !== null}
 					/>
-					<button type="submit" className={styles.send} disabled={!ready || thinking}>
+					{(voice.listenSupported || voice.mode === "speaking") && (
+						<button
+							type="button"
+							className={styles.mic}
+							onClick={voice.mode === "speaking" ? voice.stop : voice.micPress}
+							disabled={voice.mode !== "speaking" && (!ready || thinking)}
+							aria-label={voice.mode === "speaking" ? "Stop speaking" : "Talk to Osmo"}
+						>
+							{voice.mode === "speaking" ? <Square aria-hidden="true" size={18} /> : <Mic aria-hidden="true" size={18} />}
+						</button>
+					)}
+					<button type="submit" className={styles.send} disabled={!ready || thinking || voice.liveText !== null}>
 						Send
 					</button>
 				</form>
