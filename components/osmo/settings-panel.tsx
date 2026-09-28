@@ -12,6 +12,8 @@ import {
 	renameDevice,
 } from "@/lib/shell/passkeys";
 import type { DeviceSource } from "@/lib/shell/devices";
+import { VoiceSettings } from "./voice-settings";
+import type { VoiceControls } from "./use-voice";
 import styles from "./panels.module.css";
 
 const UNREACHABLE = "I can't reach my memory right now. Try again in a moment.";
@@ -19,7 +21,7 @@ const SAVE_FAILED = "Couldn't save that. Try again.";
 // Gur is already in Settings, so this skips the lock screen's "try again from Settings".
 const PASSKEY_FAILED_HERE = "This device couldn't save a passkey. Try again.";
 
-export function SettingsPanel() {
+export function SettingsPanel({ voice }: { voice: VoiceControls }) {
 	const router = useRouter();
 	const [devices, setDevices] = useState<DeviceSource[] | null>(null);
 	// Captured when the list loads rather than read live at render, so render stays pure (no Date.now() there).
@@ -145,6 +147,8 @@ export function SettingsPanel() {
 				)}
 				{deviceError && <p className={styles.error} role="alert">{deviceError}</p>}
 			</section>
+
+			<VoiceSettings voice={voice} />
 
 			<section className={styles.section}>
 				<h3 className={styles.sectionTitle}>Lock Osmo</h3>

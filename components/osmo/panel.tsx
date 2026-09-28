@@ -37,8 +37,10 @@ export function usePanels() {
 	const linkRef = useCallback((id: PanelId) => (el: HTMLButtonElement | null) => {
 		links.current[id] = el;
 	}, []);
+	// Opens a panel without closing it if it's already open (the voice uses this to ask for teaching).
+	const open = useCallback((id: PanelId) => setPanel(id), []);
 
-	return { panel, toggle, close, linkRef };
+	return { panel, toggle, close, open, linkRef };
 }
 
 export function PanelLinks({ panel, toggle, linkRef }: Pick<ReturnType<typeof usePanels>, "panel" | "toggle" | "linkRef">) {

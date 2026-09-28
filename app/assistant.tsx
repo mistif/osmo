@@ -36,6 +36,8 @@ import { Panel, PanelLinks, usePanels } from "@/components/osmo/panel";
 import { MemoryPanel } from "@/components/osmo/memory-panel";
 import { InsightsPanel } from "@/components/osmo/insights-panel";
 import { SettingsPanel } from "@/components/osmo/settings-panel";
+import { SPEECH_CHAR_MS } from "@/lib/voice/voices";
+import { useVoice } from "@/components/osmo/use-voice";
 
 type ChatMessage = {
 	role: "user" | "agent";
@@ -293,6 +295,10 @@ export default function AgentChat() {
 	const [speaking, setSpeaking] = useState<{ index: number; chars: number } | null>(null);
 	const [waves, setWaves] = useState<{ id: number; amp: number }[]>([]);
 	const waveIdRef = useRef(0);
+	// How the typed-out reply keeps time: its own timer, his spoken words, or speaking pace when the device gives no word timing.
+	const paceRef = useRef<"timer" | "words" | "stretched">("timer");
+	// Which reply his voice is saying. Only that one follows his words; any other reply keeps the timer.
+	const spokenIndexRef = useRef<number | null>(null);
 
 	useEffect(() => {
 		reduceMotionRef.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -314,10 +320,14 @@ export default function AgentChat() {
 			}, 160);
 			return () => clearTimeout(done);
 		}
+		// His spoken words move the text of the reply he's saying; every other reply keeps its own timer.
+		const spoken = speaking.index === spokenIndexRef.current;
+		if (spoken && paceRef.current === "words") return;
 		const beat = speechBeat(text[speaking.chars], text[speaking.chars - 1]);
 		// A short beat of thinking before the first word, and a breath after each mark.
 		const breath = speaking.chars > 0 ? speechBeat(text[speaking.chars - 1], text[speaking.chars - 2]).pause : 0;
-		const wait = charDelay(text.length, theme.pulseSeconds) + breath + (speaking.chars === 0 ? 350 : 0);
+		const pace = spoken && paceRef.current === "stretched" ? SPEECH_CHAR_MS : charDelay(text.length, theme.pulseSeconds);
+		const wait = pace + breath + (speaking.chars === 0 ? 350 : 0);
 		const timer = setTimeout(() => {
 			const loudness = Math.min(1, beat.voice * (0.6 + 0.4 * theme.strength));
 			stage?.style.setProperty("--voice", loudness.toFixed(2));
@@ -393,6 +403,42 @@ export default function AgentChat() {
 	// render's memory or conversation, and hears every reply through onReplyRef.
 	const sendTextRef = useRef<((text: string, options: SendOptions) => boolean) | null>(null);
 	const onReplyRef = useRef<((reply: string, via: Via) => void) | null>(null);
+	const voice = useVoice({
+		speech: {
+			onSpeechStart: () => {
+				paceRef.current = "words";
+				// The reply he is saying is the newest one: deliver's update is already queued ahead of this call.
+				setSpeaking((s) => {
+					spokenIndexRef.current = s ? s.index : null;
+					return s;
+				});
+			},
+			onNoWordTiming: () => {
+				paceRef.current = "stretched";
+				// A fresh object, so the effect runs again at the new pace.
+				setSpeaking((s) => (s && s.index === spokenIndexRef.current ? { ...s } : s));
+			},
+			onWord: (end) => {
+				setSpeaking((s) => (s && s.index === spokenIndexRef.current ? { ...s, chars: Math.max(s.chars, end) } : s));
+				if (reduceMotionRef.current) return;
+				const stage = stageRef.current;
+				stage?.style.setProperty("--voice", "0.8");
+				setTimeout(() => stage?.style.setProperty("--voice", "0.2"), 170);
+				const id = ++waveIdRef.current;
+				setWaves((current) => [...current.slice(-5), { id, amp: 0.8 }]);
+			},
+			onSpeechEnd: () => {
+				paceRef.current = "timer";
+				stageRef.current?.style.setProperty("--voice", "0");
+				setSpeaking((s) => (s && s.index === spokenIndexRef.current ? { ...s, chars: Number.MAX_SAFE_INTEGER } : s));
+			},
+		},
+		sendTextRef,
+		openSettings: () => panels.open("settings"),
+	});
+	useEffect(() => {
+		onReplyRef.current = voice.onReply;
+	}, [voice.onReply]);
 
 	function sendMessage(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -598,6 +644,7 @@ export default function AgentChat() {
 			data-tone={theme.tone}
 			data-speaking={speaking ? "" : undefined}
 			data-panel={panels.panel ?? undefined}
+			data-listening={voice.mode === "awake" || voice.mode === "followup" ? "" : undefined}
 		>
 			<div className={styles.aura} aria-hidden="true">
 				<span className={`${styles.orb} ${styles.orbA}`} />
@@ -638,9 +685,10 @@ export default function AgentChat() {
 								key={`${message.role}-${index}`}
 								className={`${styles.item} ${message.role === "user" ? styles.user : styles.agent} ${
 									talking ? styles.speaking : ""
-								}`}
+								} ${message.speaker === "guest" && message.role === "user" ? styles.guest : ""}`}
 								hidden={talking && speaking.chars === 0}
 							>
+								{message.speaker === "guest" && message.role === "user" && <span className={styles.who}>Someone else</span>}
 								<p className={styles.bubble}>{talking ? message.text.slice(0, speaking.chars) : message.text}</p>
 							</li>
 						);
@@ -666,13 +714,23 @@ export default function AgentChat() {
 						Send
 					</button>
 				</form>
+				{voice.micOpen && (
+					<p className={styles.voiceLine} role="status">
+						{voice.mode === "sleeping" ? 'Listening for "Osmo"' : "Listening…"}
+					</p>
+				)}
+				{voice.error && (
+					<p className={styles.voiceError} role="alert">
+						{voice.error}
+					</p>
+				)}
 			</main>
 
 			{panels.panel && (
 				<Panel id={panels.panel} onClose={panels.close}>
 					{panels.panel === "memory" && <MemoryPanel memory={memory} onChange={setMemory} />}
 					{panels.panel === "insights" && <InsightsPanel agent={agent} />}
-					{panels.panel === "settings" && <SettingsPanel />}
+					{panels.panel === "settings" && <SettingsPanel voice={voice} />}
 				</Panel>
 			)}
 		</div>

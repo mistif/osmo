@@ -478,6 +478,43 @@
 	}
 }
 
+/* Listening: the circle's edge brightens and it breathes faster, so it's clear he's hearing you. */
+.stage[data-listening] .core {
+	border-color: color-mix(in oklab, var(--aura-a) 95%, transparent);
+	animation: listen 1.2s ease-in-out infinite;
+}
+@keyframes listen {
+	0%,
+	100% {
+		scale: 1;
+	}
+	50% {
+		scale: 1.07;
+	}
+}
+.voiceLine,
+.voiceError {
+	flex: none;
+	margin: -1rem 0 0;
+	padding: 0 0 1rem;
+	font-size: 0.85rem;
+}
+.voiceLine {
+	color: color-mix(in oklab, var(--bone) 70%, transparent);
+}
+.voiceError {
+	color: #f2b8a2;
+}
+.guest {
+	flex-direction: column;
+	align-items: flex-end;
+}
+.who {
+	margin: 0 0.4rem 0.2rem;
+	font-size: 0.78rem;
+	color: color-mix(in oklab, var(--bone) 70%, transparent);
+}
+
 /* ---------- Reduced motion: keep the colors, stop the movement ---------- */
 
 @media (prefers-reduced-motion: reduce) {
@@ -504,5 +541,8 @@
 	.aura,
 	.column {
 		transition: none;
+	}
+	.stage[data-listening] .core {
+		animation: none;
 	}
 }
