@@ -231,7 +231,7 @@ Specs and plans for each live in `docs/superpowers/`. The commits are on `main`.
 - (a) When `assistant.tsx` swaps in its own reply (a name answer, recall), a bond milestone line from that turn is lost. The fix needs the brain to expose the milestone a turn mentioned (main agent).
 - (b) Messages answering "Could you explain it?" skip `processTurn`, so they don't count toward the bond.
 
-**Language session, for Gur:** `talk.ts` askName ("What should I call you?"), the affection and creator replies assume the speaker is Gur; a guest-aware variant is a follow-up.
+**Language session, decided by Gur:** `talk.ts` askName ("What should I call you?") and the affection and creator replies assume the speaker is Gur, so a guest can hear them too. It's tone only; nothing private leaks. On 2026-09-28 Gur said to leave them as they are, so don't change them unless he asks.
 
 **Small deferred issues, language session:**
 - "About history:" has a colon a voice reads out.
@@ -244,7 +244,12 @@ Specs and plans for each live in `docs/superpowers/`. The commits are on `main`.
 - "kpop" is read as "pop".
 - A name that is also donor slang ("Zenn") gets rewritten.
 
-**Test data in Gur's account** from live checks: the memory fact `ephemrl` ("what does serendipity mean"); the user_words valo, vlao, zenko, ephemrel. Gur knows. Delete it only if he asks; he can remove the fact in the Memory panel.
+**Test data in Gur's account** from live checks:
+- the memory fact `ephemrl` ("what does serendipity mean");
+- the user_words valo, vlao, zenko, ephemrel;
+- one exchange in his conversation, "what does ephemeral mean", from checking the voice chain on 2026-09-27.
+
+Gur knows. Delete it only if he asks; he can remove the fact in the Memory panel.
 
 ## Where to read more
 
