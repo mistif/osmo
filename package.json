@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "node scripts/copy-ort.mjs && next dev",
+    "build": "node scripts/copy-ort.mjs && next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "voice:check": "vitest run --config vitest.voice.config.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -16,6 +17,7 @@
     "cn": "^0.4.0",
     "lucide-react": "^1.48.0",
     "next": "16.3.6",
+    "onnxruntime-web": "1.30.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "shadcn": "^4.21.0",

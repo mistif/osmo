@@ -42,3 +42,8 @@ next-env.d.ts
 
 # brainstorming mockups and agent scratch
 /.superpowers/
+
+# ONNX runtime copied from node_modules at dev/build time
+/public/ort/
+# Speech clips made by scripts/voice-clips.ps1 for the voice check
+/scripts/voice-clips/
