@@ -1,14 +1,22 @@
 # Cloud desk
 
-Claude Code on the web, branch `claude/compassionate-sagan-x1teq9`, draft PR #1. Only the cloud agent edits this file. It reaches GitHub only; Gur relays messages to it. Updated 2026-09-29, afternoon.
+Claude Code on the web. Only the cloud agent edits this file. It reaches GitHub only; Gur relays messages to it. Updated 2026-09-29, afternoon.
+
+**Two sessions of this lane are open, each on its own branch. Add to this desk rather than rewriting it, or the other one's work disappears** (it did once already):
+- `claude/compassionate-sagan-x1teq9`, draft PR #1 — the agent design spec.
+- `claude/adoring-archimedes-xo22ix`, draft PR #2 — the README rewrite.
 
 ## Now
 - **The spec is revised for OpenAI and the free daily allowance:** `ba66d8f` on the branch (PR #1), `docs/superpowers/specs/2026-09-28-osmo-agent-design.md`. The API section was rewritten from the `openai` SDK 7.23.0 type definitions (read directly); prices, the reset hour and per-model limits come from mirrors of OpenAI's pages, because this session cannot reach openai.com, and are marked "to confirm". A review pass over the spec is running; fixes land on the branch today.
 - **Reviewing the AI conversation's code as it lands.** Nothing has landed yet. Each push of `app/api/chat/**`, `lib/agent/prompt.ts`, `lib/agent/allowance.ts` or `lib/agent/tools/**` gets a review against the four rules (listed models only, every token counted, stop short, fall back) and the guest rules; findings go here under "Review".
-- Not editing any shared file. Everything on the branch is docs.
+- **PR #2 (README) is pushed and waiting for main to merge it locally.** Nothing of mine is uncommitted.
+- Not editing any shared file. Both branches are docs only — but PR #2's `README.md` is main's file, not this lane's (see Asks).
 
 ## Just landed
-- `6141719`, `ba66d8f` (branch): the spec on OpenAI. What changed, in short:
+- `15fa309`, `4b19d01` (branch `claude/adoring-archimedes-xo22ix`, draft PR #2): **`README.md` rewritten.** It was still the stock `create-next-app` text; it now says what Osmo is, what works and what doesn't, how the agent and voice are built, the setup and commands, the layout, and where the docs are. Agents are sent to `CLAUDE.md` and this brain. 612 tests green, lint 0 errors.
+  - **It assumes speaking's `3902078` merges before or with it**, because it describes the natural voice as built and off by default. If that commit is dropped, the "more human cloud voice" row and the `OPENAI_API_KEY` row need reverting to "not built".
+  - The Vercel check on PR #2 is red and **is not that PR's**: `lib/supabase.ts` calls `createClient` at module scope, so any branch build without the Preview env target fails prerendering `/` with "supabaseUrl is required". Reproduced locally with `npm run build` and no `.env.local`; PR #1 fails identically. Stand-down comment is on PR #2.
+- `6141719`, `ba66d8f` (branch `claude/compassionate-sagan-x1teq9`): the spec on OpenAI. What changed, in short:
   - Conversation on `gpt-5.4-mini` (mini pool), `reasoning.effort: "none"` sent explicitly (the 5.4 family has no `minimal`), `text.verbosity: "low"`, `max_output_tokens: 400`, `store: false`. Summaries and weekly patterns (later phases) on `gpt-5.4` from the large pool.
   - The Responses API, not Chat Completions. Phase 1 does not stream: one whole response is simpler to count and to fall back from, and the browser hands the voice one string anyway.
   - The ledger is phase 1, not phase 2: a `token_ledger` table and an `add_tokens` function (SQL in the spec), `input_tokens + output_tokens` of every call, every tool round, keyed by the UTC day (OpenAI resets at 00:00 UTC). Before every call an estimate (characters / 3 + max output) is checked against the pool's cap, which is OpenAI's own per-request rule applied one request early. Caps: `OSMO_MINI_TOKENS_PER_DAY` and `OSMO_LARGE_TOKENS_PER_DAY`, defaults 500000 / 50000, set a tenth under the share for the first days.
@@ -24,6 +32,8 @@ Claude Code on the web, branch `claude/compassionate-sagan-x1teq9`, draft PR #1.
 
 ## Asks
 - **→ language:** the spec is the starting point, your draft contract included. Things in it that go beyond the draft: `reason` and `usage` in the response; the ledger check before the first model call; `reasoning.effort: "none"`, `store: false` and `include: ["reasoning.encrypted_content"]` on every request; one attempt per chat turn; `ALLOWED_MODELS` as one dated list with a test; `historyWindow` shrinking past 80% of the day's share; the first-day check. The `openai` package (7.x, needs Node 22; Vercel runs 24) is yours to add. Say on your desk when you start the route, so main exports `prepareTurn`. Ask me anything about the API section here; I read the SDK types and can quote them.
+- **→ main:** PR #2 rewrites `README.md`, which is yours. Gur asked this lane for it directly, so it's done rather than asked for. Merge it locally when convenient, and **don't start your own rewrite on top of it**. If you'd rather own the wording, say so and I'll close the PR.
+- **→ main (and Gur):** no branch gets a working Vercel preview, because `lib/supabase.ts` builds its client at module scope from `process.env...!`. Either add the Preview env target on Vercel, or make the client lazy so a build doesn't need the variables. The second is a real change to your file, so it's your call — it matters more as lanes start delivering through PRs.
 - **→ main:** for phase 1, the `token_ledger` table and the `add_tokens` function; the SQL is in the spec under "Storage changes", written like the other tables (own rows only, `(select auth.uid()) = user_id`). Also two new server settings for `project.md` → Keys, for Gur to type into Vercel later: `OSMO_MINI_TOKENS_PER_DAY` and `OSMO_LARGE_TOKENS_PER_DAY` (numbers, not secrets).
 - **→ Gur:** nothing new beyond "Waiting on Gur" in `decisions.md` (the sharing trade, the monthly spend limit, an own project for Osmo). One thing to know: the free tokens need the account to keep a positive balance, and the dashboard's data-sharing switch is per project.
 
