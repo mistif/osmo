@@ -1,15 +1,16 @@
 # Osmo as an agent: a language model for his words, his own heart underneath
 
-Date: 2026-09-28. Status: draft for review.
+Date: 2026-09-28. Revised 2026-09-29 for OpenAI and the free daily allowance. Status: design; the language lane builds it, the cloud lane keeps this document and reviews the code.
 
 ## Goal
-Osmo answers almost any question and talks like a person, while staying the same Osmo: his mood, values, personality donors, bond and memories keep shaping what he says. A language model (Claude) writes his words. His heart, brain and bond stay rule-based and run on every turn, because they are what make him consistent, learnable and his. Everything he knows about Gur lives in Supabase and he reads and writes it himself through tools, so he becomes an agent that runs off the database rather than a page that pattern-matches sentences.
+Osmo answers almost any question and talks like a person, while staying the same Osmo: his mood, values, personality donors, bond and memories keep shaping what he says. An OpenAI model writes his words, inside the free daily allowance Gur's account gets for traffic shared with OpenAI. His heart, brain and bond stay rule-based and run on every turn, because they are what make him consistent, learnable and his. Everything he knows about Gur lives in Supabase and he reads and writes it himself through tools, so he becomes an agent that runs off the database rather than a page that pattern-matches sentences.
 
 ## Non-goals
 - Changing the voice (spec `2026-09-27-osmo-voice-design.md`, shipped). He speaks, wakes to his name and tells Gur from a guest. This plan fits inside it: the route is called from the same `sendText` path, and a guest gets exactly what the voice spec allows.
 - More than one user.
 - Replacing the heart, brain, bond or genome with the model's own guesses about how Osmo feels. They stay as code.
 - Letting the model change its own state directly. It sees his state and can ask for memories to be saved; the code decides what his mood and bond do.
+- Paying for conversation. Every model call stays inside the allowance; when the day's share is used up he answers from code until the counter resets.
 
 ## Where Osmo stands today
 Read for this plan: every file under `app/`, `components/`, `lib/agent/`, `lib/shell/`, all six specs, the language session's handoff (`docs/handoff-language-session.md`), the live Supabase schema (project `agent-memory`) and the Vercel project `osmo`. Checked against `main` at `8b50b4f`, which carries the voice. Tests: 612 pass. Lint: one warning. Typecheck passes after `next typegen`.
@@ -29,24 +30,26 @@ What holds him back:
 ## The shape of the change
 
 ```
-browser (room)  --->  POST /api/chat (Vercel, holds the API key)  --->  Claude
+browser (room)  --->  POST /api/chat (Vercel, holds the key)  --->  OpenAI (gpt-5.4-mini)
       ^                     |            ^
       |                     v            |  tools: remember, forget, search the past,
-      |               Supabase (as Gur, RLS)      define a word, a story, a dilemma, web search
-      +---- stream of text, then the new mood ----+
+      |               Supabase (as Gur, RLS)      define a word, a story, a dilemma
+      |               token_ledger: today's tokens per pool, checked before every call
+      +---- the reply, the new mood, today's use ----+
 ```
 
-1. **A server route holds the key.** Today the whole app runs in the browser with the publishable Supabase key. A model API key cannot live there. A Next.js route handler at `app/api/chat/route.ts` runs on Vercel with `ANTHROPIC_API_KEY` as a server-only environment variable.
-2. **The route acts as Gur, not as an admin.** The browser sends its Supabase access token in the `Authorization` header. The route builds a Supabase client with that token, so every read and write still goes through the same row-level security as today. No service-role key anywhere. A request without a valid token gets 401, so nobody else can spend the API budget.
-3. **The turn moves to the server.** The route loads his state and memory, runs the deterministic steps (crisis, cues, heart step, bond), builds a system prompt from the result, calls Claude with his tools, runs the tools against Supabase, saves everything, and streams the reply back. The browser becomes what it should be: a room that shows the words and the mood.
-4. **The old chain becomes the fallback.** When the model is unreachable (no key, rate limit, outage) the route answers with today's `processTurn` and template replies. Osmo gets duller, never silent. `talk.ts` stays for that reason and stops growing.
-5. **`sendText` stays the one door.** Typed and spoken messages already arrive through it, and every reply already leaves through `deliver`, which hands the text to the voice. The route call goes inside `sendText`, so the voice engine, the guest marking and the "Someone else" label keep working unchanged.
-6. **A guest gets a guest.** The request carries `speaker`. For a guest the route builds the prompt from the guest view (no name, no memory, no history, no bond, no cause), tells the model it is speaking with someone who is not its owner, offers no tool that writes, discards the turn's state and effects, and saves both lines with `speaker = 'guest'`. That is the voice spec's Part 2, applied to the model.
+1. **A server route holds the key.** Today the whole app runs in the browser with the publishable Supabase key. A model API key cannot live there. A Next.js route handler at `app/api/chat/route.ts` runs on Vercel with `OPENAI_API_KEY` as a server-only environment variable (or `CHATGPT_KEY`, the alias `project.md` records; the route reads `OPENAI_API_KEY` first, exactly as speaking's `/api/speak` does). It is the same key the speaking voice uses. It is never `NEXT_PUBLIC_`.
+2. **The route acts as Gur, not as an admin.** The browser sends its Supabase access token in the `Authorization` header. The route builds a Supabase client with that token, so every read and write still goes through the same row-level security as today. No service-role key anywhere. A request without a valid token gets 401, so nobody else can spend the allowance.
+3. **The turn moves to the server.** The route loads his state and memory, runs the deterministic steps (crisis, cues, heart step, bond), builds a system prompt from the result, calls the model with his tools, runs the tools against Supabase, saves everything, and returns the reply. The browser becomes what it should be: a room that shows the words and the mood.
+4. **He stays inside the allowance.** Gur's account gets a free daily token budget for traffic shared with OpenAI, split into a mini-model pool and a large-model pool, and his investing agents use most of it. Osmo's share (`decisions.md`, 2026-09-29) is about 500,000 tokens a day from the mini pool and 50,000 from the large pool. OpenAI does not stop at the limit; it bills what goes over. So the route keeps its own ledger in Supabase, counts every token of every call (input, output and reasoning), refuses a call that could cross the day's cap, and lets the code answer instead. The caps are server settings Gur can change without a code change. The section "The model and the API" has the exact rules.
+5. **The old chain becomes the fallback.** When the model is unreachable (no key, rate limit, outage, timeout) or the day's share is used up, the route answers with today's `processTurn` and template replies. Osmo gets duller, never silent. `talk.ts` stays for that reason and stops growing.
+6. **`sendText` stays the one door.** Typed and spoken messages already arrive through it, and every reply already leaves through `deliver`, which hands the text to the voice. The route call goes inside `sendText`, so the voice engine, the guest marking and the "Someone else" label keep working unchanged.
+7. **A guest gets a guest.** The request carries `speaker`. For a guest the route builds the prompt from the guest view (no name, no memory, no history, no bond, no cause), tells the model it is speaking with someone who is not its owner, offers no tool that writes, discards the turn's state and effects, and saves both lines with `speaker = 'guest'`. That is the voice spec's Part 2, applied to the model. A guest's tokens come out of the same ledger, because the route is acting as Gur either way.
 
 ## What the model is told, every turn
-The system prompt is assembled from his state by a pure function, `lib/agent/prompt.ts`, so it can be tested without the API. In order, stable content first so it caches:
+The system prompt (the `instructions` of the request) is assembled from his state by a pure function, `lib/agent/prompt.ts`, so it can be tested without the API. In order, stable content first so it caches:
 
-1. **Who he is.** Osmo, one person's companion, built by students, professional and composed like JARVIS, with dry wit. Everything he says is plain speakable text: no markdown, lists, emoji, brackets or symbols, because a voice will read it aloud later. Short replies by default, one question at a time. He has opinions and defends them, gently. He never talks down.
+1. **Who he is.** Osmo, one person's companion, built by students, professional and composed like JARVIS, with dry wit. Everything he says is plain speakable text: no markdown, lists, emoji, brackets or symbols, because a voice reads it aloud. Short replies by default, one question at a time. He has opinions and defends them, gently. He never talks down.
 2. **His personality donors.** The six donor names and their organs, written as guidance rather than data: "Your voice comes from The Victorian Butler: formal, full sentences, no contractions. Your humor comes from The Grumpy Professor: dry, rare." Every organ's written material goes in: the voice openers and elaboration, the humor lines whatever their style, the slang tags, the catchphrases. Today all of that is stored on all 100 donors and used by nothing (see "Personality piece 2, absorbed"). The model is told to use it sparingly and in the professional register, which is a judgement a template could not make. This is where the donors finally sound different.
 3. **His values.** The five moral weights in words ("you weigh honesty most, then kindness"), and his outlook ("you lean toward hope, because of what you have experienced").
 4. **His memory of Gur.** Every `memory_facts` row as a sentence, the same sentences the Memory panel shows. Words Gur taught him. Gur's own frequent words, so the model knows "valo" is not a typo.
@@ -54,21 +57,21 @@ The system prompt is assembled from his state by a pure function, `lib/agent/pro
 6. **How he feels right now, and why.** `feelingPhrase`, the dominant emotions, `session.cause`, today's mood so far from `mood_days`, and what happened last time they talked. This block changes every turn, so it goes last.
 7. **The rules that stay code.** He is told which things are handled for him and not to improvise them: the crisis reply, re-rolling, saving memories (use the tool, do not claim to remember without it).
 
-The conversation itself is the last 30 of Gur's messages from `messages` (guest lines excluded, as `ownerHistory` does today), stored as plain text. Thinking blocks are never stored or replayed, so there is no history-editing problem.
+The conversation itself is the last 30 of Gur's messages from `messages` (guest lines excluded, as `ownerHistory` does today), sent as plain text items. The model's reasoning is never stored or replayed: every turn is rebuilt from `messages`, the request does not chain on a previous response, and OpenAI is asked not to store responses. The whole prompt should stay near 4,000 tokens, because every token comes out of the day's share.
 
 ## What stays deterministic, in order
-Before the model sees anything, the route runs what `mind.ts` does today, in this order:
+Before the model sees anything, the route runs what `mind.ts` does today, in this order. The main lane exports these steps from `mind.ts` as one `prepareTurn(...)` (answered 2026-09-29), with every guest gate inside it, so the order lives in one place and the route only calls it:
 
-1. **Crisis.** `isCrisis` on the raw text. If it matches, the reply is `CRISIS_REPLY`, saved and returned. The model is not called.
+1. **Crisis.** `isCrisis` on the raw text. If it matches, the reply is `CRISIS_REPLY`, saved and returned. The model is not called and no tokens are spent.
 2. **Heart.** Gap and loneliness, cues, reactivity, one coupling and decay step. The new activations are what the prompt describes.
 3. **Bond.** `recordTurn` with the same signals as today. Whether the message shared a feeling or an event comes from the model's reply instead of regexes (see tools), so the counts get more accurate, not less.
 4. **Pending answers.** A yes or no while a dilemma verdict is pending, and "yes, roll" while a re-roll is pending, are still handled by code. The model is told the outcome and voices it.
 5. **Life events and arguments.** `classifyUserEvents` and `detectArgument` still run so `applyEvent` and `argueOutlook` keep learning. The model is told "Gur just shared sad news; your sadness rose" and writes the acknowledgement itself.
 
-After the model replies, the route saves `agent_state`, the two messages, `mood_days`, and any effects from tools, using the existing `persistTurn` moved server-side.
+After the model replies, the route saves `agent_state`, the two messages, `mood_days`, the ledger row, and any effects from tools, using the existing `persistTurn` moved server-side.
 
 ## His tools
-All run in the route, all through the per-request Supabase client, all with their inputs validated before they run. Each is small and has its own tests with a fake database.
+All run in the route, all through the per-request Supabase client, all with their inputs validated before they run. Each is small and has its own tests with a fake database. Every tool round trip is another model call, and its tokens count.
 
 | Tool | What it does | Table |
 |---|---|---|
@@ -79,13 +82,13 @@ All run in the route, all through the per-request Supabase client, all with thei
 | `experience_story()` | The existing `pickEvent` and `applyEvent`. Returns the story and his new feeling; the model tells it. | `event_log`, `emotion_associations` |
 | `pose_dilemma(topic?)` | The existing `nextDilemma` or `findDilemma`, scored by `decide`. Returns the scenario, his choice and the values that drove it; the model explains and asks "Do you agree?" | `dilemma_log` |
 | `note_shared(kind)` | The model reports that Gur shared a feeling or a life event, so the bond counts it. Replaces the feeling regexes for bond purposes. | (bond in `agent_state`) |
-| `web_search` | Claude's own server-side search, for current facts. Capped at 3 searches a turn. | (none) |
+| `web_search` | OpenAI's built-in web search, for current facts. Off by default: each search is billed per call, outside the token allowance (see below). When on, at most 2 searches a turn. | (none) |
 
-Web search changes a promise he makes today ("internet access is used only to look up word definitions"). It becomes a switch in Settings, on by default, stored in a new `settings` column on `agent_state`. When it is off the tool is not offered. His self-description is updated either way.
+Web search changes a promise he makes today ("internet access is used only to look up word definitions"), and it is the one thing in this plan that costs money. It becomes a switch in Settings, off by default, stored in a new `settings` column on `agent_state`. When it is off the tool is not offered. His self-description is updated either way.
 
 ## What he can newly do
 - Answer general questions, explain things, help think through a problem, do arithmetic, and hold a real conversation about anything. The model does this on its own.
-- Answer about the world as it is now, through web search.
+- Answer about the world as it is now, through web search, if Gur switches it on.
 - Remember the thread of their life together, not only facts: "You mentioned the exam last Tuesday. How did it go?" comes from `search_past` in phase 2 and from episodes in phase 3.
 - Sound like his donors. A Victorian Butler Osmo and a Skater Osmo will read differently for the first time.
 - Have an opinion in his own voice about a dilemma, a story or a piece of news, weighted by his values and mood.
@@ -110,89 +113,174 @@ So today a donor's "voice" amounts to dropping a trailing question when verbosit
 ### Phase 0. Fix what the review found
 Small, mechanical, keeps every test green. Ships on its own first so the later phases start clean. The findings are listed at the end.
 
-### Phase 1. The route and the model, no tools
-- `app/api/chat/route.ts`: verify the token, load state and memory, run the deterministic steps, build the prompt, call Claude, stream text, save.
+### Phase 1. The route, the model and the ledger, no tools
+- `app/api/chat/route.ts`: verify the token, load state and memory, run `prepareTurn`, check the ledger, build the prompt, call the model, save, return.
 - `lib/agent/prompt.ts` (pure) and its tests.
-- The deterministic steps run in the route in the same order as `mind.ts`, from the pieces it exports, unless main exports them as one function.
-- The browser sends `{ text, speaker }` with the token from inside `sendText`. The route streams from the model so the first words are not held back, but the browser hands `deliver` one finished string, because the voice speaks a reply as one utterance and the typewriter already follows its word timing. The "One moment…" line covers the wait. Speaking sentence by sentence as they arrive is a later refinement, not phase 1.
-- The mood theme updates from the state the route returns with the reply.
-- Fallback to `processTurn` when the model call fails.
-- Vercel: add `ANTHROPIC_API_KEY`. Nothing changes in Supabase.
+- `lib/agent/allowance.ts` (pure) and its tests: the listed models, which pool a model belongs to, the estimate for a call, and the decision "may this call be made today". The ledger is not optional and not phase 2: OpenAI bills what goes over the allowance, so the counter goes live with the first model call.
+- The `token_ledger` table (main applies the migration; the SQL is in "Storage changes").
+- The browser sends `{ text, speaker }` with the token from inside `sendText`, waits for the finished reply, and hands `deliver` one string, because the voice speaks a reply as one utterance and the typewriter already follows its word timing. The "One moment…" line covers the wait. The route does not stream in phase 1: a whole response is simpler to count and to fall back from, and the browser could not use the early words anyway. Streaming sentence by sentence is a later refinement.
+- The mood theme updates from the state the route returns with the reply, and the response also carries today's use so the room can show it.
+- Fallback to `processTurn` when the model call fails or the ledger says no.
+- Vercel: `OPENAI_API_KEY` is already there for the speaking voice (Production only); the two cap variables are new. Supabase: the ledger.
 
 After phase 1 he answers most questions. He does not yet remember anything new by himself.
 
 ### Phase 2. Tools, and the old chain retired
-- The tools above, except `web_search`. Each with its own tests.
+- The tools above, except `web_search`. Each with its own tests. The tool loop sums the usage of every round into the ledger.
 - Delete from `sendText` in `assistant.tsx` (checked against `main` at `8b50b4f`, all still present): `agentKnowledge`, `answerFromMemory`, `findUnknownTopic`, `calculateMath`, the pending-learning flow and the name-from-history hacks. Delete `lib/facts.ts` regexes once `remember` covers them. `context.ts` keeps `turnView` and shrinks otherwise to what the fallback needs.
 - Supabase: a full-text index on `messages.text`, and `settings jsonb` on `agent_state`.
-- A `usage_log` table (day, input tokens, output tokens) written by the route, so Insights can show what he cost this week and a daily cap can stop a runaway. The cap is a number in `settings`.
 
 ### Phase 3. Web search, and episodes
-- `web_search` with the Settings switch.
-- **Episodes.** Every 20 turns, or when a conversation goes quiet for an hour, the route asks the model for a three-sentence first-person summary of what happened ("Gur told me about his exam on Thursday. He was nervous. I said I would ask how it went.") with an optional follow-up date. Saved in a new `episodes` table. The most recent and the most relevant episodes (full-text match on the current message) go into the prompt. A due follow-up is mentioned when he greets Gur. This is what turns him from a chatbot with a fact list into someone who was there last week.
+- `web_search` with the Settings switch, off by default because it is billed.
+- **Episodes.** Every 20 turns, or when a conversation goes quiet for an hour, the route asks the model for a three-sentence first-person summary of what happened ("Gur told me about his exam on Thursday. He was nervous. I said I would ask how it went.") with an optional follow-up date. Saved in a new `episodes` table. The most recent and the most relevant episodes (full-text match on the current message) go into the prompt. A due follow-up is mentioned when he greets Gur. This is what turns him from a chatbot with a fact list into someone who was there last week. Summaries are the one job for the large-model pool: a few calls a day where judgement matters more than speed, and if that pool is spent the summary waits until tomorrow.
 - Full text search first. Vector search (`pgvector`) is a later upgrade if plain search proves too blunt; it needs an embedding provider and is not worth a second vendor yet.
 
 ### Phase 4. Being more human, once the plumbing is quiet
 - **He starts conversations.** The welcome after a gap is generated from the last episode and any due follow-up instead of a fixed line per stage.
-- **He notices patterns.** Once a week, a summary of `mood_days` and episodes lets him say "You have seemed tired all week" if it is true.
+- **He notices patterns.** Once a week, a summary of `mood_days` and episodes lets him say "You have seemed tired all week" if it is true. Also on the large pool.
 - **Evaluation.** A set of about 40 saved conversations graded for: speakable text, staying in character and stage, using memory correctly, and never inventing a memory. Run before any prompt change. Without this, prompt edits are guesswork.
-- **Panels.** Insights shows episodes as part of "Our story" and shows spend. Memory shows episodes under a fourth heading, editable and forgettable like facts.
+- **Panels.** Insights shows episodes as part of "Our story" and shows today's and this week's tokens per pool against the caps. Memory shows episodes under a fourth heading, editable and forgettable like facts.
 
 ## The model and the API, so nothing stale gets built
-These are the current shapes as of this plan. They differ from older patterns.
+These are the current shapes as of this revision, taken from the `openai` Node SDK 7.23.0 type definitions (published 2026-09-23) and from Gur's dashboard as recorded in `decisions.md`. The cloud session cannot reach OpenAI's docs pages, so prices and the reset time are from secondary sources and marked as such; the language lane checks them against the dashboard on the first day.
 
-- Model: `claude-opus-5-5`. Thinking is always on for this model and cannot be disabled; depth is set with `output_config: { effort: "low" }`, which suits chat and keeps replies fast. Raise it only if evaluation shows a reason.
-- Streaming through the SDK's `messages.stream` with `finalMessage()` at the end. `max_tokens` around 1024: his replies are deliberately short and speakable.
-- Prompt caching: `cache_control` on the stable part of the system prompt (sections 1 to 4 above). The changing block (mood, bond, recent messages) goes after it. Check `usage.cache_read_input_tokens` is non-zero after the second turn.
-- Tools: plain JSON schema with `strict: true`, `tool_choice` left as `auto` (forcing a tool is rejected on this model). The SDK's tool runner can drive the loop; its per-turn hooks are where the route writes to Supabase.
-- Refusal fallback: `fallbacks: "default"` with the `server-side-fallback-2026-07-01` beta so a safety refusal on an odd message gets a reply from another model instead of silence. Unlikely for a companion, cheap to add.
-- Web search: the `web_search_20260209` server tool with `max_uses: 3`.
-- Errors: catch the SDK's typed errors from most specific to least (`RateLimitError`, then `APIError`, then connection errors) and fall back to `processTurn` on all of them.
+### The allowance, and the rules it forces
+- Two pools, from the dashboard (2026-09-29): up to 250,000 tokens a day across `gpt-5.4`, `gpt-5.2`, `gpt-5.1`, `gpt-5`, `gpt-4.1`, `gpt-4o`, `o1` and `o3`; up to 2.5 million tokens a day across `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5-mini`, `gpt-5-nano`, `gpt-4.1-mini`, `gpt-4.1-nano`, `gpt-4o-mini`, `o3-mini` and `o4-mini`. Any other model, and anything over a limit, is billed at standard rates. OpenAI does not stop at the limit.
+- Osmo's share: about 500,000 a day from the mini pool and 50,000 from the large pool; the investing agents are capped at the rest. Osmo cannot see their usage, so it keeps strictly to its share.
+- The four rules, each with a test: **listed models only** (one `ALLOWED_MODELS` list, dated, copied from the dashboard; a model constant not in it fails the test suite); **count every token** (input, output and reasoning, from every call, tool rounds included); **stop short of each cap** (a call is refused when today's count plus the call's estimate would cross the pool's cap); **fall back to the rule-based chain** when refused or on any error.
+- The counter resets at 00:00 UTC (secondary sources; to confirm on the dashboard). The ledger is keyed by the UTC date, in one function, so a different reset hour is a one-line change.
 
-Cost, rough, for one message: about 4,000 input tokens (mostly cached after the first turn) and 300 to 400 output tokens including thinking. On Opus 5.5 that is around one to two cents a message, so a busy day of 50 messages is under a dollar. Sonnet 5.5 (`claude-sonnet-5-5`) is about half the price and is a fine choice if the bill matters more than the last bit of judgement; the model is one constant in the route. Web search is billed per search on top.
+### Which models
+- **Conversation: `gpt-5.4-mini`**, from the mini pool. It is the newest listed mini model, and it can run with reasoning off, so the share is not spent on thinking. At about 4,500 tokens a message (a 4,000-token prompt plus a short reply) the 500,000 share is roughly 110 messages a day; a 50,000 share of `gpt-5.4` would be about 11, which is why the large model is not the conversation model.
+- **Summaries and weekly patterns (phases 3 and 4): `gpt-5.4`**, from the large pool. A few calls a day, no history window, so 50,000 tokens is plenty.
+- Alternatives, all listed: `gpt-5-mini` and `gpt-4.1-mini` if `gpt-5.4-mini` proves too chatty or too slow; `gpt-5.4-nano` is not worth its savings, the prompt is the cost, not the reply. The model is one constant per pool in `allowance.ts`, and the eval set in phase 4 is how a change is judged.
+- The SDK's `ChatModel` union lists every model on the dashboard's lists, so the constants type-check; the dated snapshot for the mini model is `gpt-5.4-mini-2026-03-17`. Use the bare names, so OpenAI's own upgrades apply.
+
+### Which API, and the request
+- **The Responses API** (`client.responses.create`), not Chat Completions. It has the `instructions` field for the system prompt, built-in web search, `max_output_tokens`, and a usage block that breaks out reasoning and cached tokens. Chat Completions is kept only as a reference in this section; nothing in the route uses it.
+- The request, per turn:
+  - `model`: the conversation constant.
+  - `instructions`: the system prompt from `prompt.ts`.
+  - `input`: the history window and the new message as `role`/`content` items; tool results go back as `function_call_output` items with the `call_id` the model gave.
+  - `reasoning: { effort: "none" }` for conversation, so no reasoning tokens are spent. `"none"` is in the SDK's `ReasoningEffort` union; if a model rejects it, the next setting is `"minimal"`, and `"low"` for the summaries.
+  - `text: { verbosity: "low" }`: his replies are short.
+  - `max_output_tokens`: 400 for conversation. If a response comes back `incomplete` for that reason, the text so far is used when it ends a sentence, else the fallback answers.
+  - `store: false`: nothing is kept on OpenAI's side for retrieval, and no `previous_response_id`; the route replays history from `messages` itself. (Whether `store: false` interacts with the sharing programme is unknown; the first day's dashboard shows whether the tokens landed in the free column. If they did not, `store` goes back to its default.)
+  - `tools`: the function tools with `strict: true` and `parallel_tool_calls: false`, so each round is one call and the loop stays simple; `tool_choice: "auto"`. Web search is `{ type: "web_search", search_context_size: "low" }` with `max_tool_calls: 2`, only when the switch is on.
+  - `safety_identifier`: a hash of Gur's user id, as OpenAI asks of apps with end users.
+  - `prompt_cache_key`: the user id, so the cached prefix is found. No `temperature` or `top_p`: they are not set on this family.
+- Streaming is not used in phase 1 (see the phase). If it is added later, `client.responses.stream()` gives the text as `response.output_text.delta` events and the finished `Response`, with `usage`, at `response.completed`; the SDK helper's `finalResponse()` returns the same object. The ledger is written from that final object, never from the deltas.
+- Prompt caching is automatic for prompts of 1,024 tokens and more with an identical prefix, which is why the stable blocks come first. Cached input is cheaper on the bill, but this plan counts cached tokens in full against the share, because the allowance page does not say they are discounted.
+
+### Counting
+- After every call, add `usage.input_tokens + usage.output_tokens` to the ledger. `output_tokens` includes the reasoning tokens (`usage.output_tokens_details.reasoning_tokens` is the breakdown, recorded too); `input_tokens` includes the cached ones (`usage.input_tokens_details.cached_tokens`, recorded too). Store the model, so the pool is known.
+- Before every call, estimate: the prompt and input in characters divided by three, rounded up, plus `max_output_tokens`. If `used(pool, today) + estimate > cap(pool)`, the call is not made and the turn falls back. The estimate is deliberately generous, so the counter always stops short.
+- A call that times out or errors after the request was sent may still have been served: count the estimate for it. A call refused before sending counts nothing.
+- A tool loop is several calls; each one is estimated, checked and counted on its own, so a long loop can stop in the middle and fall back.
+- The two caps come from the server settings `OSMO_MINI_TOKENS_PER_DAY` (default 500000) and `OSMO_LARGE_TOKENS_PER_DAY` (default 50000). Until the dashboard has shown a few real days, set them a tenth under the share (450000 and 45000): OpenAI counts on its own clock, and the investing agents' estimates may be off in the other direction.
+- When the mini pool is past 80% for the day, the history window drops from 30 messages to 10, so the last fifth of the share goes further.
+- Two tabs could race by one call, because `sendText` returns false only within one browser; the margin covers that.
+
+### Errors, timeouts and the fallback
+- The client is built with `timeout: 20_000` and `maxRetries: 1`. A retry after a connection error or a 429 that produced no usage costs nothing; a retry after a timeout is counted as a second estimate.
+- Catch the SDK's classes from most specific to least: `AuthenticationError` (401, the key), `RateLimitError` (429, which is also where `insufficient_quota` arrives), `APIConnectionTimeoutError`, `APIConnectionError`, `InternalServerError`, then `APIError`. All of them fall back to `processTurn`. The response tells the browser `source: "fallback"` and why, so a bad key is visible in the console rather than mistaken for a dull mood.
+- A missing key is not an error path: the route sees no `OPENAI_API_KEY` and no `CHATGPT_KEY` and falls back before building a client.
+- A refusal by the model (a `content_filter` incomplete reason) falls back the same way. Unlikely for a companion.
+
+### Cost
+- Inside the allowance: nothing. A day of conversation is bounded by the share, and the fallback takes over after it.
+- Outside it: web search, when switched on, is billed per call (about a cent a search at the published rate, to confirm on the pricing page), and the speaking voice's text-to-speech is billed as before. A monthly spend limit in the OpenAI dashboard is the backstop for both, and for any slip in the counting.
 
 ## Storage changes
 
 | Change | Phase | Why |
 |---|---|---|
-| Vercel env `ANTHROPIC_API_KEY` (server only, never `NEXT_PUBLIC_`) | 1 | The key |
-| `agent_state.settings jsonb` (`{ webSearch: true, dailyCapCents: 200 }`) | 2 | Switches |
+| Vercel env `OPENAI_API_KEY` (server only, never `NEXT_PUBLIC_`; `CHATGPT_KEY` accepted) | 1 | The key; already there for the voice |
+| Vercel env `OSMO_MINI_TOKENS_PER_DAY`, `OSMO_LARGE_TOKENS_PER_DAY` | 1 | The caps, changeable without code |
+| `token_ledger` and `add_tokens` (below) | 1 | Count every token, stop short |
+| `agent_state.settings jsonb` (`{ webSearch: false }`) | 2 | Switches |
 | Full-text index on `messages(text)` | 2 | `search_past` |
-| `usage_log(user_id, day, input_tokens, output_tokens, cost_cents)` | 2 | Spend, cap |
 | `episodes(id, user_id, summary, follow_up_at, from_id, to_id, created_at)` | 3 | Episodic memory |
 
-Every new table gets the same "own rows only" row-level security as the others. The route never uses a service-role key.
+The ledger, for main to apply (own rows only, like every other table):
+
+```sql
+create table public.token_ledger (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  day date not null,
+  pool text not null check (pool in ('mini', 'large')),
+  model text not null,
+  calls integer not null default 0,
+  input_tokens integer not null default 0,
+  output_tokens integer not null default 0,
+  reasoning_tokens integer not null default 0,
+  cached_tokens integer not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, day, pool, model)
+);
+alter table public.token_ledger enable row level security;
+create policy "own rows" on public.token_ledger
+  for all using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+
+create or replace function public.add_tokens(
+  p_day date, p_pool text, p_model text,
+  p_input integer, p_output integer, p_reasoning integer, p_cached integer
+) returns void language sql security invoker as $$
+  insert into public.token_ledger as t
+    (user_id, day, pool, model, calls, input_tokens, output_tokens, reasoning_tokens, cached_tokens)
+  values ((select auth.uid()), p_day, p_pool, p_model, 1, p_input, p_output, p_reasoning, p_cached)
+  on conflict (user_id, day, pool, model) do update set
+    calls = t.calls + 1,
+    input_tokens = t.input_tokens + excluded.input_tokens,
+    output_tokens = t.output_tokens + excluded.output_tokens,
+    reasoning_tokens = t.reasoning_tokens + excluded.reasoning_tokens,
+    cached_tokens = t.cached_tokens + excluded.cached_tokens,
+    updated_at = now();
+$$;
+```
+
+The function runs as the caller, so row-level security still applies, and the increment is one statement, so two calls cannot lose each other's count. Today's use for a pool is `sum(input_tokens + output_tokens)` over the day's rows for that pool. The route never uses a service-role key.
 
 ## Code structure
-- `app/api/chat/route.ts`: auth, load, deterministic steps, model call, tools, save, stream. Thin; everything it calls is testable without it.
-- `lib/agent/prompt.ts`: state in, system prompt out. Pure.
-- The deterministic steps: either exported from `mind.ts` as one `prepareTurn` by the main lane, or composed in the route from the pieces `mind.ts` already exports, in the same order. Which one is main's call (see the cloud desk).
-- `lib/agent/tools/*.ts`: one file per tool, each a schema plus a handler that takes a Supabase client. Tested with a fake.
-- `lib/agent/mind.ts` and `talk.ts`: the fallback. Unchanged except that `turn.ts` is extracted from `mind.ts`.
+All new files are the language lane's, which owns the conversation and can test with the key locally.
+- `app/api/chat/route.ts`: auth, load, `prepareTurn`, the ledger check, the prompt, the model call, tools, save, respond. Thin; everything it calls is testable without it.
+- `app/api/chat/openai.ts`: the client, and one `ask(request)` that returns `{ text, calls: [{ model, usage, status }] }` or throws one of the SDK's errors. The only file that imports `openai`.
 - `app/api/chat/supabase.ts`: the per-request client, built from the user that speaking's `lib/server/auth.ts` returns.
-- `app/assistant.tsx`: `sendText` loses its language chain and calls the route; the room, the typewriter, the voice wiring and the panels stay as they are.
+- `lib/agent/prompt.ts`: state in, system prompt out. Pure.
+- `lib/agent/allowance.ts`: `ALLOWED_MODELS` with the dashboard date, `poolOf(model)`, `estimateTokens(request)`, `mayCall(used, estimate, cap)`, `dayKey(now)`. Pure.
+- `lib/agent/tools/*.ts`: one file per tool, each a schema plus a handler that takes a Supabase client. Tested with a fake.
+- `lib/agent/mind.ts` (main): exports `prepareTurn`; otherwise the fallback, unchanged. `talk.ts` unchanged.
+- `app/assistant.tsx` (language): `sendText` loses its language chain and calls the route; the room, the typewriter, the voice wiring and the panels stay as they are.
+
+### The `/api/chat` contract
+`POST` with `Authorization: Bearer <Supabase access token>` (checked by speaking's `lib/server/auth.ts`) and body `{ text: string, speaker: "you" | "guest" }`. Response `{ reply: string, state: AgentState, source: "model" | "fallback", reason?: "allowance" | "error" | "no_key" | "crisis", usage?: { pool: "mini" | "large", usedToday: number, cap: number } }`, or a 401. The route saves the two `messages` rows and `agent_state` itself, so `sendText` only shows the reply and takes the new state for the mood theme. `reason` and `usage` are additions to the draft in `project.md`; `usage` is what lets the room show today's use without a new query. Streaming, if added, ends in the same final object.
 
 ## Coordination
-- **Four lanes share a brain** (the `brain` branch: `lanes.md`, `project.md`, `decisions.md`, one desk per lane). This plan is the cloud lane's. Once approved, the cloud lane creates only new files: `app/api/chat/**`, `lib/agent/prompt.ts`, `lib/agent/tools/**`, with tests. Everything else it needs is an Ask on `desks/cloud.md`: the `sendText` branch that calls the route (language), the deterministic prefix of a turn if it is to be exported from `mind.ts` (main), migrations (main). The main agent merges the cloud lane's PRs locally; the GitHub merge button is never used, because local `main` is usually ahead and a merge there deploys. `lib/voice/` is not touched.
-- **Server auth is speaking's.** The speaking lane plans `lib/server/auth.ts`, which checks the bearer token and returns the user or a 401. The route reuses it and builds the per-request Supabase client on top.
-- **Two current rules change, and both need Gur's explicit yes** before phase 1 is built: his messages leave the device for Vercel and Anthropic, where today only a looked-up word leaves it; and a paid API key is added. His self-description and the dictionary spec are updated in the same change.
-- **Nothing is pushed without Gur's OK.** A push to `main` is a deploy.
+- **Four lanes share a brain** (the `brain` branch: `lanes.md`, `project.md`, `decisions.md`, one desk per lane). Since 2026-09-29 the **language lane builds** the AI conversation, because it owns `sendText` and can test with the key locally; the **cloud lane** keeps this spec current and reviews the code on GitHub after each push, posting findings on `desks/cloud.md`; the **main lane** exports `prepareTurn` from `mind.ts`, applies the migrations, and owns the panels that will show the use; the **speaking lane** owns `lib/server/auth.ts`, which the route reuses. The main agent merges PRs locally; the GitHub merge button is never used, because local `main` is usually ahead and a merge there deploys. `lib/voice/` is not touched.
+- **The key is shared** by speaking (`/api/speak`, billed) and language (`/api/chat`, allowance only). Only Gur types keys, into `.env.local` and Vercel; no agent ever reads a key's value out.
+- **Two things wait on Gur** (`decisions.md`, "Waiting on Gur"): confirming the sharing trade, because the free allowance means OpenAI may use what Osmo sends to improve its models, which includes Gur's messages, his memory facts, his mood and history in each prompt, and guests' words; and a monthly spend limit in the OpenAI dashboard as the backstop. Giving Osmo his own OpenAI project and key is also on that list. His self-description and the dictionary spec are updated in the same change that ships phase 1.
+- **Nothing is pushed without Gur's OK.** A push to `main` is a deploy. Phase 1 ships behind nothing: with no key on Vercel it is the fallback, and with the key it is live, so the push waits for the two answers above.
 
 ## Testing
-- All 449 existing tests keep passing at every phase.
-- `prompt.ts`: given a state, the prompt names the right donors, the right stage, the right feeling and cause; contains every memory sentence; contains no markdown.
-- `turn.ts`: the same cases `mind.test.ts` covers today, moved.
+- All 612 existing tests keep passing at every phase.
+- `prompt.ts`: given a state, the prompt names the right donors, the right stage, the right feeling and cause; contains every memory sentence; contains no markdown; a guest state yields a prompt with no name, memory, history or cause.
+- `allowance.ts`: every model constant is in `ALLOWED_MODELS`; `poolOf` for each listed model and an unlisted one (throws); the estimate is above the real token count on three sample prompts; `mayCall` refuses at the boundary; `dayKey` rolls over at 00:00 UTC and not at local midnight.
+- The ledger against a fake Supabase client: a call adds its usage under the right pool and model; a tool loop of three rounds adds three; a timed-out call adds its estimate; a refused call adds nothing.
 - Each tool against a fake Supabase client: happy path, a database error, an invalid input.
-- The route with a fake model client (the same pattern `lookupWord` uses with a fake `fetch`): 401 without a token, crisis short-circuits, fallback on a model error, tool results are saved, usage is logged.
+- The route with a fake model client (the same pattern `lookupWord` uses with a fake `fetch`): 401 without a token; crisis short-circuits without a model call; fallback with `reason: "no_key"` when both key names are absent; fallback with `reason: "allowance"` when the ledger says no; fallback with `reason: "error"` on each SDK error class; tool results are saved; usage is logged; a guest turn sends no memory sentence, name or history line to the model and writes no fact.
 - The eval set from phase 4, run by hand before prompt changes.
-- By hand in the browser after each phase: a factual question, a question about last week, "remember my sister is Maya" then "what's my sister's name", a sad message, a dilemma, "roll a new osmo", and the API key removed from Vercel to see the fallback.
+- By hand in the browser after each phase: a factual question, a question about last week, "remember my sister is Maya" then "what's my sister's name", a sad message, a dilemma, "roll a new osmo", the caps set to a few thousand to watch the fallback take over, and the key removed from Vercel to see the fallback. On the first live day: the dashboard's free column shows the tokens, and its count agrees with the ledger to within the estimates.
 
 ## Risks and open assumptions
-- **Latency.** A model reply takes one to three seconds where today's is instant. The typewriter and the "One moment…" line already cover waiting; streaming makes the first words arrive early.
+- **Going over the allowance.** OpenAI bills past the limit instead of stopping. The ledger, the generous estimate, the caps set under the share, and the monthly spend limit are four separate guards; the investing agents' own cap is the fifth, and it is not Osmo's to check. The first days are watched on the dashboard.
+- **The sharing trade.** Everything in a prompt may be used by OpenAI to improve its models. That is Gur's decision to confirm before phase 1 goes live, and his self-description must say plainly that his words leave the device.
+- **The model list moves.** The dashboard's list changes with each model generation. `ALLOWED_MODELS` is one dated list; when it no longer matches the dashboard, the test that pins it is the reminder.
+- **The reset hour** is assumed to be 00:00 UTC. If the dashboard shows otherwise, `dayKey` changes.
+- **`reasoning.effort: "none"`** is in the SDK's union; whether `gpt-5.4-mini` accepts it is confirmed on the first call, with `"minimal"` as the next setting.
+- **Latency.** A model reply takes one to three seconds where today's is instant. The typewriter and the "One moment…" line already cover waiting. The mini model with reasoning off is the fast setting.
 - **Character drift.** A model will happily be warmer or chattier than Osmo should be. The prompt rules and the eval set are the guard. Keeping the heart and bond as code, not prose, is the other: the model is told he is a stranger, it does not get to decide.
 - **Invented memories.** The strongest rule in the prompt: never claim to remember something that is not in the memory block or a tool result. The eval checks it.
-- **Privacy.** Messages now leave the browser to Vercel and to Anthropic. That is a change from "internet only for word definitions" and his self-description must say so plainly. Supabase rows stay as private as before.
-- **Cost.** Bounded by the daily cap in phase 2. Until then the risk is a few dollars.
+- **Privacy.** Messages now leave the browser to Vercel and to OpenAI. That is a change from "internet only for word definitions" and his self-description must say so plainly. Supabase rows stay as private as before.
 - **Guest leakage.** The model is the one place a guest could be told something of Gur's, because it answers freely. The guest prompt must contain nothing of his, and the route test for a guest turn asserts that no memory sentence, name or history line reaches the model. The voice check itself (who is speaking) stays on the device and is untouched.
 
 ## Appendix: code review findings, 2026-09-28
