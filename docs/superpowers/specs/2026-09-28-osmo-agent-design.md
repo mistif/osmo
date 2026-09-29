@@ -113,7 +113,7 @@ Small, mechanical, keeps every test green. Ships on its own first so the later p
 ### Phase 1. The route and the model, no tools
 - `app/api/chat/route.ts`: verify the token, load state and memory, run the deterministic steps, build the prompt, call Claude, stream text, save.
 - `lib/agent/prompt.ts` (pure) and its tests.
-- `lib/agent/turn.ts`: the deterministic steps lifted out of `mind.ts` so both the route and the fallback share them.
+- The deterministic steps run in the route in the same order as `mind.ts`, from the pieces it exports, unless main exports them as one function.
 - The browser sends `{ text, speaker }` with the token from inside `sendText`. The route streams from the model so the first words are not held back, but the browser hands `deliver` one finished string, because the voice speaks a reply as one utterance and the typewriter already follows its word timing. The "One moment…" line covers the wait. Speaking sentence by sentence as they arrive is a later refinement, not phase 1.
 - The mood theme updates from the state the route returns with the reply.
 - Fallback to `processTurn` when the model call fails.
@@ -166,14 +166,15 @@ Every new table gets the same "own rows only" row-level security as the others. 
 ## Code structure
 - `app/api/chat/route.ts`: auth, load, deterministic steps, model call, tools, save, stream. Thin; everything it calls is testable without it.
 - `lib/agent/prompt.ts`: state in, system prompt out. Pure.
-- `lib/agent/turn.ts`: the deterministic steps, shared by route and fallback. Pure.
+- The deterministic steps: either exported from `mind.ts` as one `prepareTurn` by the main lane, or composed in the route from the pieces `mind.ts` already exports, in the same order. Which one is main's call (see the cloud desk).
 - `lib/agent/tools/*.ts`: one file per tool, each a schema plus a handler that takes a Supabase client. Tested with a fake.
 - `lib/agent/mind.ts` and `talk.ts`: the fallback. Unchanged except that `turn.ts` is extracted from `mind.ts`.
-- `lib/server/supabase.ts`: the per-request client from a bearer token.
+- `app/api/chat/supabase.ts`: the per-request client, built from the user that speaking's `lib/server/auth.ts` returns.
 - `app/assistant.tsx`: `sendText` loses its language chain and calls the route; the room, the typewriter, the voice wiring and the panels stay as they are.
 
 ## Coordination
-- **Two sessions share the tree** (see the handoff). The route, `prompt.ts`, `turn.ts` and `tools/` are new files about understanding and answering, so they sit with the language session. Extracting `turn.ts` from `mind.ts` and the `sendText` edit are shared changes, agreed with the brain session first, as the handoff requires. `lib/voice/` is not touched.
+- **Four lanes share a brain** (the `brain` branch: `lanes.md`, `project.md`, `decisions.md`, one desk per lane). This plan is the cloud lane's. Once approved, the cloud lane creates only new files: `app/api/chat/**`, `lib/agent/prompt.ts`, `lib/agent/tools/**`, with tests. Everything else it needs is an Ask on `desks/cloud.md`: the `sendText` branch that calls the route (language), the deterministic prefix of a turn if it is to be exported from `mind.ts` (main), migrations (main). The main agent merges the cloud lane's PRs locally; the GitHub merge button is never used, because local `main` is usually ahead and a merge there deploys. `lib/voice/` is not touched.
+- **Server auth is speaking's.** The speaking lane plans `lib/server/auth.ts`, which checks the bearer token and returns the user or a 401. The route reuses it and builds the per-request Supabase client on top.
 - **Two current rules change, and both need Gur's explicit yes** before phase 1 is built: his messages leave the device for Vercel and Anthropic, where today only a looked-up word leaves it; and a paid API key is added. His self-description and the dictionary spec are updated in the same change.
 - **Nothing is pushed without Gur's OK.** A push to `main` is a deploy.
 
@@ -195,7 +196,7 @@ Every new table gets the same "own rows only" row-level security as the others. 
 - **Guest leakage.** The model is the one place a guest could be told something of Gur's, because it answers freely. The guest prompt must contain nothing of his, and the route test for a guest turn asserts that no memory sentence, name or history line reaches the model. The voice check itself (who is speaking) stays on the device and is untouched.
 
 ## Appendix: code review findings, 2026-09-28
-Static review of `app/`, `components/`, `lib/`, `scripts/`, plus the test suite, lint and typecheck. Re-checked against `main` at `8b50b4f` after the voice landed: all ten are still there. Most severe first. All are small and become phase 0. Ownership follows the handoff: findings 1, 2, 4, 8 and 10 are in the language session's part of `assistant.tsx`; 5 is in the shared `mind.ts`; 3, 7 and 9 are the brain session's; 6 is in the load effect, which the brain session last changed.
+Static review of `app/`, `components/`, `lib/`, `scripts/`, plus the test suite, lint and typecheck. Re-checked against `main` at `8b50b4f` after the voice landed: all ten are still there. Most severe first. All are small and become phase 0. Ownership per `lanes.md` on the `brain` branch: 1, 2, 4, 8 and 10 to language; 3, 6, 7 and 9 to main; 5 to main and language together. They are tracked on those lanes' desks.
 
 1. **`app/assistant.tsx` `answerFromMemory`: substring matching on fact keys.** Saving "my age is 30" makes every later message containing "age" ("send me a message") answer "Your age is 30." Same for `meaning:` keys. Needs word-boundary matching.
 2. **`app/assistant.tsx` `findUnknownTopic` accepts pronouns.** "what is it" asks Gur to explain "it", then saves whatever he types next as its meaning, after which every message containing "it" gets that reply. Reuse `parseLookup`'s term rules.
