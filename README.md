@@ -8,8 +8,9 @@ you tell him, and a voice: he speaks his replies, listens through the microphone
 tells your voice from a stranger's.
 
 He is private by construction. A passkey guards the front door, row-level security
-guards every table, and the speech models run in your browser — the audio never leaves
-the device.
+guards every table, and the listening runs in your browser: your microphone audio and
+your voiceprint never leave the device. The one thing that does go out is the text of
+what Osmo says, and only if you switch his natural voice on.
 
 **Live:** https://osmo-xyz.vercel.app (passkey required) · **Deploying and hand checks:** [`docs/osmo-deploy.md`](docs/osmo-deploy.md)
 
@@ -25,7 +26,7 @@ the device.
 | He knows your voice from a guest's | working, once you've taught him |
 | He wakes when you say "Osmo" | **the model isn't trained yet** — see [`docs/osmo-wake-word.md`](docs/osmo-wake-word.md). Until it is, the listening switch stays disabled and the mic button is the only voice path. |
 | A language model writes his replies | **not built.** Every reply today comes from code in `lib/agent/`. The design is under way. |
-| A more human cloud voice | **not built** |
+| A more human cloud voice | **built, and off by default.** OpenAI `gpt-4o-mini-tts` through `POST /api/speak`, one clip per sentence, cached, with the built-in voice as the fallback on every failure path. It stays off per device until you turn it on. |
 
 ## How he works
 
@@ -53,8 +54,8 @@ the everyday guesser's, because a missed crisis costs far more than a false alar
 
 ### His voice — `lib/voice/`
 
-All of it runs in the browser, on `onnxruntime-web`, against models this site serves
-itself.
+The listening half runs entirely in the browser, on `onnxruntime-web`, against models
+this site serves itself. Nothing he hears is sent anywhere.
 
 - **`fbank.ts`** — Kaldi-style log mel filterbank features: 25 ms frames every 10 ms,
   pre-emphasis, a Povey window, a 512-point FFT, 80 mel bins, per-recording mean
@@ -109,6 +110,7 @@ Names only — never commit a value. All of these go in `.env.local`.
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | everything |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | everything. Public by design; row-level security is what protects the data. |
+| `OPENAI_API_KEY` | server-only, and optional. Only the natural voice (`/api/speak`) needs it; without it he uses the device's built-in voices. |
 | `NEXT_PUBLIC_OSMO_DEMO` | local only. Every message counts as a new day, so the bond moves in one sitting — use a test account. [`docs/osmo-demo-mode.md`](docs/osmo-demo-mode.md) |
 
 ## Commands
@@ -117,7 +119,7 @@ Names only — never commit a value. All of these go in `.env.local`.
 |---|---|
 | Dev server | `npm run dev` |
 | Build | `npm run build` |
-| Tests (612 at last count) | `npm test` |
+| Tests (600+) | `npm test` |
 | Types | `npx tsc --noEmit -p .` — a fresh clone may need `npx next typegen` first |
 | Lint | `npm run lint` |
 | Voice model check | `npm run voice:check` — needs clips from `scripts/voice-clips.ps1`; Windows only |
@@ -147,8 +149,8 @@ scripts/          the ONNX copy, the word list, the voice check
 
 ## Tests
 
-612 tests across 68 files, all in Vitest, next to the code they cover. They run in about
-five seconds, so run them.
+Over six hundred, all in Vitest, next to the code they cover. They run in about five
+seconds, so run them.
 
 The rule on this project is that a bug gets a failing test before it gets a fix.
 
