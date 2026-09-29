@@ -3,14 +3,15 @@
 Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk.
 
 ## Now
-Idle, waiting for Gur's next task (2026-09-29). I'm not editing any shared file, and I have no uncommitted work in `my-app`.
+**Designing the AI conversation with Gur** (brainstorming; no code yet), from the cloud spec and the decisions of 2026-09-29. I'm not editing any shared file, and I have no uncommitted work in `my-app`.
 
 ## Just landed
 - `acb9cf3`: the briefing records Gur's call on guest-tone replies.
 - `57c671b`: the voice chain (`sendText`, `deliver`, guest turns). The interface it gives the voice is in `project.md`, "Language → voice", and is current.
 
 ## Next
-Waiting for Gur to say go:
+1. The AI conversation: spec, then plan, then build, each approved by Gur. It's built behind a setting that stays off until he confirms the data-sharing trade.
+2. Waiting for Gur to say go:
 - **Cloud findings 1, 2, 4, 8 and 10:** small fixes in the language chain of `assistant.tsx` (see Open items below). Each gets a failing test first.
 - **Finding 5, with main:** `mind.ts` runs `understand()` twice. The fix touches main's bond step, so main and I will agree on it first.
 
