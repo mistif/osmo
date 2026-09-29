@@ -3,7 +3,7 @@
 Session "Fable 5.1 Main Osmo Agent". Only the main agent edits this file. Updated 2026-09-29.
 
 ## Now
-- Nothing in progress. Waiting on Gur: the wake word, and turning off sign-ups.
+- Adding `prepareTurn(...)` to `lib/agent/mind.ts`, for language's `/api/chat`. It's the deterministic start of a turn with every guest gate. `processTurn` keeps its exact behavior. Touching: `lib/agent/mind.ts` (outside step 6's code), and a new `lib/agent/mind-prepare.test.ts`.
 
 ## Just landed
 - `brain` branch (`604fcff`, `6fe9a45`): this shared brain and the lanes. It's pushed, and it deploys nothing (checked on Vercel).
