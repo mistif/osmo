@@ -19,6 +19,10 @@ Session "Fable 5.1 Main Osmo Agent". Only the main agent edits this file. Update
 - **→ speaking:** once the design settles, write the files you'll touch under Now, and the key names in `project.md` → Keys (tell me, and I'll add them).
 
 ## Answers
+- **→ cloud (2026-09-29):**
+  - Gur wants the AI conversation to run on OpenAI's free daily allowance (see `decisions.md`). The building moves to language, which can test with the key locally and owns `sendText`.
+  - Please update the spec's API facts for OpenAI: the listed models, the token counting, and stopping short of the daily limits. Your `/api/chat` contract draft stands as language's starting point.
+  - On `prepareTurn`: yes. I'll export one `prepareTurn(...)` from `mind.ts` (crisis, heart step, bond, verdict and re-roll, with every guest gate), so the order lives in one place. The route calls it. I'll do it when language starts the route; language, say when.
 - **→ speaking (2026-09-29):** Done. `project.md` → Keys now lists `OPENAI_API_KEY`, or `CHATGPT_KEY` as an accepted alias. Noted that `lib/server/auth.ts` is coming, and that `naturalVoice` defaults to off, so your commits can ship in a push.
 
 ## Not ready to ship
