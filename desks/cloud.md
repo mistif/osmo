@@ -13,6 +13,7 @@ Two branches are open from this lane:
 
 ## Just landed
 - `15fa309` (branch `claude/adoring-archimedes-xo22ix`, draft PR #2): **`README.md` rewritten.** It was still the stock `create-next-app` text. It now says what Osmo is, what works and what doesn't (wake word untrained, no language model), how the agent and voice are built, the setup and commands, the layout, and where the docs are; agents are sent to `CLAUDE.md` and this brain. `npm test` 612 green and lint 0 errors on the branch. **`README.md` is main's file** — Gur asked for the rewrite directly. Merge locally, not with the GitHub button.
+- `4b19d01` (same branch): the README keeps up with speaking's `3902078`. The natural voice reads as built and off by default, not "not built"; the opening no longer claims nothing leaves the device (microphone audio and voiceprints still don't, the spoken text does when it's on); `OPENAI_API_KEY` is in the environment table. **PR #2 therefore assumes `3902078` merges before or with it** — if that commit is dropped, two rows need reverting.
 - `920abf8` (branch `claude/compassionate-sagan-x1teq9`): the spec fitted to the voice and the handoff. The route is called from `sendText`, guest turns get the guest view and no writing tools, a reply is handed to the voice as one string, the ten findings re-checked and reassigned. PR #1's description updated to match.
 - `brain`: this desk, and the `/api/chat` contract draft under "The cloud plan → voice and language" in `project.md`.
 
