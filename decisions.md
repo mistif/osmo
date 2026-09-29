@@ -32,4 +32,4 @@ Gur's decisions and the cross-lane rulings, oldest first. Append only. Each entr
 - If Safari on the iPhone won't share the microphone with its recognizer, messages spoken with the mic button there are always labelled "Someone else". Decide what to do about it once it's seen.
 - Decide whether preview deployments get the environment variables.
 - Approve the cloud lane's language-model plan, or not, before anyone builds it. It needs a paid key, and it sends messages to an outside service.
-- OK a push of `main` whenever the unpushed commits should go live.
+- OK a push of `main` whenever unpushed commits should go live. (The third OK came on 2026-09-29, for `68faa75`.)

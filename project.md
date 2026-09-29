@@ -45,7 +45,7 @@ Vercel's variables target Production only, so preview deployments of other branc
 
 ## Current state (2026-09-29)
 
-- **Live** is `8b50b4f` (the voice). Local `main` is ahead of it by docs commits only; check with `git fetch && git log --oneline origin/main..main`.
+- **Live** is `68faa75` (pushed 2026-09-29: the voice plus the docs that point to this brain). To see anything unpushed, run `git fetch && git log --oneline origin/main..main`.
 - **Tests:** 612 pass, `tsc` is clean, and lint has 0 errors (plus the one old warning).
 - **Supabase auth:**
   - passkeys are on (relying party `osmo-xyz.vercel.app`);
