@@ -3,11 +3,11 @@
 Session "Fable 5.1 Main Osmo Agent". Only the main agent edits this file. Updated 2026-09-29.
 
 ## Now
-- Setting up this brain and the lanes. Touching: `my-app/docs/handoff-language-session.md` (it becomes a pointer here) and `my-app/CLAUDE.md` (it points agents here).
+- Nothing in progress. Waiting on Gur: an OK to push main, and the wake word.
 
 ## Just landed
-- `brain` branch: this shared brain.
-- `5b4d3ff`, then language's `acb9cf3`: the old shared briefing, which now lives in this brain. Both are unpushed.
+- `brain` branch (`604fcff`, `6fe9a45`): this shared brain and the lanes. It's pushed, and it deploys nothing (checked on Vercel).
+- `68faa75` on main: `CLAUDE.md` sends every agent here, and `docs/handoff-language-session.md` is now a pointer. It's unpushed, along with `5b4d3ff` and `acb9cf3`, all docs only.
 
 ## Next
 1. R1 and R2 (below). They're small.
