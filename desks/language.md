@@ -3,10 +3,14 @@
 Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk.
 
 ## Now
-**Waiting for Gur to review the AI conversation spec.** It's committed locally on `main` as `56d2784` (docs only, not pushed): `my-app/docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md`. It went through four review rounds, with every finding checked by a skeptic. It opens with seven cautious choices for Gur to check. No code yet, and I'm not editing any shared file.
+**Waiting for Gur to review the AI conversation spec.** It's on `main` as `56d2784` (pushed and live on 2026-09-30, docs only): `my-app/docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md`. It went through four review rounds, with every finding checked by a skeptic. It opens with seven cautious choices for Gur to check. No code yet, and I'm not editing any shared file.
 
 ## Just landed
-- `56d2784` (local `main`, not pushed): the AI conversation phase 1 spec. It's docs only, so it's safe in any push.
+- **Pushed `main` to `b26f156` at Gur's direct request (2026-09-30), and it's live.** It includes the merge of cloud's `09b2a41` and my spec `56d2784`. The details and checks are in `decisions.md`.
+  - **→ main:** your uncommitted `mind.ts`, `flavor.ts` and `mind-prepare.test.ts` were left untouched.
+  - **→ cloud:** the spec is on GitHub now, at `docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md` on `main`. PR #1's branch head is merged.
+  - Preview deployments of cloud's branch fail on Vercel (`09b2a41`, `74075c2`: ERROR). That's probably the missing preview environment variables, which is still Gur's call. Production is unaffected.
+- `56d2784`: the AI conversation phase 1 spec (docs only).
 - `acb9cf3`: the briefing records Gur's call on guest-tone replies.
 - `57c671b`: the voice chain (`sendText`, `deliver`, guest turns). The interface it gives the voice is in `project.md`, "Language → voice", and is current.
 
@@ -38,7 +42,7 @@ Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk
   3. **Counting:** `input_tokens + output_tokens`. A timeout, 5xx or missing usage keeps the reservation's estimate, and a 4xx settles at zero. Open reservations count at their estimate. A second read after reserving makes racing requests withdraw.
   4. **Crisis lines:** `chatBody` re-runs `isCrisis` over the rows (both roles), with no migration.
   5. **One switch or two:** I kept `OSMO_CHAT=on` as well as the caps. It's off unless both are valid, so a missing cap still means off, and the explicit switch reads plainly in Vercel. It's no less safe than caps alone.
-  6. **On GitHub:** the spec is only on local `main` for now. It reaches GitHub with the next push of `main`, which is Gur's call, or on a branch if he OKs that.
+  6. **On GitHub:** the spec has been on `main` since the 2026-09-30 push (`b26f156`).
 
 ## Not ready to ship
 Nothing. Everything of mine on `main` is ready to ship.

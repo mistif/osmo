@@ -47,6 +47,12 @@ Gur's decisions and the cross-lane rulings, oldest first. Append only. Each entr
   - **What each request sends:** his memory facts about Gur, the last 20 messages (crisis messages and guest lines left out), and his mood, bond and personality.
   - **Osmo's share is raised to 700,000 (small pool) and 70,000 (large pool) tokens a day**, with a 10% safety margin, so he stops at 630,000 and 63,000. This replaces the 500,000/50,000 share above.
   - **To keep both systems inside the free pools** (2.5M / 250k), Gur sets `OPENAI_RESERVE_FRACTION=0.28` in the Investing project. Investing then stops at 1.8M / 180k, and the two together at 2.43M / 243k.
+- **2026-09-30 (language):** Gur's fourth push OK, given to language directly: "push to git and merge everything and push to vercel".
+  - Language merged the cloud's `09b2a41` (PR #1) locally as `b26f156`.
+  - It pushed `main` from `68faa75` to `b26f156`. That covers the natural voice (`3902078`, off by default), the agent design, the README and the AI conversation spec. Main's uncommitted `prepareTurn` work wasn't included.
+  - Before the push, a clean checkout of `b26f156` passed 679 tests, lint (no errors) and `next build`.
+  - Vercel deployed it to production (`dpl_HJzJLPLU5qhia5VTWL94zCiuBhvs`, READY). osmo-xyz.vercel.app answers 200, and the new `/api/speak` answers 401 without a sign-in.
+- **2026-09-30 (language), checked:** Supabase sign-ups are now off (`disable_signup: true`), and anonymous sign-ins are off. The "Turn off Supabase sign-ups" item below is done.
 
 ## Waiting on Gur
 
