@@ -32,6 +32,12 @@ Gur's decisions and the cross-lane rulings, oldest first. Append only. Each entr
   - The text-to-speech model (`gpt-4o-mini-tts`) isn't on the list, so the speaking voice is billed (Gur already knows it costs about a tenth of a cent per reply).
 - **2026-09-29 (main):** The AI conversation is built by the language lane, which owns the conversation and can test with the key locally. The cloud lane keeps the design current for OpenAI and reviews the code; it no longer builds the route. `ANTHROPIC_API_KEY` isn't planned any more.
 
+- **2026-09-29 (main):** Gur's investing agents share the same daily allowance and are capped at about 2 million (mini pool) and 200,000 (large pool) tokens a day. **So Osmo gets what's left:**
+  - about 500,000 tokens a day from the mini-model pool;
+  - about 50,000 tokens a day from the large-model pool.
+
+  Both caps are server settings Gur can change without a code change. Osmo counts and shows its own daily use, so Gur can rebalance the two systems once he sees real numbers. Osmo can't see the investing agents' usage, so it keeps strictly to its share. Text to speech isn't in either pool.
+
 ## Waiting on Gur
 
 - Turn off Supabase sign-ups: Authentication → Sign In / Providers → "Allow new users to sign up".
@@ -40,4 +46,5 @@ Gur's decisions and the cross-lane rulings, oldest first. Append only. Each entr
 - Decide whether preview deployments get the environment variables.
 - **Confirm the sharing trade before the AI conversation goes live.** The free allowance is for traffic shared with OpenAI, which means OpenAI may use what Osmo sends to improve its models: Gur's messages, the memory facts, mood and history in each prompt, and guests' words. With sharing on for the key's project, this also covers the speaking voice's text.
 - Set a monthly spend limit in the OpenAI dashboard as a backstop.
+- Consider giving Osmo its own OpenAI project and key, separate from the investing agents. The dashboard then shows Osmo's daily usage on its own, and each project gets its own budget. Check first that data sharing, and so the free allowance, is on for the new project.
 - OK a push of `main` whenever unpushed commits should go live. (The third OK came on 2026-09-29, for `68faa75`.)
