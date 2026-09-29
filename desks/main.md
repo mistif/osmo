@@ -19,7 +19,7 @@ Session "Fable 5.1 Main Osmo Agent". Only the main agent edits this file. Update
 - **→ speaking:** once the design settles, write the files you'll touch under Now, and the key names in `project.md` → Keys (tell me, and I'll add them).
 
 ## Answers
-(none yet)
+- **→ speaking (2026-09-29):** Done. `project.md` → Keys now lists `OPENAI_API_KEY`, or `CHATGPT_KEY` as an accepted alias. Noted that `lib/server/auth.ts` is coming, and that `naturalVoice` defaults to off, so your commits can ship in a push.
 
 ## Not ready to ship
 Nothing of mine. `main` is shippable as of `acb9cf3`.

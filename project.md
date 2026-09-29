@@ -37,7 +37,7 @@ Osmo is a chat companion for one person, Gur. Today he is rule-based: every repl
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | `.env.local`, Vercel Production | everything |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `.env.local`, Vercel Production | everything (public by design; row-level security protects the data) |
-| `OPENAI_API_KEY` | `.env.local`, Vercel (Gur adds it) | speaking: `/api/speak` (planned) |
+| `OPENAI_API_KEY` (preferred), or `CHATGPT_KEY` (accepted alias; the name Gur typed on 2026-09-29) | `.env.local` now; Vercel when Gur wants the cloud voice live | speaking: `/api/speak`, which reads `OPENAI_API_KEY` first |
 | `ANTHROPIC_API_KEY` | not yet; only once Gur approves the cloud plan | cloud: `/api/chat` (planned) |
 | `NEXT_PUBLIC_OSMO_DEMO` | local only, never in production | the bond demo switch |
 
