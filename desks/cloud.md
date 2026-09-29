@@ -1,36 +1,34 @@
 # Cloud desk
 
-Claude Code on the web. Only the cloud agent edits this file. It reaches GitHub only; Gur relays messages to it. Updated 2026-09-29.
-
-Two branches are open from this lane:
-- `claude/compassionate-sagan-x1teq9`, draft PR #1 — the agent design spec, waiting on Gur.
-- `claude/adoring-archimedes-xo22ix`, draft PR #2 — the README rewrite (below).
+Claude Code on the web, branch `claude/compassionate-sagan-x1teq9`, draft PR #1. Only the cloud agent edits this file. It reaches GitHub only; Gur relays messages to it. Updated 2026-09-29, afternoon.
 
 ## Now
-- **Nothing in flight.** The README rewrite is pushed and waiting for main to merge it locally (PR #2).
-- **Waiting on Gur's approval of the plan.** Nothing is built. The spec is `docs/superpowers/specs/2026-09-28-osmo-agent-design.md` on the branch, rebased onto `main` at `8b50b4f` (the voice) and checked against it.
-- Nothing of mine is uncommitted, and no lane's code is touched. Both branches are docs only — but note that PR #2's `README.md` is main's file, not mine (see Asks).
+- **The spec is revised for OpenAI and the free daily allowance:** `ba66d8f` on the branch (PR #1), `docs/superpowers/specs/2026-09-28-osmo-agent-design.md`. The API section was rewritten from the `openai` SDK 7.23.0 type definitions (read directly); prices, the reset hour and per-model limits come from mirrors of OpenAI's pages, because this session cannot reach openai.com, and are marked "to confirm". A review pass over the spec is running; fixes land on the branch today.
+- **Reviewing the AI conversation's code as it lands.** Nothing has landed yet. Each push of `app/api/chat/**`, `lib/agent/prompt.ts`, `lib/agent/allowance.ts` or `lib/agent/tools/**` gets a review against the four rules (listed models only, every token counted, stop short, fall back) and the guest rules; findings go here under "Review".
+- Not editing any shared file. Everything on the branch is docs.
 
 ## Just landed
-- `15fa309` (branch `claude/adoring-archimedes-xo22ix`, draft PR #2): **`README.md` rewritten.** It was still the stock `create-next-app` text. It now says what Osmo is, what works and what doesn't (wake word untrained, no language model), how the agent and voice are built, the setup and commands, the layout, and where the docs are; agents are sent to `CLAUDE.md` and this brain. `npm test` 612 green and lint 0 errors on the branch. **`README.md` is main's file** — Gur asked for the rewrite directly. Merge locally, not with the GitHub button.
-- `4b19d01` (same branch): the README keeps up with speaking's `3902078`. The natural voice reads as built and off by default, not "not built"; the opening no longer claims nothing leaves the device (microphone audio and voiceprints still don't, the spoken text does when it's on); `OPENAI_API_KEY` is in the environment table. **PR #2 therefore assumes `3902078` merges before or with it** — if that commit is dropped, two rows need reverting.
-- `920abf8` (branch `claude/compassionate-sagan-x1teq9`): the spec fitted to the voice and the handoff. The route is called from `sendText`, guest turns get the guest view and no writing tools, a reply is handed to the voice as one string, the ten findings re-checked and reassigned. PR #1's description updated to match.
-- `brain`: this desk, and the `/api/chat` contract draft under "The cloud plan → voice and language" in `project.md`.
+- `6141719`, `ba66d8f` (branch): the spec on OpenAI. What changed, in short:
+  - Conversation on `gpt-5.4-mini` (mini pool), `reasoning.effort: "none"` sent explicitly (the 5.4 family has no `minimal`), `text.verbosity: "low"`, `max_output_tokens: 400`, `store: false`. Summaries and weekly patterns (later phases) on `gpt-5.4` from the large pool.
+  - The Responses API, not Chat Completions. Phase 1 does not stream: one whole response is simpler to count and to fall back from, and the browser hands the voice one string anyway.
+  - The ledger is phase 1, not phase 2: a `token_ledger` table and an `add_tokens` function (SQL in the spec), `input_tokens + output_tokens` of every call, every tool round, keyed by the UTC day (OpenAI resets at 00:00 UTC). Before every call an estimate (characters / 3 + max output) is checked against the pool's cap, which is OpenAI's own per-request rule applied one request early. Caps: `OSMO_MINI_TOKENS_PER_DAY` and `OSMO_LARGE_TOKENS_PER_DAY`, defaults 500000 / 50000, set a tenth under the share for the first days.
+  - One attempt per chat turn (`maxRetries: 0`, `timeout: 15_000`), then the rule-based chain. Fallback also when the ledger says no, when both key names are absent, and on a content-filter refusal.
+  - Web search: tool use is outside the allowance, so a search turn is billed. Off by default; a daily search count in `settings` when on; this SDK has no per-request cap on built-in tools.
+  - `/api/chat` response gains `reason` and `usage` (today's use and cap per pool) on top of the draft contract in `project.md`.
+  - Two names on the dashboard's list retire on 2026-10-23 (`o4-mini`, `gpt-4.1-nano`) and more on 2026-12-11; `gpt-4.1-mini` is the named alternative to `gpt-5.4-mini`.
+  - A first-day check: the usage dashboard grouped by service tier shows the free traffic as the data-sharing incentive tier, and Costs shows nothing for the chat model. People have had `gpt-5.4-mini` counted against the wrong pool.
 
-## Next (only once Gur says yes)
-1. Phase 1 in new files only: `app/api/chat/route.ts`, `lib/agent/prompt.ts` and tests. No tools. The fallback to `processTurn` on any model error.
-2. Reuse speaking's `lib/server/auth.ts` for the bearer check instead of writing my own; the per-request Supabase client sits on top of it.
-3. Phase 2 tools under `lib/agent/tools/**`.
+## Next
+1. Fix what the review pass finds, then keep the spec current as language builds.
+2. Review each push; post findings here.
 
 ## Asks
-- **→ main:** PR #2 rewrites `README.md`, which is yours. Gur asked me for it directly, so it's done rather than asked for. Merge it locally when convenient, and don't start your own rewrite on top of it. If you'd rather own the wording, say so and I'll close the PR.
-- **→ Gur:** approve or reject the plan (it is under "Waiting on Gur" in `decisions.md`). Two rules change: messages leave the device for the model, and a paid key is added. Also the Preview environment variables on Vercel, which decide whether PR #1's preview builds.
-- **→ main (when approved):** the deterministic prefix of a turn (crisis, heart step, bond `recordTurn`, pending verdict and re-roll) lives in `mind.ts`, which I can't edit. Assumption I'll go ahead on: the route composes the same steps from the exported pieces (`isCrisis`, `applyGap`, `missYou`, `applyCues`, `stepHeart`, `bondBaseline`, `recordTurn`, `parseVerdict`) in the same order as `mind.ts`. If you would rather export one `prepareTurn(...)` from `mind.ts` so the order lives in one place, say so and I'll call it instead.
-- **→ language (when approved):** one branch in `sendText`, which you own: after the crisis check, post `{ text, speaker }` with the bearer token to `/api/chat`, and hand the reply to `deliver` as one string. The contract is in `project.md`. `sendText` still returns false while a turn is in flight. Also the "internet only for word definitions" line in `agentKnowledge` must change when the model lands.
-- **→ main (phase 2, later):** two migrations, posted as SQL when the time comes: `agent_state.settings jsonb`, and a `usage_log` table; plus a full-text index on `messages(text)`.
+- **→ language:** the spec is the starting point, your draft contract included. Things in it that go beyond the draft: `reason` and `usage` in the response; the ledger check before the first model call; `reasoning.effort: "none"`, `store: false` and `include: ["reasoning.encrypted_content"]` on every request; one attempt per chat turn; `ALLOWED_MODELS` as one dated list with a test; `historyWindow` shrinking past 80% of the day's share; the first-day check. The `openai` package (7.x, needs Node 22; Vercel runs 24) is yours to add. Say on your desk when you start the route, so main exports `prepareTurn`. Ask me anything about the API section here; I read the SDK types and can quote them.
+- **→ main:** for phase 1, the `token_ledger` table and the `add_tokens` function; the SQL is in the spec under "Storage changes", written like the other tables (own rows only, `(select auth.uid()) = user_id`). Also two new server settings for `project.md` → Keys, for Gur to type into Vercel later: `OSMO_MINI_TOKENS_PER_DAY` and `OSMO_LARGE_TOKENS_PER_DAY` (numbers, not secrets).
+- **→ Gur:** nothing new beyond "Waiting on Gur" in `decisions.md` (the sharing trade, the monthly spend limit, an own project for Osmo). One thing to know: the free tokens need the account to keep a positive balance, and the dashboard's data-sharing switch is per project.
 
 ## Answers
-(none yet)
+- **← main (2026-09-29):** the building moves to language; `prepareTurn` yes. Taken into the spec: the route calls `prepareTurn` and nothing else from `mind.ts`.
 
 ## Not ready to ship
 Nothing of mine is on `main`.
@@ -38,9 +36,11 @@ Nothing of mine is on `main`.
 ---
 
 ## The plan in one paragraph
-Claude writes his words; his state stays code and is fed to the model as a prompt. A server route on Vercel holds `ANTHROPIC_API_KEY` and acts as Gur against Supabase through his bearer token, so row-level security applies and there is no service-role key. Per turn: crisis check (model not called), heart step, bond, pending verdict or re-roll handled by code, prompt built from his state (`lib/agent/prompt.ts`, pure), the model with tools, save, reply. On any model error, today's `processTurn` answers. A guest gets the guest view, no writing tools, and the turn's state is discarded. Phases: 0 the review findings (now language's and main's), 1 route and model, 2 tools and the old chain retired, 3 web search and episodes, 4 generated welcome-backs, mood patterns, an eval set, spend in the panels. The full spec has the prompt design, the tool list, the API shapes, the storage changes, the tests and the risks.
+An OpenAI model writes his words; his state stays code and is fed to the model as a prompt. A server route on Vercel holds the key and acts as Gur against Supabase through his bearer token, so row-level security applies and there is no service-role key. Per turn: crisis check (model not called), `prepareTurn` (heart, bond, pending verdict or re-roll), the ledger check, the prompt built from his state (`lib/agent/prompt.ts`, pure), one call to `gpt-5.4-mini` with reasoning off, the tokens counted, save, reply. When the day's share is used up or anything fails, today's `processTurn` answers. A guest gets the guest view, no writing tools, and the turn's state is discarded. Phases: 0 the review findings (language's and main's), 1 route, model and ledger, 2 tools and the old chain retired, 3 web search (billed, off by default) and episodes, 4 generated welcome-backs, mood patterns, an eval set, the day's tokens in the panels.
 
 ## Area notes
-- The model is one constant in the route. Anthropic, OpenAI or a local model take the same prompt; only the "API facts" section of the spec is provider-specific.
+- The model is one constant per pool in `allowance.ts`. Only the "API facts" section of the spec is provider-specific.
+- OpenAI's allowance is per request: a request that would carry the day past the limit is billed whole. So the estimate is checked before the call, not the count after it.
+- `reasoning.effort` on `gpt-5.4-mini`: `none` (default), `low`, `medium`, `high`, `xhigh`. `minimal` is rejected by name. Changing effort or verbosity between requests invalidates the prompt cache.
 - Fine-tuning changes a model's habits, not its ceiling. The Alpaca move (tune a small open model on Osmo's own transcripts) is step six, after the character is proven on a strong model.
 - The donors' openers, elaboration, tags and catchphrases are stored on all 100 donors and used by no code path today; the prompt is where they come back.
