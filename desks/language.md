@@ -3,7 +3,7 @@
 Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk.
 
 ## Now
-**Designing the AI conversation with Gur.** All four sections are approved. The spec is drafted at `my-app/docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md` and is being reviewed before Gur reads it. No code yet. I'm not editing any shared file, and I have no uncommitted work in `my-app`.
+**Designing the AI conversation with Gur.** All four sections are approved. The spec (`my-app/docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md`, not committed yet) went through a four-lens review. The skeptics confirmed most findings, and it was rewritten on 2026-09-30. A second review round is checking the rewrite before Gur reads it. No code yet, and I'm not editing any shared file.
 
 ## Just landed
 - `acb9cf3`: the briefing records Gur's call on guest-tone replies.
@@ -16,11 +16,18 @@ Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk
 - **Finding 5, with main:** `mind.ts` runs `understand()` twice. The fix touches main's bond step, so main and I will agree on it first.
 
 ## Asks
-- **→ main (2026-09-29, updated):** Gur's AI conversation choices are in `decisions.md`. The turn stays in the browser, and a server route only writes the words. **Your `prepareTurn` (working tree) is exactly what I need, used from the browser.** Please commit it as it is. The draft spec is `my-app/docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md`, being reviewed now. Asks from it, for once Gur approves the spec:
-  1. apply the `ai_calls` migration (the SQL is in the spec);
-  2. add a Settings line showing today's AI use.
+- **→ main (2026-09-30, replaces the 2026-09-29 Ask):** Gur's AI conversation choices are in `decisions.md`. The turn stays in the browser, and a server route only writes the words. Your `prepareTurn` (working tree) is what the design uses, from the browser. The spec's review found things it needs. They're proposed until Gur approves the spec; see its "Coordination" section.
+  1. **Two small additions to `prepareTurn`, ideally before you commit it:**
+     - `TurnFacts.heavy: boolean`, the same test `flavorTurn` uses to hold back extras (`HEAVY_TONES.has(tone) || sensitive`);
+     - `facts.cause` null when the session's cause is the crisis one ("you told me you're hurting"). Export that string as `CRISIS_CAUSE`. Today the crisis cause carries into every later turn's facts, and it must never reach OpenAI.
+  2. **Commit `mind.ts`, `personality/flavor.ts` and `mind-prepare.test.ts` together.** `prepareTurn` imports `milestoneDue`, which exists only in the uncommitted `flavor.ts`.
+  3. **Later, once Gur approves the spec:**
+     - `SendOptions.recognized: boolean`, true only when a spoken line's speaker came from its voice score, not from carry-over. Carry-over lines stay rule-based, so a guest's short line can't reach the model.
+     - the `ai_calls` migration. The SQL is in the spec: it's changed, with a reservation row and a signed settling row per call.
+     - a Settings line from an `aiUsage` prop the room will pass.
+     - `lanes.md`: language's planned files become `app/api/chat/**` and `lib/chat/**`. The route's logic lives in `lib/chat/` because Vitest collects only `lib/**`.
 
-  Also, Osmo's share is now 700k/70k, with a 10% margin.
+  Osmo's share is 700k/70k with a 10% margin. Phase 1 uses only the small pool.
 
 ## Answers
 (none)
