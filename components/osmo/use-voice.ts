@@ -10,6 +10,7 @@ import { displayVoiceName } from "@/lib/voice/voices";
 import type { Voiceprint } from "@/lib/voice/voiceprint";
 import { webVoiceDeps } from "@/lib/voice/web/deps";
 import { chooseVoice, unlockSpeech } from "@/lib/voice/web/say";
+import { cloudVoiceReady, unlockCloudAudio } from "@/lib/voice/web/say-cloud";
 import { getVoiceSettings, serverVoiceSettings, setVoiceSettings, subscribeVoiceSettings } from "@/lib/voice/web/settings-store";
 import { canListen } from "@/lib/voice/web/transcriber";
 import { forgetVoiceprints, loadVoiceprints } from "@/lib/voice/web/voiceprints";
@@ -19,6 +20,13 @@ import { wakeWordTrained } from "@/lib/voice/web/wake-detector";
 export type TeachingReason = "listen" | "mic" | "settings";
 
 const noSubscription = () => () => {};
+
+// An iPhone only speaks and only plays audio after a tap has started each once. Both are unlocked
+// together, from the same taps, so either voice can be the one that answers.
+function unlockVoices(): void {
+	unlockSpeech();
+	unlockCloudAudio();
+}
 
 export function useVoice(options: { speech: SpeechHooks; sendTextRef: { current: SendText | null }; openSettings(): void }) {
 	const settings = useSyncExternalStore(subscribeVoiceSettings, getVoiceSettings, serverVoiceSettings);
@@ -54,7 +62,8 @@ export function useVoice(options: { speech: SpeechHooks; sendTextRef: { current:
 			listen: settings.listen && listenSupported && Array.isArray(prints) && teaching === null,
 			wakeReady: wakeReady === true,
 			prints: Array.isArray(prints) ? prints : [],
-			canSpeak: voice != null,
+			// The cloud voice can speak on a device that has no English voice of its own.
+			canSpeak: voice != null || (settings.naturalVoice && cloudVoiceReady()),
 			speakTyped: settings.speakTyped,
 			// Read at call time, so a message always goes through the room's latest sendText.
 			sendText: (text, sendOptions) => sendTextRef.current?.(text, sendOptions) ?? false,
@@ -92,6 +101,7 @@ export function useVoice(options: { speech: SpeechHooks; sendTextRef: { current:
 		error: view.error,
 		listening: settings.listen,
 		speakTyped: settings.speakTyped,
+		naturalVoice: settings.naturalVoice,
 		// undefined while checking, null when the device has no English voice.
 		voiceName: voice === undefined ? undefined : voice ? displayVoiceName(voice.name) : null,
 		listenSupported,
@@ -101,11 +111,11 @@ export function useVoice(options: { speech: SpeechHooks; sendTextRef: { current:
 		onReply: engine.onReply,
 		stop: engine.stop,
 		micPress() {
-			unlockSpeech();
+			unlockVoices();
 			engine.micPress();
 		},
 		setListen(on: boolean) {
-			unlockSpeech();
+			unlockVoices();
 			engine.clearError();
 			if (on && !(Array.isArray(prints) && prints.length > 0)) {
 				setTeaching("listen");
@@ -114,8 +124,12 @@ export function useVoice(options: { speech: SpeechHooks; sendTextRef: { current:
 			setVoiceSettings({ listen: on });
 		},
 		setSpeakTyped(on: boolean) {
-			unlockSpeech();
+			unlockVoices();
 			setVoiceSettings({ speakTyped: on });
+		},
+		setNaturalVoice(on: boolean) {
+			unlockVoices();
+			setVoiceSettings({ naturalVoice: on });
 		},
 		startTeaching() {
 			setTeaching("settings");

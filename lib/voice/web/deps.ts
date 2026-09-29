@@ -3,7 +3,7 @@
 import type { VoiceDeps } from "../engine";
 import { chime } from "./chime";
 import { openMic } from "./mic";
-import { chosenVoice, say } from "./say";
+import { speakReply } from "./say-cloud";
 import { voiceEmbedding } from "./speaker-id";
 import { hear } from "./transcriber";
 import { createDetector } from "./wake-detector";
@@ -19,7 +19,8 @@ export function webVoiceDeps(): VoiceDeps {
 		createDetector,
 		hear,
 		embed: voiceEmbedding,
-		say: (text, hooks) => say(text, chosenVoice(), hooks),
+		// The cloud voice when Gur has turned it on and it's usable, the device's own voice otherwise.
+		say: speakReply,
 		chime,
 	};
 }

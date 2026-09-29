@@ -19,7 +19,8 @@ export function Switch({ label, on, onChange, disabled }: { label: string; on: b
 	);
 }
 
-function voiceLine(name: string | null | undefined): string {
+function voiceLine(name: string | null | undefined, natural: boolean): string {
+	if (natural) return "I speak with my natural voice.";
 	if (name === undefined) return "Checking my voice…";
 	if (name === null) return "This device has no English voice, so I'll only write.";
 	return `I speak with ${name} on this device.`;
@@ -41,7 +42,16 @@ export function VoiceSettings({ voice }: { voice: VoiceControls }) {
 	return (
 		<section className={styles.section}>
 			<h3 className={styles.sectionTitle}>Voice</h3>
-			<p className={styles.note}>{voiceLine(voice.voiceName)}</p>
+			<p className={styles.note}>{voiceLine(voice.voiceName, voice.naturalVoice)}</p>
+
+			{/* Speaking lane's block. The note is deliberately plain: turning this on sends the words he
+			    says to OpenAI, and Gur should read that here rather than find it out later. */}
+			<Switch label="Natural voice" on={voice.naturalVoice} onChange={voice.setNaturalVoice} />
+			<p className={styles.note}>
+				{voice.naturalVoice
+					? "The words I say are sent to OpenAI to be spoken. What you say to me isn't, and neither is your voice."
+					: "A warmer, more human voice. It sends the words I say to OpenAI to be spoken; your own words and your voice stay on this device."}
+			</p>
 
 			<Switch label='Listen for "Osmo"' on={voice.listening} onChange={voice.setListen} disabled={!voice.listenSupported || voice.wakeReady !== true} />
 			{!voice.listenSupported && <p className={styles.note}>Listening needs Chrome, Edge or Safari. I can still speak.</p>}
