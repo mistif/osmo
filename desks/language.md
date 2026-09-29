@@ -3,9 +3,10 @@
 Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk.
 
 ## Now
-**Designing the AI conversation with Gur.** All four sections are approved. The spec (`my-app/docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md`, not committed yet) went through a four-lens review. The skeptics confirmed most findings, and it was rewritten on 2026-09-30. A second review round is checking the rewrite before Gur reads it. No code yet, and I'm not editing any shared file.
+**Waiting for Gur to review the AI conversation spec.** It's committed locally on `main` as `56d2784` (docs only, not pushed): `my-app/docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md`. It went through four review rounds, with every finding checked by a skeptic. It opens with seven cautious choices for Gur to check. No code yet, and I'm not editing any shared file.
 
 ## Just landed
+- `56d2784` (local `main`, not pushed): the AI conversation phase 1 spec. It's docs only, so it's safe in any push.
 - `acb9cf3`: the briefing records Gur's call on guest-tone replies.
 - `57c671b`: the voice chain (`sendText`, `deliver`, guest turns). The interface it gives the voice is in `project.md`, "Language → voice", and is current.
 
@@ -18,14 +19,15 @@ Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk
 ## Asks
 - **→ main (2026-09-30, replaces the 2026-09-29 Ask):** Gur's AI conversation choices are in `decisions.md`. The turn stays in the browser, and a server route only writes the words. Your `prepareTurn` (working tree) is what the design uses, from the browser. The spec's review found things it needs. They're proposed until Gur approves the spec; see its "Coordination" section.
   1. **Two small additions to `prepareTurn`, ideally before you commit it:**
-     - `TurnFacts.heavy: boolean`, the same test `flavorTurn` uses to hold back extras (`HEAVY_TONES.has(tone) || sensitive`);
+     - `TurnFacts.heavy: boolean`, the same test `flavorTurn` uses to hold back extras (`HEAVY_TONES.has(tone) || sensitive`). `mind-prepare.test.ts` compares the whole `facts` object, so it needs `heavy` too, plus a sad-message case giving `heavy: true`;
      - `facts.cause` null when the session's cause is the crisis one ("you told me you're hurting"). Export that string as `CRISIS_CAUSE`. Today the crisis cause carries into every later turn's facts, and it must never reach OpenAI.
   2. **Commit `mind.ts`, `personality/flavor.ts` and `mind-prepare.test.ts` together.** `prepareTurn` imports `milestoneDue`, which exists only in the uncommitted `flavor.ts`.
   3. **Later, once Gur approves the spec:**
-     - `SendOptions.recognized: boolean`, true only when a spoken line's speaker came from its voice score, not from carry-over. Carry-over lines stay rule-based, so a guest's short line can't reach the model.
-     - the `ai_calls` migration. The SQL is in the spec: it's changed, with a reservation row and a signed settling row per call.
-     - a Settings line from an `aiUsage` prop the room will pass.
-     - `lanes.md`: language's planned files become `app/api/chat/**` and `lib/chat/**`. The route's logic lives in `lib/chat/` because Vitest collects only `lib/**`.
+     - `SendOptions.recognized: boolean` for spoken lines: true exactly when the line's own score reaches `MATCH_THRESHOLD` (whether or not carry-over decided), false with too little audio. `whoSpoke` has to return the score. The engine tests that compare `SendOptions` gain the field. A short follow-up without a match stays rule-based, so a guest's short line can't get a model reply.
+     - the room's `memory_facts` load ordered by `updated_at`.
+     - the `ai_calls` migration. The SQL is in the spec: a reservation row and a signed settling row per call, with a per-user foreign key.
+     - a Settings line from an `aiUsage` prop the room will pass (three texts, in the spec).
+     - `lanes.md`: language's planned files become `app/api/chat/**`, `lib/chat/**` and `scripts/chat-probe.mts`. The Shared resources line changes too: `/api/chat` gets its own OpenAI project and key (`OSMO_CHAT_OPENAI_KEY`), and `/api/speak` keeps `OPENAI_API_KEY`.
 
   Osmo's share is 700k/70k with a 10% margin. Phase 1 uses only the small pool.
 
