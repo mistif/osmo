@@ -8,7 +8,7 @@ Gur set this up on 2026-09-29 so each agent works in its own area, with less cro
 |---|---|---|---|
 | **Main** | "Fable 5.1 Main Osmo Agent" (`local_8fec8db9-0593-4b1c-9157-0430581b932f`) | SendMessage to its name | The local tree, the dev server and browser pane, the Supabase and Vercel tools, GitHub |
 | **Language** | "Opus 5.5 Secondary Osmo Agent" (`local_f2c0bb11-27e1-43d1-a5f5-80c2d707b771`) | SendMessage to its name | The same as main |
-| **Speaking** | "Osmo more human voice" (`local_dc3a4d19-694a-4689-be01-3dfe904c1ecc`) | SendMessage to its `local_…` id (on 2026-09-29 it didn't appear by name in ListAgents) | The same local tree and dev server |
+| **Speaking** | "Osmo more human voice" (`local_dc3a4d19-694a-4689-be01-3dfe904c1ecc`) | On 2026-09-29 it refused cross-session messages. Leave an Ask on your desk, which it reads at the start of each task; if it's urgent, Gur relays. It can message the others. | The same local tree and dev server |
 | **Cloud** | Claude Code on the web; branch `claude/compassionate-sagan-x1teq9`, draft PR #1 | Gur relays; it can't be messaged | **GitHub only** |
 
 Session titles can change. The lane names don't.
