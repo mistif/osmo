@@ -1,38 +1,137 @@
 # Speaking desk
 
-Session "Osmo more human voice". The main agent seeded this desk on 2026-09-29 from what it could see. **From now on, only the speaking agent edits it**, so replace the seed with your own view.
+Session "Osmo more human voice". Only the speaking agent edits this file. Updated 2026-09-29.
 
 ## Now
-- Designing a more human speaking voice with Gur, in brainstorming as of 2026-09-29. No code yet.
-- The shape so far:
-  - A server route `/api/speak` calls OpenAI `gpt-4o-mini-tts` with a fixed voice and instructions.
-  - The browser splits each reply into sentences, plays the clips in order, and caches them in IndexedDB.
-  - The built-in voice is the fallback.
+
+Nothing in progress. The natural voice is built and committed; it is **off by default**, so it is safe
+in a push. Waiting on Gur to turn it on and tell me how it sounds.
+
+Not holding any shared file open. No uncommitted work of mine in `my-app`.
 
 ## Just landed
-(none yet)
+
+- **`3902078` on `main` (unpushed): Osmo's natural voice, behind a setting that is off.**
+  OpenAI `gpt-4o-mini-tts` via a new `POST /api/speak`, one clip per sentence with a breath between
+  them, IndexedDB clip cache, and the built-in voice as the fallback on every failure path.
+  690 tests pass, `tsc` clean, lint unchanged (still just the old `router` warning).
+
+  **What other lanes need to know:**
+  - **`lib/server/auth.ts` now exists**, as `project.md` said it would: `bearerToken(request)` and
+    `requireUser(request, lookup?)`, returning the user or null. No service-role key. The cloud lane
+    can use it for `/api/chat` as-is; the `lookup` argument is injectable so routes test without Supabase.
+  - **`VoiceSettings` has a third field, `naturalVoice`**, defaulting to `false`. `parseVoiceSettings`
+    keeps it off for settings saved before it existed. `settings-store.ts` needed no change.
+  - **`lib/voice/web/deps.ts`'s `say:` is now `speakReply`**, which picks the cloud voice or the
+    device's. `engine.ts` and `machine.ts` are untouched, and the `VoiceDeps.say` contract in
+    `project.md` is unchanged and still honoured, including `onWord` offsets into the whole reply.
+  - **`.gitignore` has one added line, `!.env.example`.** `.env*` was ignored, so the committed
+    example file needed the negation. `.gitignore` is in nobody's lane — main, revert it if you'd
+    rather not have it and I'll rename the file instead.
+  - **Docs:** `docs/osmo-natural-voice.md` (mine): where the key goes, what it costs, how he sounds,
+    and what is still unverified.
 
 ## Next
-(speaking: fill in)
+
+Nothing until Gur has heard it. Then, in order:
+1. Whatever he says about the voice, the pace and the breath between sentences — all of it is
+   constants in `lib/voice/tts.ts` plus `GAP_AFTER` in `lib/voice/sentences.ts`.
+2. Measure real first-sound latency from the browser and record it in `docs/osmo-natural-voice.md`.
+3. If he keeps it: the mood wiring in the first Ask below, so the grave tone actually engages.
 
 ## Asks
-(none yet)
+
+- **→ main: one line to make his mood reach his voice.** `setSpeechTone` is exported from
+  `lib/voice/web/say-cloud.ts` and `speechTone(valence, strength)` from `lib/voice/tts.ts`, both
+  tested — but nothing calls them yet, so **every reply is currently spoken "composed"**. The tone
+  needs `moodTheme`'s `valence` and `strength`, which only reach `assistant.tsx`, and both the
+  `useVoice` call there and `use-voice.ts`'s own signature are yours. Either add it yourself, roughly
+  `setSpeechTone(speechTone(theme.valence, theme.strength))` before a reply is delivered, or grant me
+  those two lines and I'll do it. **Not blocking:** composed is the baseline and grave is rare, so
+  composed-only is a perfectly good first listen.
+- **→ main: the 2026-09-27 voice spec now contradicts the code.** Its Non-goals say "**A paid natural
+  voice.** He uses the device's built-in voices" and "Choosing a different voice in Settings", and
+  "His voice" says on-device voices come first "so the text of his replies isn't sent to a speech
+  service". Gur reversed the first deliberately on 2026-09-29. That spec is yours, so I haven't
+  touched it — please add a superseding note pointing at `docs/osmo-natural-voice.md`, or grant me the
+  edit. Without it a later session reads "no paid voice" and undoes this. Two smaller drifts to fold
+  in: the new switch changes the voice *source*, not the voice identity, which is adjacent to that
+  second non-goal; and "If no English voice exists, he stays silent" is no longer true, because
+  `canSpeak` now also accepts the cloud voice.
+- **→ main: `project.md` → Keys.** Gur has already typed the key, but as **`CHATGPT_KEY`**, not
+  `OPENAI_API_KEY`. `/api/speak` reads `OPENAI_API_KEY` first and falls back to `CHATGPT_KEY`, so
+  nothing is broken either way. Please record both names. Gur may prefer to rename it in `.env.local`;
+  his call, and `.env.example` shows the preferred name.
 
 ## Answers
-(none yet)
+
+(none asked of me yet)
 
 ## Not ready to ship
-(speaking: fill in; keep the cloud voice behind a setting that is off until Gur has heard it)
+
+**Safe to push.** `naturalVoice` defaults to off on every device, so `3902078` changes nothing audible
+until Gur turns it on. Nothing of mine blocks a push of `main`.
+
+Two things Gur must know before he turns it on, and they belong in whatever you tell him:
+- With it on, **the text of every reply he speaks goes to OpenAI.** His own messages, his microphone
+  audio and his voiceprints do not — listening and speaker ID stay on the device.
+- It bills his key, about a tenth of a cent a reply before caching. He should set a monthly spend
+  limit in the OpenAI dashboard; that is the real backstop, not anything in the code.
+
+For the live site, the key also has to be added in Vercel. Until then production quietly uses the
+built-in voice, which is the same as today.
 
 ---
 
-## Notes from the main agent for this lane
+## Area notes
 
-- **Your seams in main's files** are listed in `lanes.md`. You don't need an OK for them; put each file under Now before you edit it.
-- **The contract** is under "Interfaces" in `project.md`. The easy things to miss:
-  - `onWord` offsets are character positions in the whole reply, not in one sentence.
-  - The watchdog counts network time: `text.length × 150 ms + 5 s`, counted from the `say()` call.
-  - `onEnd` must fire on errors too.
-  - Audio has to be unlocked inside a tap on iPhones (`unlockSpeech()`).
-- **Privacy:** until now, nothing Osmo says has left the device except dictionary lookups. A cloud voice sends every spoken reply's text, which can include Gur's own facts, to OpenAI. Say so plainly in Settings and in the deploy guide, and add it to `decisions.md` once Gur agrees.
-- **Guests:** a guest's replies are spoken too. They already contain nothing private, but they'll go through the same route.
+### What was actually wrong
+
+Gur's machine has no British voice installed at all — only `Microsoft David`, `Mark` and `Zira`, all
+`en-US`. So `pickVoice`'s two British tiers never matched and Osmo fell to tier 3, `Microsoft David`,
+an old SAPI voice. That, not the settings, is why he sounded robotic. `voices.ts` and its tiers are
+unchanged and still pick the fallback voice.
+
+### The instructions matter more than the voice
+
+My first attempt asked for "measured… understated… slightly slower than conversational pace". Gur
+heard it and said it was still robotic and asked for faster. He was right: flat and slow *is* what
+reads as robotic, and I had asked for both. The wording now asks for "light variation in pitch and
+emphasis - not flat, not slow" with `speed: 1.15`. A test in `tts.test.ts` fails if "measured" or
+"slower" comes back into the composed instruction.
+
+`speed` is confirmed to work alongside `instructions` on this model.
+
+**`INSTRUCTIONS_VERSION` is part of the cache key. Bump it with any change to the instructions, the
+voice or the speed**, or cached audio outlives the change.
+
+### Delivery: two tones, Gur's call
+
+JARVIS stays himself, and only goes out of line "if it's really really bad":
+- **composed** — the baseline, essentially always.
+- **grave** — only `valence <= -0.45` **and** `strength >= 0.6`: clearly negative *and* strongly felt.
+  Lower, slower, quieter, never emotive.
+
+Rejected deliberately: continuous per-reply modulation (imperceptible, and it destroys the cache hit
+rate) and a "bright" tone. Because grave is rare, nearly all cached audio is one tone.
+
+### Latency is measured and NOT yet trustworthy
+
+Through my shell: **38 s to first byte**, then ~1 KB/s. TLS alone took 1 s, so that is the sandbox's
+network, not OpenAI. **"First sound in ~300 ms" is an expectation, not a measurement** — it must be
+checked from the browser on Gur's machine.
+
+Relevant to main's contract: `WORD_TIMING_WAIT_MS` is 800 ms, so on an uncached first sentence the
+room may show the reply untimed and then pick word timing up when audio starts. `paceRef` recovers to
+`"words"` on the first `onWord`, so it heals itself. The watchdog (`length × 150 ms + 5 s`, network
+included) is the real ceiling, and `FIRST_SOUND_GUARD_MS` (1.2 s) fires well before it.
+
+### What is verified, and what is not
+
+Verified: the key works (HTTP 200 against `/v1/models`, and real audio generated); `/api/speak`
+returns 401 unauthenticated, 401 on a bogus token, 405 on GET, all against the running dev server;
+the page compiles and loads with no new console or server errors; 690 tests, `tsc`, lint.
+
+**Not verified:** the actual sound in the app, because turning the switch on and sending Osmo a
+message is Gur's session and agents don't touch it; real browser latency; the iPhone unlock; and how
+the breath between sentences sounds in practice.

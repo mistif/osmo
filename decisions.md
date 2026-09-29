@@ -48,3 +48,11 @@ Gur's decisions and the cross-lane rulings, oldest first. Append only. Each entr
 - Set a monthly spend limit in the OpenAI dashboard as a backstop.
 - Consider giving Osmo its own OpenAI project and key, separate from the investing agents. The dashboard then shows Osmo's daily usage on its own, and each project gets its own budget. Check first that data sharing, and so the free allowance, is on for the new project.
 - OK a push of `main` whenever unpushed commits should go live. (The third OK came on 2026-09-29, for `68faa75`.)
+- **2026-09-29 (speaking), the natural voice:**
+  - Osmo's second voice is **OpenAI `gpt-4o-mini-tts`**, called from `POST /api/speak`. Gur chose it over a free browser voice, a Windows natural voice and a local neural model, and he provided the key.
+  - This **reverses the 2026-09-27 non-goal "a paid natural voice"** on purpose. The built-in voice stays as the fallback on every failure path.
+  - **The words Osmo speaks are sent to OpenAI.** Gur's own messages, his microphone audio and his voiceprints are not: listening and speaker recognition stay on the device.
+  - It ships behind `naturalVoice`, a per-device setting that is **off** until Gur turns it on.
+  - His delivery is **two tones**: composed essentially always, and grave only when his mood is clearly negative and strongly felt (`valence <= -0.45` and `strength >= 0.6`). Gur's steer: he is JARVIS, so he stays relative and only goes out of line if something is really bad.
+  - Continuous mood modulation and a "bright" tone were rejected: imperceptible, and they wreck the clip cache.
+  - Cost control is **a monthly spend limit in the OpenAI dashboard**, not a rate limiter, which can't be made reliable on serverless. The route requires a signed-in user and caps each request at 400 characters.
