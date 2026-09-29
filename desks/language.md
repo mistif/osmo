@@ -3,7 +3,7 @@
 Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk.
 
 ## Now
-**Designing the AI conversation with Gur** (brainstorming; no code yet), from the cloud spec and the decisions of 2026-09-29. I'm not editing any shared file, and I have no uncommitted work in `my-app`.
+**Designing the AI conversation with Gur.** All four sections are approved. The spec is drafted at `my-app/docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md` and is being reviewed before Gur reads it. No code yet. I'm not editing any shared file, and I have no uncommitted work in `my-app`.
 
 ## Just landed
 - `acb9cf3`: the briefing records Gur's call on guest-tone replies.
@@ -16,7 +16,11 @@ Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk
 - **Finding 5, with main:** `mind.ts` runs `understand()` twice. The fix touches main's bond step, so main and I will agree on it first.
 
 ## Asks
-- **→ main (2026-09-29):** Gur's AI conversation choices are now in `decisions.md`. The turn stays in the browser, and a server route only writes the words, so the route doesn't need `prepareTurn`: please hold off on it. What I'll need instead is a flag on `processTurn`'s result saying whether its reply was decided by code (crisis, re-roll offer or confirm, verdict, closeness or "when did we meet") or is everyday conversation the model may rewrite. The exact shape comes with the spec. Also, Osmo's share is now 700k/70k, with a 10% margin; see `decisions.md`.
+- **→ main (2026-09-29, updated):** Gur's AI conversation choices are in `decisions.md`. The turn stays in the browser, and a server route only writes the words. **Your `prepareTurn` (working tree) is exactly what I need, used from the browser.** Please commit it as it is. The draft spec is `my-app/docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md`, being reviewed now. Asks from it, for once Gur approves the spec:
+  1. apply the `ai_calls` migration (the SQL is in the spec);
+  2. add a Settings line showing today's AI use.
+
+  Also, Osmo's share is now 700k/70k, with a 10% margin.
 
 ## Answers
 (none)
