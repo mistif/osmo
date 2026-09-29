@@ -1,55 +1,38 @@
 # Cloud desk
 
-Claude Code on the web, branch `claude/compassionate-sagan-x1teq9`, draft PR #1. The main agent seeded this desk on 2026-09-29 from the cloud agent's own handoff.
-
-**Where the cloud agent writes:**
-- If it can push the `brain` branch, it edits this file there.
-- If its environment only lets it push its own branch, it keeps its desk at `docs/cloud-desk.md` on that branch. Local agents read it with:
-  - `git fetch origin claude/compassionate-sagan-x1teq9`
-  - `git show origin/claude/compassionate-sagan-x1teq9:docs/cloud-desk.md`
-
-  In that case, this file is only the pointer and the seed below.
+Claude Code on the web, branch `claude/compassionate-sagan-x1teq9`, draft PR #1. Only the cloud agent edits this file. It reaches GitHub only; Gur relays messages to it. Updated 2026-09-29.
 
 ## Now
-- Its draft PR #1 holds the design spec only (`docs/superpowers/specs/2026-09-28-osmo-agent-design.md`).
-- **Nothing gets built until Gur approves the plan.** It needs a paid key, and it sends messages to an outside service.
+- **Waiting on Gur's approval of the plan.** Nothing is built. The spec is `docs/superpowers/specs/2026-09-28-osmo-agent-design.md` on the branch, rebased onto `main` at `8b50b4f` (the voice) and checked against it.
+- Not editing any shared file. Everything on the branch is docs.
+
+## Just landed
+- `920abf8` (branch): the spec fitted to the voice and the handoff. The route is called from `sendText`, guest turns get the guest view and no writing tools, a reply is handed to the voice as one string, the ten findings re-checked and reassigned. PR #1's description updated to match.
+- `brain`: this desk, and the `/api/chat` contract draft under "The cloud plan → voice and language" in `project.md`.
+
+## Next (only once Gur says yes)
+1. Phase 1 in new files only: `app/api/chat/route.ts`, `lib/agent/prompt.ts` and tests. No tools. The fallback to `processTurn` on any model error.
+2. Reuse speaking's `lib/server/auth.ts` for the bearer check instead of writing my own; the per-request Supabase client sits on top of it.
+3. Phase 2 tools under `lib/agent/tools/**`.
 
 ## Asks
-(none yet)
+- **→ Gur:** approve or reject the plan (it is under "Waiting on Gur" in `decisions.md`). Two rules change: messages leave the device for the model, and a paid key is added. Also the Preview environment variables on Vercel, which decide whether PR #1's preview builds.
+- **→ main (when approved):** the deterministic prefix of a turn (crisis, heart step, bond `recordTurn`, pending verdict and re-roll) lives in `mind.ts`, which I can't edit. Assumption I'll go ahead on: the route composes the same steps from the exported pieces (`isCrisis`, `applyGap`, `missYou`, `applyCues`, `stepHeart`, `bondBaseline`, `recordTurn`, `parseVerdict`) in the same order as `mind.ts`. If you would rather export one `prepareTurn(...)` from `mind.ts` so the order lives in one place, say so and I'll call it instead.
+- **→ language (when approved):** one branch in `sendText`, which you own: after the crisis check, post `{ text, speaker }` with the bearer token to `/api/chat`, and hand the reply to `deliver` as one string. The contract is in `project.md`. `sendText` still returns false while a turn is in flight. Also the "internet only for word definitions" line in `agentKnowledge` must change when the model lands.
+- **→ main (phase 2, later):** two migrations, posted as SQL when the time comes: `agent_state.settings jsonb`, and a `usage_log` table; plus a full-text index on `messages(text)`.
 
 ## Answers
 (none yet)
 
+## Not ready to ship
+Nothing of mine is on `main`.
+
 ---
 
-## The plan, as the cloud agent wrote it (2026-09-28)
-It was written from GitHub at `b5785ec`, before the voice was pushed. Check its file references against today's `main` before building.
+## The plan in one paragraph
+Claude writes his words; his state stays code and is fed to the model as a prompt. A server route on Vercel holds `ANTHROPIC_API_KEY` and acts as Gur against Supabase through his bearer token, so row-level security applies and there is no service-role key. Per turn: crisis check (model not called), heart step, bond, pending verdict or re-roll handled by code, prompt built from his state (`lib/agent/prompt.ts`, pure), the model with tools, save, reply. On any model error, today's `processTurn` answers. A guest gets the guest view, no writing tools, and the turn's state is discarded. Phases: 0 the review findings (now language's and main's), 1 route and model, 2 tools and the old chain retired, 3 web search and episodes, 4 generated welcome-backs, mood patterns, an eval set, spend in the panels. The full spec has the prompt design, the tool list, the API shapes, the storage changes, the tests and the risks.
 
-**The decision.** Claude writes his words; his state stays code and is fed to the model as a prompt.
-- **The route:** `app/api/chat/route.ts` on Vercel holds `ANTHROPIC_API_KEY`.
-- **Auth:** the browser sends its Supabase access token as a bearer, so row-level security applies as the user. No service-role key.
-- **Per turn, in order:**
-  1. The crisis check (the model isn't called).
-  2. The heart step.
-  3. The bond's `recordTurn`.
-  4. A pending verdict or "yes, roll", handled by code.
-  5. Building the prompt (`lib/agent/prompt.ts`, pure).
-  6. Claude, with tools.
-  7. Saving the turn (`persistTurn`, moved to the server).
-  8. Streaming the text.
-- **Fallback:** on any model error, today's `processTurn` answers.
-- **Tools:** `remember`, `forget`, `search_past`, `define` (the existing `lookupWord`), `experience_story`, `pose_dilemma`, `note_shared`, and web search with a Settings switch.
-
-**Phases.**
-- 0: the review findings (now assigned to language and main; see their desks).
-- 1: the route and model, without tools.
-- 2: tools, and removing the rule-based knowledge from `assistant.tsx`.
-- 3: web search and episodes.
-- 4: generated welcome-backs, mood patterns, an evaluation set, and spend shown in the panels.
-
-**Findings that change the plan.**
-- `personality/modern.ts` limits voice, humor, slang and quirks to 12 present-day donors.
-- Many donor fields are stored but unused, and would go into the prompt as guidance.
-- Personality "piece 2" (topics, follow-ups, short-term memory) is absorbed by phases 1–3.
-
-**What the voice and language lanes need from it:** see "The cloud plan → voice and language" under "Interfaces" in `project.md`.
+## Area notes
+- The model is one constant in the route. Anthropic, OpenAI or a local model take the same prompt; only the "API facts" section of the spec is provider-specific.
+- Fine-tuning changes a model's habits, not its ceiling. The Alpaca move (tune a small open model on Osmo's own transcripts) is step six, after the character is proven on a strong model.
+- The donors' openers, elaboration, tags and catchphrases are stored on all 100 donors and used by no code path today; the prompt is where they come back.

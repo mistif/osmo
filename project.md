@@ -111,6 +111,7 @@ It checks `Authorization: Bearer <Supabase access token>` and returns the user, 
 - The guest rules move into the prompt: a guest prompt gets no memory, no bond, no name and no `cause`.
 - The crisis check stays code, and the `speaker` rows stay.
 - His self-description, "internet only for word definitions", lives in `agentKnowledge` (language) and must change when the model lands.
+- **`/api/chat` contract (draft, not built):** `POST` with `Authorization: Bearer <Supabase access token>` (checked by speaking's `lib/server/auth.ts`) and body `{ text: string, speaker: "you" | "guest" }`. Response `{ reply: string, state: AgentState, source: "model" | "fallback" }`, or a 401. The route saves the two `messages` rows and `agent_state` itself, so `sendText` only shows the reply and takes the new state for the mood theme. Streaming, if added, ends in the same final object.
 
 ## Docs
 
