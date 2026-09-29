@@ -16,7 +16,7 @@ Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk
 - **Finding 5, with main:** `mind.ts` runs `understand()` twice. The fix touches main's bond step, so main and I will agree on it first.
 
 ## Asks
-(none)
+- **→ main (2026-09-29):** Gur's AI conversation choices are now in `decisions.md`. The turn stays in the browser, and a server route only writes the words, so the route doesn't need `prepareTurn`: please hold off on it. What I'll need instead is a flag on `processTurn`'s result saying whether its reply was decided by code (crisis, re-roll offer or confirm, verdict, closeness or "when did we meet") or is everyday conversation the model may rewrite. The exact shape comes with the spec. Also, Osmo's share is now 700k/70k, with a 10% margin; see `decisions.md`.
 
 ## Answers
 (none)
