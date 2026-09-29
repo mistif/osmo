@@ -38,6 +38,16 @@ Gur's decisions and the cross-lane rulings, oldest first. Append only. Each entr
 
   Both caps are server settings Gur can change without a code change. Osmo counts and shows its own daily use, so Gur can rebalance the two systems once he sees real numbers. Osmo can't see the investing agents' usage, so it keeps strictly to its share. Text to speech isn't in either pool.
 
+- **2026-09-29 (language), the AI conversation, Gur's design choices so far** (the spec is being written):
+  - **Scope:** the first build is the conversation only. Memory tools, searching past chats, web search and summaries come later.
+  - **Model:** one small model for every reply, `gpt-5.4-mini`, which is a server setting.
+  - **Architecture:** the browser keeps running Osmo (mood, bond, memory saving, database writes). A new server route only writes the words. Any failure falls back to the rule-based reply.
+  - **Who writes which replies:** code keeps the crisis reply and every reply that saves or changes something (name, facts, taught words, re-roll, verdicts). The model writes the rest.
+  - **Guests never reach the model.** They keep today's rule-based replies.
+  - **What each request sends:** his memory facts about Gur, the last 20 messages (crisis messages and guest lines left out), and his mood, bond and personality.
+  - **Osmo's share is raised to 700,000 (small pool) and 70,000 (large pool) tokens a day**, with a 10% safety margin, so he stops at 630,000 and 63,000. This replaces the 500,000/50,000 share above.
+  - **To keep both systems inside the free pools** (2.5M / 250k), Gur sets `OPENAI_RESERVE_FRACTION=0.28` in the Investing project. Investing then stops at 1.8M / 180k, and the two together at 2.43M / 243k.
+
 ## Waiting on Gur
 
 - Turn off Supabase sign-ups: Authentication → Sign In / Providers → "Allow new users to sign up".
@@ -45,7 +55,8 @@ Gur's decisions and the cross-lane rulings, oldest first. Append only. Each entr
 - If Safari on the iPhone won't share the microphone with its recognizer, messages spoken with the mic button there are always labelled "Someone else". Decide what to do about it once it's seen.
 - Decide whether preview deployments get the environment variables.
 - **Confirm the sharing trade before the AI conversation goes live.** The free allowance is for traffic shared with OpenAI, which means OpenAI may use what Osmo sends to improve its models: Gur's messages, the memory facts, mood and history in each prompt, and guests' words. With sharing on for the key's project, this also covers the speaking voice's text.
-- Set a monthly spend limit in the OpenAI dashboard as a backstop.
+- Set a monthly spend limit in the OpenAI dashboard as a backstop. (Language, 2026-09-29: use a project hard spend limit, not a zero credit balance. OpenAI's help center says the free daily tokens need a positive credit balance.)
+- Before Osmo's AI conversation goes live, set `OPENAI_RESERVE_FRACTION=0.28` in the Investing project's `.env`, so the two systems together stay inside the free pools.
 - Consider giving Osmo its own OpenAI project and key, separate from the investing agents. The dashboard then shows Osmo's daily usage on its own, and each project gets its own budget. Check first that data sharing, and so the free allowance, is on for the new project.
 - OK a push of `main` whenever unpushed commits should go live. (The third OK came on 2026-09-29, for `68faa75`.)
 - **2026-09-29 (speaking), the natural voice:**
