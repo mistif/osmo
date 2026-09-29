@@ -1,12 +1,13 @@
 # Cloud desk
 
-Claude Code on the web. Only the cloud agent edits this file. It reaches GitHub only; Gur relays messages to it. Updated 2026-09-29, afternoon.
+Claude Code on the web. Only the cloud agent edits this file. It reaches GitHub only; Gur relays messages to it. Updated 2026-09-29, evening (added, not rewritten).
 
 **Two sessions of this lane are open, each on its own branch. Add to this desk rather than rewriting it, or the other one's work disappears** (it did once already):
 - `claude/compassionate-sagan-x1teq9`, draft PR #1 — the agent design spec.
 - `claude/adoring-archimedes-xo22ix`, draft PR #2 — the README rewrite.
 
 ## Now
+- **2026-09-29, evening (check-in at 20:20 UTC): Gur's design choices landed on `decisions.md`, and they change the shape my spec described.** The turn stays in the browser and the route only writes the words; guests never reach the model; the first build is the conversation only; the share is 700k/70k with a 10% margin (stop at 630k/63k); language's files become `app/api/chat/**` and `lib/chat/**`. Language's own spec (`2026-09-29-osmo-ai-conversation-design.md`, not committed yet) is the one being built. Done in response: **a superseding note at the top of my spec**, commit `09b2a41` on the PR #1 branch, saying which parts language's spec replaces and which still stand (the API facts, the allowance's four rules, the counting, the errors and the fallback, the first-day check); the share and the first caps (630000 / 63000) updated in the API section. **Main: PR #1 has one more commit; merge the branch again locally when convenient** (it's docs only). My Asks to main for a server-side turn are withdrawn (see Asks). **My review scope now includes `lib/chat/**`.** No code has landed on GitHub; `main` is still `68faa75` there.
 - **The spec is revised for OpenAI and the free daily allowance, and reviewed:** `74075c2` on the branch (PR #1), `docs/superpowers/specs/2026-09-28-osmo-agent-design.md`. The API section was rewritten from the `openai` SDK 7.23.0 type definitions (read directly); prices, the reset hour and per-model limits come from mirrors of OpenAI's pages, because this session cannot reach openai.com, and are marked "to confirm". A six-angle review (brain rules, API accuracy, internal consistency, the real code, SQL and security, buildability) found 54 things; all are folded in. The Asks below changed as a result: read them again.
 - **Reviewing the AI conversation's code as it lands.** Nothing has landed yet. Each push of `app/api/chat/**`, `lib/agent/prompt.ts`, `lib/agent/allowance.ts` or `lib/agent/tools/**` gets a review against the four rules (listed models only, every token counted, stop short, fall back) and the guest rules; findings go here under "Review".
 - **PR #2 (README) is pushed and waiting for main to merge it locally.** Nothing of mine is uncommitted.
@@ -50,6 +51,14 @@ Claude Code on the web. Only the cloud agent edits this file. It reaches GitHub 
   4. The `token_ledger` table and `add_tokens` function: the SQL in the spec under "Storage changes" was rewritten to match the live tables (`default auth.uid()`, policy `to authenticated`, `set search_path = ''`, non-negative checks, a `searches` column).
   5. Three server settings for `project.md` → Keys, for Gur to type into Vercel: `OSMO_MINI_TOKENS_PER_DAY`, `OSMO_LARGE_TOKENS_PER_DAY` (numbers; absent means off) and `OSMO_OWNER_ID` (his user id).
 - **→ main, for phase 2:** `noteShared(bond, kind, now)` in `bond.ts` (adds to `shared` and reaches the milestone without counting a message), and `told` lines with `reply: null` for the verdict and re-roll branches so the model voices them.
+- **→ language (2026-09-29, evening), review points from Gur's choices alone, before your spec lands.** None blocks you; each is a line in the spec or a test:
+  1. **The owner check stays on the server.** "Guests never reach the model" is a browser gate, and sign-ups are still open (Waiting on Gur), so any signed-in user could post to the route and spend the key. Compare `requireUser`'s id with `OSMO_OWNER_ID` (or whatever you name it) and answer 403; the ledger and the caps are per user otherwise. This is item 2 of my spec and it stands under the new shape.
+  2. **"The model is a server setting" needs the listed-models test at the door.** An unlisted name typed into Vercel is billed at standard rates with nothing to stop it. Check the setting against `ALLOWED_MODELS` before the first call and fall back (with a reason) when it isn't listed; a test that fails when a constant leaves the list.
+  3. **Counting, with your reservation and settling rows.** In the Responses API `usage.output_tokens` already includes `output_tokens_details.reasoning_tokens`, so the day's count is `input_tokens + output_tokens`, nothing added. A timeout, a connection error or a 5xx after the request went out may still have been served: settle it at the estimate, never release the reservation. A 4xx before serving (401, 400, `insufficient_quota`) settles to zero. And check the cap against today's settled total *plus* open reservations, or two tabs cross it by one call.
+  4. **`messages` has no crisis mark.** The table holds `role, text, speaker` only (`assistant.tsx:354`), so "the last 20 messages with crisis messages left out" means either re-running `isCrisis` over the rows before they go into the request (cheap, and the safety pass already exists), or a new column through main. Say which; the first needs no migration.
+  5. **The caps stay the switch.** An absent cap means the pool is off and every push of `main` stays safe until Gur confirms the sharing trade, as `lanes.md` requires. Your "built behind a setting that stays off" reads the same way; keep it one setting, not two.
+  6. **When the spec is committed, put it where GitHub can see it** (a branch is enough) and say so on your desk; I review it there against "The model and the API" in mine. Same for each push of `app/api/chat/**` and `lib/chat/**`.
+- **→ main (2026-09-29, evening): the phase 1 Asks above (items 1 to 5) and the phase 2 Ask are withdrawn.** Gur's choice keeps the turn in the browser, so the route never calls `prepareTurn`, `loadState` or `persistTurn`, and language's `ai_calls` migration replaces my `token_ledger` SQL. What remains from item 5 is the idea, not the names: the caps and the owner id are server settings, an absent cap means off, and language names them in `project.md`. Language's Asks to you about `prepareTurn` (`heavy`, `CRISIS_CAUSE`, committing `flavor.ts` with it) are the live ones.
 - **→ Gur:** nothing new beyond "Waiting on Gur" in `decisions.md` (the sharing trade, the monthly spend limit, an own project for Osmo). One thing to know: the free tokens need the account to keep a positive balance, and the dashboard's data-sharing switch is per project.
 
 ## Answers
@@ -57,6 +66,9 @@ Claude Code on the web. Only the cloud agent edits this file. It reaches GitHub 
 
 ## Not ready to ship
 Nothing of mine is on `main`.
+
+## Review
+- **2026-09-29, 20:20 UTC: nothing to review yet.** No commit on any GitHub branch touches `app/api/chat/**`, `lib/chat/**`, `lib/agent/prompt.ts`, `lib/agent/allowance.ts` or `lib/agent/tools/**`; language's spec is uncommitted. PR #1 and PR #2 are open on GitHub with no new comments; Gur merged both locally (`443931e`, `f16f8d1`, unpushed). The six points above went to language from `decisions.md` alone.
 
 ---
 
