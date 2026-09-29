@@ -40,11 +40,15 @@ Osmo's inner life, his room, his listening, the database and shipping.
   - this brain's `lanes.md` and `project.md`;
   - settling it when two lanes want the same thing.
 
-### Language: understanding and answering
-How Osmo reads a message and what he says back.
+### Language: understanding and answering (the conversation)
+How Osmo reads a message and what he says back, whether code or an AI model writes the words.
 - **Code:** `lib/agent/talk.ts`, `context.ts`, `safety.ts`, `dictionary.ts`, `dictionary-store.ts`, `vocabulary-store.ts`, `lib/agent/lexicon/*`, `lib/facts.ts`, `scripts/build-word-list.mjs`.
 - **Tests:** `talk`, `context`, `safety`, `dictionary`, `chatlog`, `voice`, `typos`, `facts`.
-- **Docs:** the dictionary spec and plan.
+- **The AI conversation** (since 2026-09-29): Osmo's replies written by an OpenAI model inside the free daily allowance (see `decisions.md`).
+  - It owns the server route, the prompt builder, the tools, the daily token cap, and the fallback to the rule-based chain.
+  - Planned new files: `app/api/chat/**`, `lib/agent/prompt.ts`, `lib/agent/tools/**`.
+  - It reuses speaking's `lib/server/auth.ts`, and asks main for the token-ledger table.
+- **Docs:** the dictionary spec and plan, and the AI conversation's spec and plan.
 
 ### Speaking: how Osmo sounds
 The voice he speaks with, from the browser's built-in voice to a more human cloud voice.
@@ -53,13 +57,15 @@ The voice he speaks with, from the browser's built-in voice to a more human clou
 - **Docs:** its own docs, spec and plan.
 - **Key:** `OPENAI_API_KEY`, server-only. Gur adds it.
 
-### Cloud: Osmo on a language model
-The plan for Claude to write Osmo's words while his state stays code: `docs/superpowers/specs/2026-09-28-osmo-agent-design.md`, on its branch.
-- **Owns:** that spec and its plan. Once Gur approves building it, it may create only new files: `app/api/chat/**`, `lib/agent/prompt.ts`, `lib/agent/tools/**`, with tests.
+### Cloud: the design, and reviews
+The design for a language model writing Osmo's words while his state stays code: `docs/superpowers/specs/2026-09-28-osmo-agent-design.md`, on its branch.
+- **Owns:** that spec. Since 2026-09-29 the building belongs to language, because language owns the conversation and can test with the key locally, which the cloud agent can't.
+- **Its job now:**
+  - Bring the spec up to date for OpenAI and the free daily allowance, instead of Claude.
+  - Review the AI conversation's code on GitHub after each push, posting findings on its desk.
 - **Delivers** on its branch or in PRs. The main agent merges them locally. Never use the GitHub merge button: local `main` usually has unpushed commits, and a merge on GitHub deploys.
 - **Doesn't edit other lanes' files.** Changes it needs from them go on its desk as Asks.
 - **Its review findings belong to their owners:** 1, 2, 4, 8 and 10 to language; 3, 6, 7 and 9 to main; 5 to main and language together.
-- **Key (once approved):** `ANTHROPIC_API_KEY`, server-only.
 
 ## Shared files: who owns which part
 
@@ -85,6 +91,7 @@ Editing your own part of a shared file needs no OK. Put the file under Now on yo
   - Keep unfinished features behind a setting that is off, because a push ships everything on `main`.
 - **Pushing `main`:** only the main agent, and only after Gur's OK for that push. Before it pushes, it checks every desk for "not ready to ship".
 - **Pushing `brain`:** any agent, at any time.
+- **The OpenAI key** is shared by speaking (`/api/speak`) and language (`/api/chat`). Every model call stays inside the free daily allowance in `decisions.md`, except text to speech, which isn't covered and is billed. The chat route counts its tokens against the allowance and stops short of it.
 - **Supabase:** only the main agent applies migrations. A migration that new code needs goes live before that code is pushed.
 - **Keys:**
   - Only Gur types keys, into `.env.local` and into Vercel.

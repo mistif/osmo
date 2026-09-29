@@ -25,11 +25,19 @@ Gur's decisions and the cross-lane rulings, oldest first. Append only. Each entr
   - Editing your own part of a shared file needs no OK, only a note on your desk.
 - **2026-09-29 (main):** Gur started the speaking lane on a more human voice (a cloud text-to-speech voice, with the built-in voice kept as the fallback). The speaking lane records its design decisions here once Gur approves them.
 
+- **2026-09-29 (main):** Gur: Osmo's AI conversation goes through OpenAI's free daily allowance for "traffic shared with OpenAI" (from his OpenAI dashboard):
+  - Up to 250,000 tokens a day across gpt-5.4, gpt-5.2, gpt-5.1, gpt-5, gpt-4.1, gpt-4o, o1 and o3.
+  - Up to 2.5 million tokens a day across gpt-5.4-mini, gpt-5.4-nano, gpt-5-mini, gpt-5-nano, gpt-4.1-mini, gpt-4.1-nano, gpt-4o-mini, o3-mini and o4-mini.
+  - Anything beyond these limits, and any other model, is billed at standard rates. OpenAI doesn't stop at the limit, so Osmo's code must: use listed models only, count every token (input, output and reasoning), stop short of each daily limit, and then fall back to the rule-based chain.
+  - The text-to-speech model (`gpt-4o-mini-tts`) isn't on the list, so the speaking voice is billed (Gur already knows it costs about a tenth of a cent per reply).
+- **2026-09-29 (main):** The AI conversation is built by the language lane, which owns the conversation and can test with the key locally. The cloud lane keeps the design current for OpenAI and reviews the code; it no longer builds the route. `ANTHROPIC_API_KEY` isn't planned any more.
+
 ## Waiting on Gur
 
 - Turn off Supabase sign-ups: Authentication → Sign In / Providers → "Allow new users to sign up".
 - Train the wake word (`docs/osmo-wake-word.md`).
 - If Safari on the iPhone won't share the microphone with its recognizer, messages spoken with the mic button there are always labelled "Someone else". Decide what to do about it once it's seen.
 - Decide whether preview deployments get the environment variables.
-- Approve the cloud lane's language-model plan, or not, before anyone builds it. It needs a paid key, and it sends messages to an outside service.
+- **Confirm the sharing trade before the AI conversation goes live.** The free allowance is for traffic shared with OpenAI, which means OpenAI may use what Osmo sends to improve its models: Gur's messages, the memory facts, mood and history in each prompt, and guests' words. With sharing on for the key's project, this also covers the speaking voice's text.
+- Set a monthly spend limit in the OpenAI dashboard as a backstop.
 - OK a push of `main` whenever unpushed commits should go live. (The third OK came on 2026-09-29, for `68faa75`.)

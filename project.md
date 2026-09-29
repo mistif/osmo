@@ -4,7 +4,7 @@ The facts every lane needs. The main agent keeps this file; each lane keeps its 
 
 ## What Osmo is
 
-Osmo is a chat companion for one person, Gur. Today he is rule-based: every reply comes from code in `lib/agent/`, with no language model. The cloud lane's plan would change that once Gur approves it. Osmo has:
+Osmo is a chat companion for one person, Gur. Today he is rule-based: every reply comes from code in `lib/agent/`, with no language model. From 2026-09-29, the language lane is adding an AI conversation through OpenAI's free daily allowance, with the rule-based chain as the fallback. Osmo has:
 - a mood (the "heart");
 - a personality stitched together from 100 donor characters (the "Frankenstein" genome);
 - a bond with Gur that grows over time;
@@ -37,8 +37,7 @@ Osmo is a chat companion for one person, Gur. Today he is rule-based: every repl
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | `.env.local`, Vercel Production | everything |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `.env.local`, Vercel Production | everything (public by design; row-level security protects the data) |
-| `OPENAI_API_KEY` (preferred), or `CHATGPT_KEY` (accepted alias; the name Gur typed on 2026-09-29) | `.env.local` now; Vercel when Gur wants the cloud voice live | speaking: `/api/speak`, which reads `OPENAI_API_KEY` first |
-| `ANTHROPIC_API_KEY` | not yet; only once Gur approves the cloud plan | cloud: `/api/chat` (planned) |
+| `OPENAI_API_KEY` (preferred), or `CHATGPT_KEY` (accepted alias; the name Gur typed on 2026-09-29) | `.env.local` now; Vercel when Gur wants them live | speaking: `/api/speak` (billed). Language: `/api/chat` (planned; free allowance only). Both read `OPENAI_API_KEY` first. |
 | `NEXT_PUBLIC_OSMO_DEMO` | local only, never in production | the bond demo switch |
 
 Vercel's variables target Production only, so preview deployments of other branches fail at build. Adding the Preview target is Gur's call.
@@ -105,7 +104,8 @@ Keys are lowercase. The Memory panel edits values only.
 ### Server auth (owner: speaking; planned `lib/server/auth.ts`)
 It checks `Authorization: Bearer <Supabase access token>` and returns the user, or a 401. `/api/speak` uses it, and `/api/chat` will later. There's no service-role key anywhere.
 
-### The cloud plan → voice and language (owner: cloud)
+### The AI conversation → voice and the rest (owner: language; design by cloud)
+- Listed free-allowance models only. A daily token count stays under the limits, and the rule-based chain answers once the day's allowance is used up or on any model error.
 - Whole replies per `deliver` (or a "final text" event).
 - `sendText` still returns false while a turn is in flight.
 - The guest rules move into the prompt: a guest prompt gets no memory, no bond, no name and no `cause`.
