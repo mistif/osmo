@@ -21,7 +21,9 @@ export function turnView<T extends Line & { speaker?: "guest" }>(
 	return {
 		memory: mine,
 		history,
-		userName: mine.find((fact) => fact.key === "name")?.value ?? null,
+		// A name saved with a closing mark ("Gur.", from before learnFact dropped them) is read without it, so Osmo
+		// says it back as a name that justLearnedName reads again.
+		userName: mine.find((fact) => fact.key === "name")?.value.replace(/[\s.!?,]+$/, "") || null,
 		slang: Object.fromEntries(
 			mine.filter((fact) => fact.key.startsWith("slang:")).map((fact) => [fact.key.slice("slang:".length), fact.value.toLowerCase()]),
 		),
@@ -33,9 +35,14 @@ export function turnView<T extends Line & { speaker?: "guest" }>(
 	};
 }
 
-// True when Osmo's last message asked the user for their name.
+// Code's own name questions: "What should I call you?", and "What's your name?" ("What is your name?" in a formal voice).
+const NAME_QUESTION = /^(?:what should i call you|what(?:'s| is) your name)\?$/i;
+
+// True when Osmo's last message asked the user for their name. Only its last sentence counts, and only in code's
+// words, so a model's "I like jazz. What's yours?" never makes the next message a name.
 export function askedForName(lastAgentText: string | undefined): boolean {
-	return !!lastAgentText && /what's yours\?|what should i call you\?|what(?:'s| is) your name\?|and you are\?/i.test(lastAgentText);
+	const last = lastAgentText?.trim().split(/(?<=[.!?])\s+/).at(-1);
+	return !!last && NAME_QUESTION.test(last);
 }
 
 // Short answers that are clearly not names, even though "Gur" looks just like them.
@@ -56,14 +63,31 @@ export function nameFromAnswer(text: string): string | null {
 	return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
 }
 
-// The name Osmo just said out loud: "Nice to meet you, Gu!", "And you're Gu, I remember.", "Your name is Gu."
-// Right after one of these, the user can correct it.
-function justLearnedName(lastAgentText: string | undefined): string | null {
-	const said =
-		lastAgentText?.match(/^Nice to meet you, ([^!]+)!/) ??
-		lastAgentText?.match(/\bAnd you're ([^,]+), I remember\./) ??
-		lastAgentText?.match(/^Your name is ([^.]+)\./);
-	return said?.[1] ?? null;
+// The user's answer to Osmo's name question. Code asks only while no name is saved, so once one is known,
+// a reply ending "What's your name?" (a model's, to someone else) can never replace it.
+export function nameAnswer(text: string, lastAgentText: string | undefined, knownName: string | null): string | null {
+	return knownName || !askedForName(lastAgentText) ? null : nameFromAnswer(text);
+}
+
+// A name as Osmo says it back: one to four words of letters in any script ("Åsa", "גור"), with no comma or full stop.
+const NAME = String.raw`([\p{L}\p{M}'’-]+(?: [\p{L}\p{M}'’-]+){0,3})`;
+// Code's sentences that say the name. "Nice to meet you, Gu! I'll remember that." and "Your name is Gu." open
+// his reply; "And you're Gu, I remember." ("And you are" in a formal voice) can follow a welcome back.
+const SAID_NAME = [
+	new RegExp(String.raw`^Nice to meet you, ${NAME}! I'll remember that\.`, "u"),
+	new RegExp(String.raw`(?:^|[.!?]\s+)And you(?:'re| are) ${NAME}, I remember\.`, "u"),
+	new RegExp(String.raw`^Your name is ${NAME}\.(?:\s|$)`, "u"),
+];
+
+// The name Osmo just said out loud, in code's words only: a model's "Nice to meet you, Maya!" or the memory
+// listing's "Your name is Gur." never counts. Right after one of these, the user can correct it.
+export function justLearnedName(text: string | undefined): string | null {
+	if (!text) return null;
+	for (const pattern of SAID_NAME) {
+		const said = text.match(pattern);
+		if (said) return said[1];
+	}
+	return null;
 }
 
 const LEADING_NO = /^(?:(?:no|nope|nah|actually|wait|sorry|oops)[,\s]+)+/i;
@@ -86,7 +110,8 @@ export function nameCorrection(text: string, lastAgentText: string | undefined):
 	return flagged || close ? name : null;
 }
 
-// The latest name the user gave anywhere in the chat, or null.
+// The latest name the user gave anywhere in the chat, or null. Once it has found one, an answer to a name
+// question no longer counts (code asks only while no name is known); a correction or a stated name still does.
 export function nameFromHistory(history: Line[]): string | null {
 	let found: string | null = null;
 	history.forEach((line, i) => {
@@ -95,7 +120,7 @@ export function nameFromHistory(history: Line[]): string | null {
 			found = justLearnedName(line.text) ?? found;
 			return;
 		}
-		const answer = before?.role === "agent" && askedForName(before.text) ? nameFromAnswer(line.text) : null;
+		const answer = before?.role === "agent" ? nameAnswer(line.text, before.text, found) : null;
 		const correction = before?.role === "agent" ? nameCorrection(line.text, before.text) : null;
 		const stated = /^(?:my name is|my name['’]?s|call me|you can call me)\s+/i.test(line.text.trim())
 			? nameFromAnswer(line.text)

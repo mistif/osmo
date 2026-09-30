@@ -30,6 +30,27 @@ describe("learnFact", () => {
 		expect(learnFact("hello")).toBeNull();
 		expect(learnFact("")).toBeNull();
 	});
+
+	it("saves a name without the sentence's closing marks, so Osmo can say it back", () => {
+		const cases: [string, string][] = [
+			["my name is Gur.", "Gur"],
+			["My name is Gur!", "Gur"],
+			["no, my name is Gur?!", "Gur"],
+			["call me Gur.", "Gur"],
+			["call me Gur !", "Gur"],
+			["you can call me Gur Ratzin, ", "Gur Ratzin"],
+			["actually call me Sam...", "Sam"],
+		];
+		for (const [text, name] of cases) {
+			expect(learnFact(text), text).toEqual({ key: "name", value: name });
+		}
+	});
+
+	it("saves no name when nothing but marks is left", () => {
+		for (const text of ["call me ...", "my name is ?"]) {
+			expect(learnFact(text), text).toBeNull();
+		}
+	});
 });
 
 describe("learnFact: bare I'm <Name> (review fix)", () => {

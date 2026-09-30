@@ -12,13 +12,18 @@ const FEELINGS = new Set([
 	"hungry", "sick", "lonely", "excited", "glad", "upset", "down", "scared", "sorry",
 ]);
 
+// A saved name drops the sentence's closing marks ("my name is Gur." saves "Gur"), so Osmo says it back
+// as a name and reads it again when he does. Nothing but marks is no name at all.
+function savedName(raw: string): MemoryFact | null {
+	const value = raw.replace(/[\s.!?,]+$/, "").trim();
+	return value ? { key: "name", value } : null;
+}
+
 // Bare "I'm ..." / "it's ..." are NOT names ("im sad"); feelings are handled by the heart.
 // A leading "no"/"actually" lets the user correct a fact.
 export function learnFact(text: string): MemoryFact | null {
 	const nameMatch = text.match(/^(?:(?:no|nope|actually|wait)[,\s]+)?(?:call me|you can call me)\s+(.+)$/i);
-	if (nameMatch) {
-		return { key: "name", value: nameMatch[1].trim() };
-	}
+	if (nameMatch) return savedName(nameMatch[1]);
 
 	// "I'm Gur" / "I am Alex": one capitalized word that is not a feeling.
 	// Only the name needs a capital, so a casually typed "im Gur" counts too.
@@ -31,7 +36,8 @@ export function learnFact(text: string): MemoryFact | null {
 		/^(?:(?:no|nope|actually|wait)[,\s]+)?(?:remember(?: that)?\s+)?my\s+(.+?)\s+is\s+(.+)$/i,
 	);
 	if (factMatch) {
-		return { key: cleanMemoryKey(factMatch[1]), value: factMatch[2].trim() };
+		const key = cleanMemoryKey(factMatch[1]);
+		return key === "name" ? savedName(factMatch[2]) : { key, value: factMatch[2].trim() };
 	}
 
 	const preferenceMatch = text.match(
