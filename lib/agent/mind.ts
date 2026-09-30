@@ -1,4 +1,4 @@
-import { closeness, mentioned, recordTurn } from "./bond/bond";
+import { closeness, mentioned, recordTurn, stageOf, type MilestoneId, type Stage } from "./bond/bond";
 import { closenessReply, isAskCloseness, isAskMet, metReply, milestoneLine } from "./bond/lines";
 import { applyFeedback, decide, explain, parseVerdict, type Decision } from "./brain";
 import { applyCues, applyGap, bondBaseline, missYou } from "./cues";
@@ -16,9 +16,9 @@ import {
 } from "./events";
 import { moodLabel, stepHeart } from "./heart";
 import { withBaseFeelings } from "./lexicon/feelings";
-import { moodTheme } from "./mood-theme";
+import { moodTheme, type MoodTheme } from "./mood-theme";
 import { adoptGenome, assemble, resolve } from "./personality/assemble";
-import { flavorTurn } from "./personality/flavor";
+import { flavorTurn, milestoneDue } from "./personality/flavor";
 import { afterReroll, describeMadeOf, isAskMadeOf, isConfirmRoll, parseReroll, REROLL_PROMPT } from "./personality/readout";
 import type { AgentState } from "./state";
 import { CRISIS_REPLY, isCrisis } from "./safety";
@@ -55,7 +55,8 @@ export type TurnContext = {
 	recent?: string[];
 	// The user's own words and how often they've used them, so they are never taken for typos.
 	vocabulary?: Record<string, number>;
-	// A voice that isn't Gur's: nothing of his is shared and the bond is left alone. The room discards the result's state.
+	// A voice that isn't Gur's: nothing of his is shared and the bond is left alone. The room discards the result's state
+	// and session; prepareTurn hands back the ones it was given.
 	guest?: boolean;
 };
 export type TurnResult = {
@@ -93,12 +94,21 @@ function acknowledgeGuest(event: StoryEvent): string {
 	return event.valence === "happy" ? "That is wonderful news. I am glad for you." : "I am so sorry. That is a heavy thing to carry.";
 }
 
-function takeTurn(
-	state: AgentState,
-	session: Session,
-	text: string,
-	ctx: TurnContext,
-): TurnResult {
+// Where a turn stands when only everyday conversation (step 6) is left to answer it.
+type OpenTurn = {
+	s: AgentState;
+	sess: Session;
+	p: ReturnType<typeof resolve>;
+	awayMs: number;
+	guest: boolean;
+	trimmed: string;
+	effects: Effect[];
+};
+
+// Everything before everyday conversation, all decided by code: the heart step, the crisis check, the bond, verdicts,
+// re-rolls, what he's made of, how close you are, when you met (steps 0-1), then life events, arguments, stories and
+// dilemmas (steps 2-5). Returns the finished turn when one of those answers.
+function startTurn(state: AgentState, session: Session, text: string, ctx: TurnContext): { decided: TurnResult } | { open: OpenTurn } {
 	const trimmed = text.trim();
 	const effects: Effect[] = [];
 	const p = resolve(state.genome);
@@ -116,10 +126,12 @@ function takeTurn(
 	// 0. Talk of suicide or self-harm always comes first, whatever else is going on.
 	if (isCrisis(trimmed)) {
 		return {
-			state: s,
-			session: { ...sess, last: null, cause: "you told me you're hurting" },
-			reply: CRISIS_REPLY,
-			effects,
+			decided: {
+				state: s,
+				session: { ...sess, last: null, cause: "you told me you're hurting" },
+				reply: CRISIS_REPLY,
+				effects,
+			},
 		};
 	}
 
@@ -145,64 +157,70 @@ function takeTurn(
 		s = { ...s, weights: applyFeedback(s.weights, targetDilemma, target.decision, verdict.agreed) };
 		effects.push({ type: "verdict", logId: target.logId, agreed: verdict.agreed });
 		return {
-			state: s,
-			session: { ...sess, last: null },
-			reply: verdict.agreed
-				? "Understood. I will trust that reasoning a little more."
-				: "Noted. I will give the other side more weight next time.",
-			effects,
+			decided: {
+				state: s,
+				session: { ...sess, last: null },
+				reply: verdict.agreed
+					? "Understood. I will trust that reasoning a little more."
+					: "Noted. I will give the other side more weight next time.",
+				effects,
+			},
 		};
 	}
 
 	// Guests can't change him, and the bond is private.
 	if (guest && (isConfirmRoll(trimmed) || parseReroll(trimmed))) {
-		return { state: s, session: sess, reply: GUEST_NO_CHANGES, effects };
+		return { decided: { state: s, session: sess, reply: GUEST_NO_CHANGES, effects } };
 	}
 	if (guest && (isAskCloseness(trimmed) || isAskMet(trimmed))) {
-		return { state: s, session: sess, reply: GUEST_PRIVATE, effects };
+		return { decided: { state: s, session: sess, reply: GUEST_PRIVATE, effects } };
 	}
 	// Re-rolling the personality needs an explicit "yes, roll" straight after the offer.
 	if (session.awaitingReroll && isConfirmRoll(trimmed)) {
 		const genome = assemble(session.awaitingReroll.seed);
 		s = adoptGenome(s, genome, { resetWeights: true });
-		return { state: s, session: sess, reply: afterReroll(resolve(genome)), effects };
+		return { decided: { state: s, session: sess, reply: afterReroll(resolve(genome)), effects } };
 	}
 	// A plain "yes" is not enough to re-roll, but it shouldn't quietly cancel the offer either.
 	if (!guest && session.awaitingReroll && /^(?:yes|yeah|yep|yup|ya|sure|ok|okay|do it|go for it)\W*$/i.test(trimmed)) {
 		return {
-			state: s,
-			session: { ...sess, awaitingReroll: session.awaitingReroll },
-			reply: `Please say "yes, roll" to confirm. Otherwise I will remain as I am.`,
-			effects,
+			decided: {
+				state: s,
+				session: { ...sess, awaitingReroll: session.awaitingReroll },
+				reply: `Please say "yes, roll" to confirm. Otherwise I will remain as I am.`,
+				effects,
+			},
 		};
 	}
 	if (isConfirmRoll(trimmed)) {
 		return {
-			state: s,
-			session: sess,
-			reply: `There is nothing to confirm at the moment. Say "roll a new osmo" first if you would like a new version of me.`,
-			effects,
+			decided: {
+				state: s,
+				session: sess,
+				reply: `There is nothing to confirm at the moment. Say "roll a new osmo" first if you would like a new version of me.`,
+				effects,
+			},
 		};
 	}
 	const reroll = parseReroll(trimmed);
 	if (reroll) {
 		const seed = reroll.seed ?? ctx.seed ?? 1;
-		return { state: s, session: { ...sess, awaitingReroll: { seed } }, reply: REROLL_PROMPT, effects };
+		return { decided: { state: s, session: { ...sess, awaitingReroll: { seed } }, reply: REROLL_PROMPT, effects } };
 	}
 	if (isAskMadeOf(trimmed)) {
-		return { state: s, session: sess, reply: describeMadeOf(p), effects };
+		return { decided: { state: s, session: sess, reply: describeMadeOf(p), effects } };
 	}
 	if (isAskCloseness(trimmed)) {
-		return { state: s, session: sess, reply: closenessReply(s.bond), effects };
+		return { decided: { state: s, session: sess, reply: closenessReply(s.bond), effects } };
 	}
 	if (isAskMet(trimmed)) {
-		return { state: s, session: sess, reply: metReply(s.bond, ctx.now), effects };
+		return { decided: { state: s, session: sess, reply: metReply(s.bond, ctx.now), effects } };
 	}
 
 	// 2. Life events the user tells it about.
 	// A hypothetical ("what would you do if someone died") is not a real event.
 	if (told.length > 0) {
-		if (guest) return { state: s, session: sess, reply: told.map(acknowledgeGuest).join(" "), effects };
+		if (guest) return { decided: { state: s, session: sess, reply: told.map(acknowledgeGuest).join(" "), effects } };
 		for (const event of told) {
 			s = applyEvent(s, event, p.reactivity);
 			effects.push({ type: "event", event });
@@ -215,10 +233,12 @@ function takeTurn(
 			s = { ...s, bond: mentioned(s.bond, "firstEvent") };
 		}
 		return {
-			state: s,
-			session: { ...sess, cause: "of what you shared with me" },
-			reply,
-			effects,
+			decided: {
+				state: s,
+				session: { ...sess, cause: "of what you shared with me" },
+				reply,
+				effects,
+			},
 		};
 	}
 
@@ -227,10 +247,12 @@ function takeTurn(
 	if (direction !== 0) {
 		s = argueOutlook(s, direction);
 		return {
-			state: s,
-			session: sess,
-			reply: "I hear you. I will weigh that against what I have been through, but I make up my own mind.",
-			effects,
+			decided: {
+				state: s,
+				session: sess,
+				reply: "I hear you. I will weigh that against what I have been through, but I make up my own mind.",
+				effects,
+			},
 		};
 	}
 
@@ -247,24 +269,28 @@ function takeTurn(
 			reply += ` ${leaning(s.outlook, kindFor(happy), kindFor(tragic))}`;
 		}
 		return {
-			state: s,
-			session: { ...sess, cause: `the story about ${event.kind} stayed with me` },
-			reply,
-			effects,
+			decided: {
+				state: s,
+				session: { ...sess, cause: `the story about ${event.kind} stayed with me` },
+				reply,
+				effects,
+			},
 		};
 	}
 
 	// 5. Moral dilemmas.
 	const asked = WHAT_WOULD_YOU_DO.test(trimmed);
 	if (asked || DILEMMA_TRIGGER.test(trimmed)) {
-		if (guest) return { state: s, session: sess, reply: GUEST_DILEMMA, effects };
+		if (guest) return { decided: { state: s, session: sess, reply: GUEST_DILEMMA, effects } };
 		const found = asked ? findDilemma(trimmed) : null;
 		if (asked && !found) {
 			return {
-				state: s,
-				session: sess,
-				reply: 'I don\'t have a scenario like that yet. Say "give me a dilemma" and I\'ll take one of mine.',
-				effects,
+				decided: {
+					state: s,
+					session: sess,
+					reply: 'I don\'t have a scenario like that yet. Say "give me a dilemma" and I\'ll take one of mine.',
+					effects,
+				},
 			};
 		}
 		const dilemma = found ?? nextDilemma(sess.dilemmasSeen);
@@ -278,12 +304,27 @@ function takeTurn(
 		});
 		const pending: Pending = { logId, dilemmaId: dilemma.id, decision };
 		return {
-			state: s,
-			session: { ...sess, pending, last: pending, dilemmasSeen: [...sess.dilemmasSeen, dilemma.id] },
-			reply: `${dilemma.prompt} ${explain(dilemma, decision)} Do you agree?`,
-			effects,
+			decided: {
+				state: s,
+				session: { ...sess, pending, last: pending, dilemmasSeen: [...sess.dilemmasSeen, dilemma.id] },
+				reply: `${dilemma.prompt} ${explain(dilemma, decision)} Do you agree?`,
+				effects,
+			},
 		};
 	}
+
+	return { open: { s, sess, p, awayMs, guest, trimmed, effects } };
+}
+
+function takeTurn(
+	state: AgentState,
+	session: Session,
+	text: string,
+	ctx: TurnContext,
+): TurnResult {
+	const start = startTurn(state, session, text, ctx);
+	if ("decided" in start) return start.decided;
+	const { s, sess, p, awayMs, guest, trimmed, effects } = start.open;
 
 	// 6. Everyday conversation: greetings, feelings, small talk.
 	// A message can say several things ("im good and i made you"), so answer each part.
@@ -346,4 +387,89 @@ export function processTurn(state: AgentState, session: Session, text: string, c
 	const result = takeTurn(state, session, text, ctx);
 	// A guest's turn records nothing: no events, dilemmas or verdicts.
 	return ctx.guest ? { ...result, effects: [] } : result;
+}
+
+// What a prompt may know about him this turn. For a guest, only how he feels: never why, never the bond, never Gur's name.
+export type TurnFacts = {
+	// How he feels, in words ("calm", "a little lonely").
+	feeling: string;
+	tone: MoodTheme["tone"];
+	// Why he feels that way, as a clause that follows "because".
+	cause: string | null;
+	stage: Stage;
+	// A milestone he hasn't mentioned yet.
+	milestone: MilestoneId | null;
+	// Time since the previous message.
+	awayMs: number;
+	userName: string | null;
+	// Messages before this one in the session.
+	turn: number;
+};
+export type PreparedTurn = TurnResult & { facts: TurnFacts };
+
+// Same rule as step 6: these turns get no extras (and a guest's words never fill Gur's).
+function sensitiveTurn(parts: ReturnType<typeof understand>): boolean {
+	return parts.some(({ intent }) =>
+		intent.type === "insult" ||
+		intent.type === "rudeFeedback" ||
+		intent.type === "sexual" ||
+		intent.type === "slashCommand" ||
+		intent.type === "askFeeling" ||
+		intent.type === "askWhyFeeling" ||
+		((intent.type === "userFeeling" || intent.type === "feelingFromOsmo") && !intent.positive),
+	);
+}
+
+// An open turn left the way step 6 leaves it once it has answered: the new cause, the milestone that's due marked as
+// said (the model is asked to say it), and a first feeling not thanked for this turn not brought up later.
+function leaveForModel(open: OpenTurn, ctx: TurnContext): { result: TurnResult; milestone: MilestoneId | null } {
+	const { s, sess, p, awayMs, trimmed, effects } = open;
+	const parts = understand(trimmed, ctx.slang, {
+		recent: ctx.recent,
+		protect: ctx.userName ? new Set([ctx.userName.toLowerCase()]) : undefined,
+		personal: ctx.vocabulary ? new Map(Object.entries(ctx.vocabulary)) : undefined,
+	});
+	const cause = parts.map((x) => causeOf(x.intent)).find((c) => c !== null) ?? null;
+	const milestone = milestoneDue({
+		intent: parts[0]?.intent.type ?? "",
+		tone: moodTheme(s.activations, p.baseline).tone,
+		sensitive: sensitiveTurn(parts),
+		bond: s.bond,
+		awayMs,
+	});
+	const said = milestone ? mentioned(s.bond, milestone) : s.bond;
+	return {
+		result: { state: { ...s, bond: mentioned(said, "firstFeeling") }, session: cause ? { ...sess, cause } : sess, reply: null, effects },
+		milestone,
+	};
+}
+
+// For a route where a language model writes the everyday conversation (step 6). Everything code decides runs first,
+// with the guest gates. When code answers (a crisis, a verdict, a re-roll, the bond, a life event, a story, a dilemma),
+// `reply` is set and the result is processTurn's. Otherwise `reply` is null, the state and session are already what
+// step 6 would leave, and the model answers from `facts` (saying `facts.milestone`'s line if there is one).
+// A guest's turn changes nothing of his: the state and session come back exactly as passed in, and effects are empty,
+// so saving the result is always safe.
+export function prepareTurn(state: AgentState, session: Session, text: string, ctx: TurnContext): PreparedTurn {
+	const guest = ctx.guest === true;
+	const start = startTurn(state, session, text, ctx);
+	const { result, milestone } =
+		"decided" in start
+			? { result: start.decided, milestone: null }
+			: guest
+				? { result: { state: start.open.s, session: start.open.sess, reply: null, effects: [] }, milestone: null }
+				: leaveForModel(start.open, ctx);
+	const baseline = resolve(result.state.genome).baseline;
+	const facts: TurnFacts = {
+		feeling: moodLabel(result.state.activations, baseline),
+		tone: moodTheme(result.state.activations, baseline).tone,
+		cause: guest ? null : result.session.cause,
+		stage: guest ? "stranger" : stageOf(result.state.bond),
+		milestone,
+		awayMs: guest || ctx.lastAt === null ? 0 : ctx.now - ctx.lastAt,
+		userName: guest ? null : (ctx.userName ?? null),
+		turn: guest ? 0 : session.turns,
+	};
+	if (guest) return { state, session, reply: result.reply, effects: [], facts };
+	return { ...result, facts };
 }

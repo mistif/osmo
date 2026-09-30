@@ -70,6 +70,24 @@ function welcomed(text: string, hello: string, stage: Stage): string {
 const fitsNow = (id: MilestoneId, intent: string) =>
 	milestoneLine(id) !== null && id !== "firstEvent" && (id !== "firstFeeling" || intent === "userFeeling");
 
+export type MilestoneContext = Pick<FlavorContext, "intent" | "tone" | "sensitive" | "bond" | "awayMs">;
+
+// Being away makes him lonely, which is exactly when a welcome back fits, so loneliness alone does not block it.
+function welcomesBack(ctx: MilestoneContext): boolean {
+	const firstVisit = !ctx.bond || ctx.bond.messages <= 1;
+	const upset = ctx.sensitive || (HEAVY_TONES.has(ctx.tone) && ctx.tone !== "loneliness");
+	return !upset && !firstVisit && ctx.intent !== "farewell" && (ctx.awayMs ?? 0) >= AWAY_MS;
+}
+
+// The milestone he brings up this turn, if any: never beside a welcome back, on a heavy turn, or to a frustrated user
+// (it waits for a better moment), and only one that fits now. flavorTurn says it; prepareTurn in mind.ts hands it to a
+// language model to say.
+export function milestoneDue(ctx: MilestoneContext): MilestoneId | null {
+	if (!ctx.bond || welcomesBack(ctx) || HEAVY_TONES.has(ctx.tone) || ctx.sensitive) return null;
+	if (ctx.intent === "misunderstood" || ctx.intent === "rudeFeedback") return null;
+	return ctx.bond.toMention.find((id) => fitsNow(id, ctx.intent)) ?? null;
+}
+
 // How often each extra may appear, by stage.
 const MEMORY_RATE: Record<Stage, number> = { stranger: 0, acquaintance: 0, friend: 0.08, oldFriend: 0.15 };
 const SLANG_RATE: Record<Stage, number> = { stranger: 0, acquaintance: 0.06, friend: 0.12, oldFriend: 0.12 };
@@ -92,17 +110,13 @@ export function flavorTurn(reply: string, ctx: FlavorContext): { text: string; m
 		if (p.voice.formality > 0.75) text = swap(swap(text, FORMAL_SWAPS), CONTRACTIONS);
 		if (p.voice.verbosity < 0.3 && !heavy) text = dropTrailingQuestion(text);
 	}
-	// Being away makes him lonely, which is exactly when a welcome back fits, so loneliness alone does not block it.
-	const firstVisit = !bond || bond.messages <= 1;
-	const upset = ctx.sensitive || (HEAVY_TONES.has(ctx.tone) && ctx.tone !== "loneliness");
-	if (!upset && !firstVisit && intent !== "farewell" && (ctx.awayMs ?? 0) >= AWAY_MS) {
+	if (welcomesBack(ctx)) {
 		return { text: welcomed(text, welcomeBack(stage, ctx.userName ?? null, turn), stage), mentioned: null };
 	}
 	if (heavy) return { text, mentioned: null };
 
-	// At most one extra, in priority order. A frustrated user hears no milestone; it waits for a better moment.
-	const frustrated = intent === "misunderstood" || intent === "rudeFeedback";
-	const due = frustrated ? undefined : bond?.toMention.find((id) => fitsNow(id, intent));
+	// At most one extra, in priority order.
+	const due = milestoneDue(ctx);
 	const line = due ? milestoneLine(due) : null;
 	if (due && line) return { text: addExtra(text, line), mentioned: due };
 
