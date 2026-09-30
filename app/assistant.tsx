@@ -35,7 +35,7 @@ import { learnFact, learnSlang, type MemoryFact } from "@/lib/facts";
 import { answerFromMemory, calculateMath, findUnknownTopic, isBuiltInTopic } from "@/lib/chat/answers";
 import { ASK_TIMEOUT_MS, askForReply, askStatus, nextUsage } from "@/lib/chat/ask";
 import { chatBody } from "@/lib/chat/body";
-import { keptTurn, pickBranch, writerFor } from "@/lib/chat/branch";
+import { keptTurn, pickBranch, quietEffects, whileWaiting, writerFor, type QuietPlan } from "@/lib/chat/branch";
 import type { ChatStatus } from "@/lib/chat/types";
 import { newId } from "@/lib/uuid";
 import { Panel, PanelLinks, usePanels } from "@/components/osmo/panel";
@@ -273,12 +273,49 @@ export default function AgentChat() {
 		sendText(input, { via: "typed", speaker: "you" });
 	}
 
+	// A crisis message that arrives while Osmo waits on another turn is answered at once, never dropped. The
+	// waiting turn owns this step of his heart, so it isn't stepped here; that turn finishes quietly instead.
+	function takeCrisis(text: string, options: SendOptions): boolean {
+		setPendingLearning(null);
+		aiStoppedRef.current = true;
+		const wait = waitingRef.current;
+		// A model turn cut short gets no reply, so its line is saved here, ahead of the crisis pair as on screen.
+		// Only the crisis message that first quiets it saves it.
+		const cutShort = wait !== null && wait.on === "model" && !wait.quiet;
+		const waitingLine = cutShort ? wait.line : undefined;
+		if (wait) {
+			wait.quiet = true;
+			if (wait.on === "model") wait.controller?.abort();
+		}
+		// A guest's line and Osmo's reply to it are marked, so they never feed Gur's context later.
+		const mark = options.speaker === "guest" ? ({ speaker: "guest" } as const) : {};
+		const crisisLine: ChatMessage = { role: "user", text, ...mark };
+		const reply: ChatMessage = { role: "agent", text: CRISIS_REPLY, ...mark };
+		// The reply's index comes from the list this update extends, never from this render's messages: the
+		// waiting turn's reply can land just before, without a render in between.
+		let index = 0;
+		setMessages((current) => {
+			index = current.length + 1;
+			return [...current, crisisLine, reply];
+		});
+		// Cut off any reply still being typed out, then type this one out; queued after the update above.
+		heart.rest();
+		setSpeaking(() => (reduceMotionRef.current ? null : { index, chars: 0 }));
+		void saveMessages(waitingLine ? [waitingLine, crisisLine, reply] : [crisisLine, reply]);
+		// Handed over once sendText has returned: the voice has just moved to waiting for this message.
+		queueMicrotask(() => onReplyRef.current?.(CRISIS_REPLY, options.via));
+		return true;
+	}
+
 	// One path for every message, typed or spoken. Returns false when the message can't be taken now
-	// (empty, Osmo still waking up, or a reply still on its way), so the voice knows it was dropped.
+	// (empty, Osmo still waking up, or a reply still on its way and this isn't a crisis message), so the
+	// voice knows it was dropped.
 	function sendText(raw: string, options: SendOptions): boolean {
 		const text = raw.trim();
-		// waitingRef is set the moment a turn starts waiting, before the render that shows thinking.
-		if (!text || !ready || thinking || waitingRef.current !== null) return false;
+		if (!text || !ready) return false;
+		// While Osmo waits on a reply, only a crisis message is taken; any other is dropped, as before. waitingRef
+		// is set the moment a turn starts waiting, before the render that shows thinking.
+		if (thinking || waitingRef.current !== null) return whileWaiting(text) === "take" ? takeCrisis(text, options) : false;
 		const { via } = options;
 		// A guest (a voice that isn't Gur's) reads nothing of Gur's, and nothing is learned or saved from
 		// their turn except the conversation itself.
@@ -466,9 +503,10 @@ export default function AgentChat() {
 		// Set once this turn's reply is delivered, so the wait's catch-all never adds a second one.
 		let replied = false;
 		// Every reply ends here: typed out by the circle, and handed to the voice.
-		// The user's message sits at messages.length, so the reply is at messages.length + 1; the
-		// composer is locked while Osmo waits, so nothing can land in between.
-		// A quiet reply is only shown and saved: it doesn't move the heart, start the typing or reach the voice.
+		// The user's message sits at messages.length, so the reply is at messages.length + 1: the composer
+		// is locked while Osmo waits, and a crisis message taken meanwhile makes this reply a quiet one.
+		// A quiet reply is only shown and saved: it doesn't move the heart, start the typing or reach the
+		// voice, where a typed reply would cut off the crisis reply being spoken.
 		const deliver = (reply: string, how: { quiet: boolean } = { quiet: false }) => {
 			replied = true;
 			const agentMessage: ChatMessage = { role: "agent", text: greetGuest(reply, guest && (options.greet ?? false), crisis), ...mark };
@@ -483,6 +521,11 @@ export default function AgentChat() {
 			// before the reply arrives, even when the reply is ready at once.
 			if (!how.quiet) queueMicrotask(() => onReplyRef.current?.(agentMessage.text, via));
 		};
+		// A turn a crisis message quieted keeps its state step, but teaches nothing and starts nothing. It says
+		// only what quietEffects allows: nothing after a model request, and a lookup's reply that asks nothing.
+		const endQuietly = (plan: QuietPlan, result: Lookup | null) => {
+			if (plan.reply === "noExplain" && result) deliver(formatDefinition(result, true), { quiet: true });
+		};
 		// A word question waits for the dictionary, inside the turn's one wait.
 		const lookUp = async (term: string, wait: Waiting) => {
 			wait.on = "lookup";
@@ -492,6 +535,10 @@ export default function AgentChat() {
 				cacheGet: canSaveRef.current ? getCachedLookup : undefined,
 				cachePut: canSaveRef.current && !guest ? putCachedLookup : undefined,
 			}).catch((): Lookup => ({ kind: "missing", term }));
+			if (wait.quiet) {
+				endQuietly(quietEffects("lookup"), result);
+				return;
+			}
 			if (result.kind === "missing" && !guest) setPendingLearning(result.term);
 			deliver(formatDefinition(result, guest));
 		};
@@ -528,13 +575,20 @@ export default function AgentChat() {
 				const body = signedIn
 					? chatBody({ text, messages, memory: view.memory, facts: prepared.facts, state: prepared.state, math: branch === "math" ? mathResult : null })
 					: null;
-				const answer = signedIn && body ? await askForReply(fetch, signedIn.access_token, body, controller.signal) : null;
+				// A crisis message taken while the session was read has already cut this turn short: nothing is posted.
+				const answer = signedIn && body && !wait.quiet ? await askForReply(fetch, signedIn.access_token, body, controller.signal) : null;
 				if (answer) {
 					setAiUsage((current) => nextUsage(current, answer));
 					// A crisis flag, a 403 or "off": nothing more is posted this visit.
 					if (answer.kind === "crisis" || (answer.kind === "fallback" && answer.stop)) aiStoppedRef.current = true;
 					// A 403 or "off" means it's really off; a crisis only pauses it for this visit.
 					if (answer.kind === "fallback" && answer.stop) aiEnabledRef.current = false;
+				}
+				if (wait.quiet) {
+					// Aborted by a crisis message: processTurn's step of his state, no pendingTopic, no lookup, no reply.
+					applyTurn(keptTurn<TurnResult>("code", prepared, turn));
+					endQuietly(quietEffects("model"), null);
+					return;
 				}
 				// His state is applied only now that it's known whose reply is used.
 				applyTurn(keptTurn<TurnResult>(answer?.kind === "model" ? "model" : "code", prepared, turn));
