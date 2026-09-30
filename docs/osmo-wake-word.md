@@ -30,6 +30,28 @@ Osmo's ear for his name is a small file, `osmo.onnx`, that you train once with o
 8. In the file browser on the left (the folder icon), open `my_custom_model`, right-click `osmo.onnx` and choose **Download**. Skip step 4 of the notebook (tflite); Osmo uses the `.onnx` file.
 9. Give the file to Claude in this project. It goes to `public/models/wake/osmo.onnx`. Claude then runs `npm run voice:check`, which now tests "Osmo" itself, and commits it. It goes live with the next push.
 
+## What it took on 2026-09-30 (read this before training again)
+
+The notebook is a year behind Colab. Trained once this way; the model is `public/models/wake/osmo.onnx`.
+
+1. **Runtime version 2025.07**, not "Latest" (Runtime → Change runtime type → Runtime version). Latest is Python 3.13, and `piper-phonemize` and `speexdsp-ns` have no build for it, so the setup half-fails. Also check the accelerator really is T4 GPU: it silently fell back to CPU once.
+2. After the setup cell asks to **restart the session**, run from the Imports cell down (Run all stops at the restart).
+3. Put these lines at the top of the **Step 1** cell:
+
+       !git -C piper-sample-generator checkout -q 195e3bd967 && ls piper-sample-generator/generate_samples.py
+       %env TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
+       !mkdir -p openwakeword/openwakeword/resources && wget -q -O openwakeword/openwakeword/resources/en_us_cmudict_forward.pt https://huggingface.co/NRC-CNRC/en_us_cmudict_ipa_forward_g2p/resolve/main/en_us_cmudict_forward.pt
+       import io, zipfile; p = "openwakeword/openwakeword/resources/en_us_cmudict_forward.pt"; d = open(p, "rb").read(); zin = zipfile.ZipFile(io.BytesIO(d)); buf = io.BytesIO(); zout = zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED); [zout.writestr(i, zin.read(i.filename).replace(b"deep_phonemizer.", b"dp.")) for i in zin.infolist()]; zout.close(); open(p, "wb").write(buf.getvalue())
+
+   Why: piper-sample-generator moved `generate_samples.py` into a package in March 2026 (v2.0.0 matches the model the notebook downloads); torch 2.6+ refuses that version's `torch.load` without the flag; the phonemizer checkpoint's S3 link is dead and the Hugging Face mirror renamed the module inside it.
+4. Put this at the top of the **Step 3** cell, or training is OOM-killed (exit 137) at the start of its second sequence:
+
+       !sed -i 's/num_workers=n_cpus, prefetch_factor=16/num_workers=0/' openwakeword/openwakeword/train.py
+
+   Running it with `nohup … > train3.log 2>&1 &` and polling `tail train3.log` in another cell keeps a stray interrupt from killing it. Training is about 13 minutes on a T4.
+5. If a step was interrupted, delete `my_custom_model/osmo/*_features_*.npy` before rerunning Step 2, or it says the features "already exist" and Step 3 fails on a missing file.
+6. Step 4 (tflite) fails on an `onnx` import; ignore it. `osmo.onnx` is in `my_custom_model/`, and `from google.colab import files; files.download("my_custom_model/osmo.onnx")` fetches it.
+
 ## If he wakes too often, or not enough
 
 - **Wakes by mistake** (TV, conversation): first raise `threshold` in `lib/voice/wake.ts` (0.7 → 0.8). If that isn't enough, train again with the phrase "hey osmo" — set `config["target_phrase"] = ["hey osmo"]` and `config["model_name"] = "hey_osmo"` — which wakes by mistake far less. The downloaded file is `hey_osmo.onnx`; rename it to `osmo.onnx` before giving it to Claude. Claude must also regenerate the voice-check clips to say "Hey Osmo" (they currently say "Osmo.").
