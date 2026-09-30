@@ -1,6 +1,6 @@
 # Osmo's AI conversation, phase 1: a model writes his everyday words, inside the free allowance
 
-Date: 2026-09-29, revised 2026-09-30 after four review rounds. The first had four lenses (fit with the code, billing, privacy and safety, consistency). The next three checked each revision, the last two focused on the crisis handling and the name patterns. A skeptic checked every finding. Status: design, approved section by section by Gur, awaiting his review of this document. Owner: the language lane, which builds it.
+Date: 2026-09-29, revised 2026-09-30 after four review rounds. The first had four lenses (fit with the code, billing, privacy and safety, consistency). The next three checked each revision, the last two focused on the crisis handling and the name patterns. A skeptic checked every finding. Status: **approved by Gur on 2026-09-30**, along with the data-sharing trade. He changed choice 2: short spoken follow-ups reach the model. Owner: the language lane, which builds it.
 
 This is the first build of the plan in `2026-09-28-osmo-agent-design.md` (the cloud lane's design, "the agent design" below). Gur's choices on 2026-09-29 (recorded in `decisions.md` on the `brain` branch) change several of its phase 1 decisions. Where the two differ, this document is the one to build from. The section "How this differs from the agent design" lists each difference.
 
@@ -26,11 +26,12 @@ Osmo answers almost anything and holds a real conversation, while staying himsel
 8. **Safety:** off until Gur turns it on, only his account, and an honest self-description.
 
 ## Choices this design makes, for Gur to check
-The review turned up cases the decisions above don't settle. Each is decided here the cautious way. Any of them can be changed.
+The review turned up cases the decisions above don't settle. Each was decided the cautious way, and Gur approved them on 2026-09-30, except choice 2, which he changed.
 1. **A separate OpenAI project and key for the conversation** (`OSMO_CHAT_OPENAI_KEY`). Data sharing is switched on per project, not per request. If the conversation used the key `/api/speak` uses, switching sharing on for it would also share every sentence the natural voice speaks, crisis replies included, and text to speech gets no free tokens. With its own project, only the conversation is shared, and the dashboard and spend limit cover Osmo alone.
-2. **Short spoken follow-ups keep the rule-based replies.** Once the voice has recognized Gur, a follow-up with under 1.5 seconds of speech counts as his even when his voice doesn't match. That line could be a guest's, so its reply isn't written by the model. Only typed lines, and spoken lines whose own voice score matches his, get a model reply. The short line still stays in the conversation, like every line of his, so later requests can include it in the recent chat. If short follow-ups feel clumsy, the alternative is to let them through and accept that a guest's short line could get a model reply.
-
-   Since 2026-09-30 the room is voice-only by default (no text box unless "Show the conversation as text" is on), so this choice touches most of the conversation. Quick replies like "why?", "yeah" or "go on" are usually under 1.5 seconds and often too short to score, so they'd get rule-based answers in the middle of a model conversation. Until main adds `recognized`, no spoken line gets a model reply at all.
+2. **Short spoken follow-ups reach the model (Gur's choice, 2026-09-30).** Once the voice has recognized Gur, a follow-up with under 1.5 seconds of speech counts as his even when his voice doesn't match. Any spoken line the voice counts as his, by score or by that carry-over, is treated like a typed line of his and can get a model reply.
+   - **Why:** the room is voice-only by default since 2026-09-30, and quick replies like "why?", "yeah" or "go on" are usually too short to score. Keeping them rule-based would put stuck-sounding answers in the middle of a model conversation.
+   - **The accepted risk:** a guest's short remark inside Gur's conversation can get a model reply that draws on his memory and recent chat.
+   - A line the voice judges to be a guest's never reaches the model.
 3. **After a crisis message, Osmo stays on the rule-based replies until the room is reloaded.** The model also acts as a second crisis detector. If it sees talk of self-harm that the code missed, the code gives the crisis reply, not the model.
 4. **Some replies that save nothing stay in code:**
    - "what are you made of", "how close are we", "when did we meet" and the re-roll nudges, because `prepareTurn` decides them and they read data the prompt doesn't carry;
@@ -82,7 +83,6 @@ A branch the table gives to the model still gets today's code reply when any of 
 - today's reply for that branch asks Gur his name (`askedForName` matches it). That covers the askName intent ("I'm Osmo. What should I call you?") and "I don't know your name yet. What should I call you?";
 - today's reply for that branch states Gur's saved name (`justLearnedName` matches it): "I'm Osmo. And you're Gur, I remember." and "Your name is Gur.". That's the line he corrects a misheard name after ("no, it's Gurra"), and only the code's wording is read for a correction;
 - the speaker is a guest;
-- the message was spoken and `options.recognized` isn't true (choice 2);
 - the message is over 2,000 characters.
 
 Because slang and facts come after `processTurn`'s reply, "i love you" is still an everyday reply (today it gets the affection reply, and `learnFact` would read it as likes = you). So are "lol means laughing" and "my mood is good thanks".
@@ -460,13 +460,12 @@ If nothing speakable is left, the answer is a fallback with `reason: "empty"`. T
   - Osmo's feeling, its cause, the bond stage, a due milestone and the time away;
   - Osmo's donors and values.
 - **Never sent:**
-  - guests' words, except a guest whose voice is mistaken for Gur's, or a guest's short follow-up counted as his (see below and Risks);
+  - guests' words, except a guest whose voice is mistaken for Gur's, or a guest's short follow-up counted as his (choice 2 and Risks);
   - crisis messages the code recognizes, Osmo's crisis replies and the crisis cause. A message about self-harm that the code misses is sent once. If the model flags it, it's never sent again;
   - anything more for the rest of the visit, once a crisis message has come. After a reload, the recent chat can include what Gur said after the crisis, but never the crisis message or the crisis reply;
   - Gur's vocabulary list, and anything from other tables;
   - the key.
 
-  A short spoken follow-up that the voice counted as Gur's without a match never gets a model reply (choice 2). It stays in the conversation like every line of his, so a later request can include it in the recent chat.
 - **Crisis safety, in four layers:**
   1. `isCrisis` runs first, and the crisis reply stays code.
   2. The model is a second detector, and answers `CRISIS` instead of writing its own words.
@@ -499,7 +498,6 @@ If nothing speakable is left, the answer is a fallback with `reason: "empty"`. T
 - **A 401 never signs Gur out.** The agent design called `lockOsmo()` on a 401, but the route's 401 can come from a passing Supabase error.
 - **The model is a second crisis detector,** and after a crisis the session stays rule-based until a reload. In the agent design, a crisis only skipped the model for that one turn.
 - **A crisis message is taken while Osmo waits,** instead of `sendText` returning `false`.
-- **Short spoken follow-ups don't get model replies** (choice 2). The agent design treated carry-over lines like any of Gur's.
 - **The estimate counts UTF-8 bytes plus a per-item overhead,** with a 20,000-token ceiling per call, instead of characters divided by three with no ceiling. Characters can undercount emoji and other non-Latin text.
 - **The time limits are 10 seconds on the server and 15 in the browser,** instead of 15 seconds and an overall 40-second deadline.
 - **The prompt leaves out** Gur's frequent words, `mood_days` and "what happened last time", which the agent design included. They're for a later phase.
@@ -531,7 +529,6 @@ The agent design stays the plan for phases 2 to 4. Its cloud lane updates it to 
     - `heavy: boolean` in `TurnFacts`: the same test `flavorTurn` uses to hold back extras, a heavy tone or a sensitive turn. `mind-prepare.test.ts` compares the whole `facts` object, so its expectation gains `heavy`, with a case where a sad message gives `heavy: true`;
     - a null `facts.cause` when the cause is the crisis one, with that string exported as `CRISIS_CAUSE`;
   - commits `lib/agent/mind.ts`, `lib/agent/personality/flavor.ts` and `lib/agent/mind-prepare.test.ts` together (`prepareTurn` needs `milestoneDue`, which is only in the uncommitted `flavor.ts`);
-  - adds `recognized: boolean` to `SendOptions` for spoken lines: true exactly when the line's own voice score reaches `MATCH_THRESHOLD`, whether or not carry-over decided the speaker, and false when there was too little audio to score. Today `whoSpoke` in `engine.ts` keeps the score to itself, so it returns it (or `recognized`) along with the speaker. The engine tests that compare the options exactly change with it. Until then, spoken lines never get a model reply;
   - orders the room's `memory_facts` load by `updated_at`;
   - applies the `ai_calls` migration before any code that needs it is pushed;
   - passes `aiUsage` to `SettingsPanel` and shows its line;
@@ -540,7 +537,7 @@ The agent design stays the plan for phases 2 to 4. Its cloud lane updates it to 
     - the Shared resources line says `/api/chat` has its own OpenAI project and key (`OSMO_CHAT_OPENAI_KEY`), and `/api/speak` keeps `OPENAI_API_KEY`.
 - **Language also updates the brain:**
   - `project.md`'s AI-conversation interface and `/api/chat` contract (its own entries), to match this document;
-  - `project.md`'s "Language → voice" entry: a crisis message is taken while Osmo waits, and `recognized` decides whether a spoken line can get a model reply;
+  - `project.md`'s "Language → voice" entry: a crisis message is taken while Osmo waits, and a spoken line the voice counts as Gur's can get a model reply;
   - `project.md`'s Keys: the six new settings, with `/api/chat` taken out of the `OPENAI_API_KEY` row;
   - a `decisions.md` entry when it goes live, replacing the 2026-09-26 rule that the internet is used only for word definitions.
 - **Speaking:** owns `lib/server/auth.ts` (`requireUser`), which the route reuses unchanged. Its key and project stay as they are.
@@ -569,10 +566,7 @@ The agent design stays the plan for phases 2 to 4. Its cloud lane updates it to 
    - whether free use counts toward the spend limit.
 
 ## Testing
-- **All existing tests keep passing,** except three expectations this design changes on purpose:
-  - `context.test.ts` line 6 ("My name is Osmo. What's yours?" no longer counts as asking his name);
-  - the engine tests that compare `SendOptions` exactly (they gain `recognized`);
-  - `mind-prepare.test.ts`'s whole-`facts` comparison (it gains `heavy`).
+- **All existing tests keep passing,** except `context.test.ts` line 6, which this design changes on purpose ("My name is Osmo. What's yours?" no longer counts as asking his name). `mind-prepare.test.ts` already expects `heavy` (`8102c49`).
 - **`allowance.ts`:**
   - each listed snapshot maps to its pool id (`mini`) and its request options;
   - an alias or an unlisted model is refused;
@@ -632,7 +626,7 @@ The agent design stays the plan for phases 2 to 4. Its cloud lane updates it to 
   - "my sister is Maya", "bet means okay", "roll a new osmo" and a crisis message are code replies;
   - "what's your name", "what's my name" and "can't you see my name", with no name known, are code replies;
   - "what's your name" and "what's my name", with a name known, are code replies too (they say his saved name back);
-  - a guest, a spoken line without `recognized`, or a message over 2,000 characters never goes to the model;
+  - a guest or a message over 2,000 characters never goes to the model, and a spoken line counted as Gur's (by score or carry-over) does;
   - "what is X" returns its `pendingTopic` as data, and sets nothing;
   - `keptTurn` keeps `prepareTurn`'s result for a model reply, and `processTurn`'s for anything else;
   - `whileWaiting` takes a crisis message and drops any other;
@@ -661,7 +655,7 @@ The agent design stays the plan for phases 2 to 4. Its cloud lane updates it to 
   - "what's your name" with no name saved, then his name (saved), then "what's your name" again (code says his saved name back);
   - "roll a new osmo" (still code);
   - a crisis message (the crisis reply, then rule-based replies until he reloads);
-  - a short spoken follow-up (a rule-based reply);
+  - a short spoken follow-up like "why?" (an AI reply that follows the conversation);
   - the Settings usage line;
   - the fallback, by setting `OSMO_MINI_TOKENS_PER_DAY` to a few thousand.
 
@@ -679,7 +673,7 @@ The agent design stays the plan for phases 2 to 4. Its cloud lane updates it to 
 - **Free tokens landing in the wrong pool, or not at all.** It has happened with this model family. The first-day check catches it.
 - **`store: false` and the allowance.** OpenAI doesn't say whether it matters. If the first-day check shows the calls billed, `store` goes back to its default.
 - **The model list moving.** Several listed models retire this autumn. The allowlist is dated, its test is the reminder to recheck the dashboard, and the served-model check stops the day if something unexpected is served.
-- **A guest's voice scored as Gur's.** It's as rare as today (a score of 0.5 or more), but such a line would get a model reply. A short follow-up without a match doesn't, though its words stay in the conversation, and a later request can include them in the recent chat.
+- **A guest taken for Gur.** A guest whose voice scores as Gur's, or who says a short line inside Gur's conversation (choice 2), gets a model reply that can draw on his memory and recent chat. Main is calibrating the match threshold against real voices (2026-09-30), because other people were being taken for Gur.
 - **A spoken crisis message while Osmo waits.** It's answered at once, but the path is hard to try by hand (it needs the wake word or the follow-up window during a typed wait). The pure parts are tested. The room's handling is checked in the code review against these cases:
   - a typed "what is photosynthesis" waiting on the model;
   - a typed "what does valo mean" whose model fallback runs a lookup that misses;
