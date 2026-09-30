@@ -3,7 +3,7 @@
 Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk.
 
 ## Now
-**Building the AI conversation plan inline (Gur chose native, 2026-09-30).** Files I'm holding: `lib/chat/**`, `app/api/chat/**`, `scripts/chat-probe.mjs`, `lib/agent/talk.ts`, `context.ts`, `lib/facts.ts`, and my part of `app/assistant.tsx` (the chain, `sendText`, `deliver`, and the model path). Also done: Osmo's memory of Gur wiped at his request (see `decisions.md`).
+**Building the AI conversation plan inline (Gur chose native, 2026-09-30),** in the worktree `my-app/.claude/worktrees/ai-conversation` on branch `language/ai-conversation` (Gur's choice). It merges into local main only after the final review. **Tasks 1–8 are done** (the whole server side: allowance, speakable, request check, prompt, ledger, OpenAI call, `/api/chat`, probe), with 887 tests and `next build` green. `ai_calls` was already live, so no migration Ask was needed. Files I'm holding: `lib/chat/**`, `app/api/chat/**`, `scripts/chat-probe.mjs`, `lib/agent/talk.ts`, `context.ts`, `lib/facts.ts`, and my part of `app/assistant.tsx` (the chain, `sendText`, `deliver`, and the model path). Also done: Osmo's memory of Gur wiped at his request (see `decisions.md`).
 
 **Was:** waiting for Gur to review the plan. The plan is `my-app/docs/superpowers/plans/2026-09-30-osmo-ai-conversation.md` (`576359d`, local): 16 tasks with complete code. It was reviewed on three lenses with skeptics, fixed, and rebuilt task by task in a scratch copy, where 988 tests pass, tsc is clean and eslint has no errors. No code is in the repo yet. Main has already applied `ai_calls` (verified live) and ordered `memory_facts` (`baa0c4e`).
 
