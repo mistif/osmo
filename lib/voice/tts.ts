@@ -7,8 +7,9 @@ export type SpeechTone = "composed" | "grave";
 // OpenAI's speech model. `gpt-4o-mini-tts` is the one that takes `instructions`; the dated
 // snapshots (for example gpt-4o-mini-tts-2025-12-15) can be pinned here if the alias ever drifts.
 export const TTS_MODEL = "gpt-4o-mini-tts";
-// A male voice; the accent comes from the instructions, not the voice.
-export const TTS_VOICE = "ash";
+// A male voice that holds the British accent the instructions ask for. Gur chose it over ash and onyx
+// on 2026-09-30 from samples of the same line.
+export const TTS_VOICE = "fable";
 // A shade quicker than default. Gur heard the default and asked for faster.
 export const TTS_SPEED = 1.15;
 // Bump this whenever an instruction below changes, or cached audio outlives the change.
