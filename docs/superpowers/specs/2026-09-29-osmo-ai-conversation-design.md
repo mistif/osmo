@@ -319,7 +319,7 @@ There's a 10-second timeout, and no retries. The fallback is free and instant; a
 
 **Reading the answer:**
 - The text is the joined `output_text` parts of the `message` items in `output`. It's never assumed to be `output[0]`.
-- `response.model` must equal the requested snapshot. If it doesn't, the call is settled with the served model's name, the answer is `error`, and the name is logged. That settling row then stops the day (step 6). If that settling row fails to save, only this call is refused. The request pins a dated snapshot, so this should never happen.
+- `response.model` must equal the requested snapshot. If it doesn't, the call is settled with the served model's name, the answer is `error` (unless the reply is a crisis flag, which still answers `crisis`, added 2026-09-30 in the plan's review), and the name is logged. That settling row then stops the day (step 6). If that settling row fails to save, only this call is refused. The request pins a dated snapshot, so this should never happen.
 - **The crisis flag is read from the raw text, before the reply check,** and allows for slips. It counts when:
   - the reply's letters alone spell "crisis", in any case ("CRISIS.", "**CRISIS**", "Crisis");
   - or the reply contains the all-uppercase word `CRISIS` anywhere, standing alone ("CRISIS I'm sorry…", "**CRISIS** I'm sorry…", "I'm so sorry. CRISIS").
