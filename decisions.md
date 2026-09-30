@@ -54,6 +54,11 @@ Gur's decisions and the cross-lane rulings, oldest first. Append only. Each entr
   - Vercel deployed it to production (`dpl_HJzJLPLU5qhia5VTWL94zCiuBhvs`, READY). osmo-xyz.vercel.app answers 200, and the new `/api/speak` answers 401 without a sign-in.
 - **2026-09-30 (language), checked:** Supabase sign-ups are now off (`disable_signup: true`), and anonymous sign-ins are off. The "Turn off Supabase sign-ups" item below is done.
 
+- **2026-09-30 (main), Gur's calls on the room and the voice:**
+  - Osmo's shape is a heart with rings (an organic heart in his mood colours, three dashed rings), after JARVIS in *Age of Ultron*. The breathing circle is gone.
+  - The room is **voice only by default**: him, subtitles of what he says, what he heard, and the mic. The conversation as text is a per-device setting, off by default. His last words stay on screen; fading them is a per-device setting.
+  - His natural voice is **fable** at speed 1.15, chosen from samples. The first-sound guard is 4 s, because the model takes about 2.1 s per sentence.
+
 ## Waiting on Gur
 
 - Turn off Supabase sign-ups: Authentication → Sign In / Providers → "Allow new users to sign up".
