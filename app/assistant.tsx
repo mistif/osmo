@@ -16,13 +16,12 @@ import { formatDefinition, lookupWord, parseLookup, type Lookup } from "@/lib/ag
 import { getCachedLookup, putCachedLookup } from "@/lib/agent/dictionary-store";
 import { learnFromMessage } from "@/lib/agent/lexicon/vocabulary";
 import { loadVocabulary, saveVocabulary } from "@/lib/agent/vocabulary-store";
-import { newSession, processTurn, type Session } from "@/lib/agent/mind";
+import { newSession, prepareTurn, processTurn, type Session, type TurnContext, type TurnResult } from "@/lib/agent/mind";
 import {
 	answersPendingLearning,
-	askedForName,
 	taughtMeanings,
+	nameAnswer,
 	nameCorrection,
-	nameFromAnswer,
 	nameFromHistory,
 	recallReply,
 	turnView,
@@ -30,10 +29,14 @@ import {
 	wantsRecall,
 } from "@/lib/agent/context";
 import { greetGuest, type SendOptions, type Via } from "@/lib/voice/guest";
-import { isCrisis } from "@/lib/agent/safety";
+import { CRISIS_REPLY, isCrisis } from "@/lib/agent/safety";
 import { defaultState, type AgentState } from "@/lib/agent/state";
 import { learnFact, learnSlang, type MemoryFact } from "@/lib/facts";
 import { answerFromMemory, calculateMath, findUnknownTopic, isBuiltInTopic } from "@/lib/chat/answers";
+import { ASK_TIMEOUT_MS, askForReply, askStatus, nextUsage } from "@/lib/chat/ask";
+import { chatBody } from "@/lib/chat/body";
+import { keptTurn, pickBranch, writerFor } from "@/lib/chat/branch";
+import type { ChatStatus } from "@/lib/chat/types";
 import { newId } from "@/lib/uuid";
 import { Panel, PanelLinks, usePanels } from "@/components/osmo/panel";
 import { MemoryPanel } from "@/components/osmo/memory-panel";
@@ -50,6 +53,9 @@ type ChatMessage = {
 	// Set on a guest's line and on Osmo's reply to it; unset means Gur.
 	speaker?: "guest";
 };
+// The turn Osmo is waiting on, for a model reply or a word lookup. Its id is the index of its user line in messages,
+// and line is that line itself. A crisis message taken meanwhile marks it quiet, and aborts a model request.
+type Waiting = { id: number; on: "model" | "lookup"; controller: AbortController | null; quiet: boolean; line: ChatMessage };
 
 const font = Bricolage_Grotesque({ subsets: ["latin"], display: "swap" });
 
@@ -75,8 +81,17 @@ export default function AgentChat() {
 	const [input, setInput] = useState("");
 	const [memory, setMemory] = useState<MemoryFact[]>([]);
 	const [pendingLearning, setPendingLearning] = useState<string | null>(null);
-	// True while Osmo looks a word up; the composer waits so replies stay in order.
+	// True while Osmo waits on a reply (the model, or a word lookup); the composer waits so replies stay in order.
 	const [thinking, setThinking] = useState(false);
+	// The AI conversation: today's usage for Settings (null means off), whether it's on (the GET below says so, and a
+	// 403 or "off" says it isn't), and whether this visit has stopped it (a crisis message, a crisis flag, a 403 or
+	// "off"). Nothing is posted unless aiOn().
+	const [aiUsage, setAiUsage] = useState<ChatStatus | null>(null);
+	const aiEnabledRef = useRef(false);
+	const aiStoppedRef = useRef(false);
+	const waitingRef = useRef<Waiting | null>(null);
+	// Read in handlers only, never while rendering.
+	const aiOn = () => aiEnabledRef.current && !aiStoppedRef.current;
 	// The user's own words and how often they've used them (understanding only).
 	const [vocabulary, setVocabulary] = useState<Record<string, number>>({});
 	useEffect(() => {
@@ -186,6 +201,22 @@ export default function AgentChat() {
 		return () => data.subscription.unsubscribe();
 	}, [router]);
 
+	// Whether the AI conversation is on for this visit. Until this answers yes, nothing is posted to /api/chat.
+	useEffect(() => {
+		let live = true;
+		void (async () => {
+			const signedIn = await ensureSession().catch(() => null);
+			if (!signedIn || !live) return;
+			const status = await askStatus(fetch, signedIn.access_token);
+			if (!live) return;
+			aiEnabledRef.current = status?.enabled === true;
+			setAiUsage(status);
+		})();
+		return () => {
+			live = false;
+		};
+	}, []);
+
 	async function saveFact(fact: MemoryFact) {
 		const { error } = await supabase
 			.from("memory_facts")
@@ -243,10 +274,11 @@ export default function AgentChat() {
 	}
 
 	// One path for every message, typed or spoken. Returns false when the message can't be taken now
-	// (empty, Osmo still waking up, or a word lookup in flight), so the voice knows it was dropped.
+	// (empty, Osmo still waking up, or a reply still on its way), so the voice knows it was dropped.
 	function sendText(raw: string, options: SendOptions): boolean {
 		const text = raw.trim();
-		if (!text || !ready || thinking) return false;
+		// waitingRef is set the moment a turn starts waiting, before the render that shows thinking.
+		if (!text || !ready || thinking || waitingRef.current !== null) return false;
 		const { via } = options;
 		// A guest (a voice that isn't Gur's) reads nothing of Gur's, and nothing is learned or saved from
 		// their turn except the conversation itself.
@@ -257,16 +289,19 @@ export default function AgentChat() {
 		const now = Date.now();
 		// A crisis message is never treated as an answer to "what does X mean?" or "what's your name?".
 		const crisis = isCrisis(text);
+		// After a crisis message the model is asked nothing more until the room is reloaded.
+		if (crisis) aiStoppedRef.current = true;
 		// A new question is answered, not saved as the explanation Osmo asked for. A guest's words never
 		// answer Gur's pending question, and leave it waiting for him.
 		const learning = guest || crisis || !answersPendingLearning(text) ? null : pendingLearning;
 		if (!learning && !guest) setPendingLearning(null);
 		// Read the reply in light of what Osmo just asked this speaker.
 		const lastAgentText = view.lastAgentText;
-		const correctedName = guest || crisis ? null : nameCorrection(text, lastAgentText);
-		const answeredName = guest || crisis || correctedName || !askedForName(lastAgentText) ? null : nameFromAnswer(text);
-		// "whats my name" or "cant u see my name in the chat" when Osmo never saved it: look back through the chat.
 		const knownName = view.userName;
+		const correctedName = guest || crisis ? null : nameCorrection(text, lastAgentText);
+		// Only an answer to code's own name question counts, and only while no name is saved.
+		const answeredName = guest || crisis || correctedName ? null : nameAnswer(text, lastAgentText, knownName);
+		// "whats my name" or "cant u see my name in the chat" when Osmo never saved it: look back through the chat.
 		const asksOwnName =
 			!guest && !crisis && !knownName && (wantsNameFromChat(text) || /\b(?:what(?:'s| is)?|whats|do you know|remember) my name\b/i.test(text));
 		const foundName = asksOwnName ? nameFromHistory(view.history) : null;
@@ -275,19 +310,21 @@ export default function AgentChat() {
 			setMemory((current) => [...current.filter((fact) => fact.key !== "name"), nameFact]);
 			void saveFact(nameFact);
 		};
-		const turn = learning
-			? null
-			: processTurn(agent, session, text, {
-					now,
-					lastAt: lastAtRef.current,
-					uuid: newId,
-					seed: newSeed(),
-					userName: view.userName,
-					slang: view.slang,
-					recent: view.recent,
-					vocabulary: view.vocabulary,
-					guest,
-				});
+		// His inner life steps once either way. processTurn is today's step; prepareTurn is the same step left for
+		// the model to put into words. Both are pure, and only the result whose reply is used is kept (keptTurn).
+		const ctx: TurnContext = {
+			now,
+			lastAt: lastAtRef.current,
+			uuid: newId,
+			seed: newSeed(),
+			userName: view.userName,
+			slang: view.slang,
+			recent: view.recent,
+			vocabulary: view.vocabulary,
+			guest,
+		};
+		const turn = learning ? null : processTurn(agent, session, text, ctx);
+		const prepared = learning ? null : prepareTurn(agent, session, text, ctx);
 		// The gap since Gur last spoke drives his heart, so a guest's turn doesn't reset it.
 		if (!guest) lastAtRef.current = now;
 
@@ -307,119 +344,222 @@ export default function AgentChat() {
 				if (canSaveRef.current) void saveVocabulary(changed);
 			}
 		}
-		let response: string;
-		if (learning) {
-			// Saved as "meaning:<term>", so it answers "what does <term> mean" later and is never mixed up
-			// with ordinary facts ("my dog is Nala" is not the meaning of "dog").
-			const explanation = text.replace(/[.!?]+$/, "").replace(/^([A-Z])(?=[a-z])/, (c) => c.toLowerCase());
-			const learnedTopic = { key: `meaning:${learning}`, value: explanation };
-			setMemory((current) => [
-				...current.filter((fact) => fact.key !== learnedTopic.key),
-				learnedTopic,
-			]);
-			setPendingLearning(null);
-			void saveFact(learnedTopic);
-			response = `Understood. "${learning}" means ${explanation}. I'll remember that.`;
-		} else if (correctedName) {
-			rememberName(correctedName);
-			response = `My apologies, ${correctedName}. I've corrected that.`;
-		} else if (answeredName) {
-			rememberName(answeredName);
-			response = `Nice to meet you, ${answeredName}! I'll remember that.`;
-		} else if (foundName) {
-			rememberName(foundName);
-			response = `You're ${foundName}. My apologies, I should have caught that.`;
-		} else if (asksOwnName && wantsNameFromChat(text)) {
-			response = "I looked back but couldn't find it. What's your name?";
-		} else if (!crisis && wantsRecall(text)) {
-			response = recallReply(view.history);
-		} else if (turn?.reply != null) {
-			response = turn.reply;
-		} else if (guest && (taughtSlang || learnedFact)) {
-			// Nothing a guest says is kept, so Osmo says so rather than pretending to note it.
-			response = GUEST_NO_NOTES;
-		} else if (taughtSlang) {
-			const slangFact = { key: `slang:${taughtSlang.word}`, value: taughtSlang.meaning };
-			setMemory((current) => [...current.filter((fact) => fact.key !== slangFact.key), slangFact]);
-			void saveFact(slangFact);
-			response = `Understood. When you say "${taughtSlang.word}", I'll read it as "${taughtSlang.meaning}".`;
-		} else if (learnedFact) {
-			setMemory((current) => [
-				...current.filter((fact) => fact.key !== learnedFact.key),
-				learnedFact,
-			]);
-			void saveFact(learnedFact);
-			response = `Noted. Your ${learnedFact.key} is ${learnedFact.value}.`;
-		} else if (mathResult !== null) {
-			response = `That comes to ${mathResult}.`;
-		} else if (lookupTerm) {
-			response = ""; // filled in when the lookup finishes, below
-		} else {
-			const unknownTopic = findUnknownTopic(text, view.memory);
-			if (unknownTopic && guest) {
-				response = formatDefinition({ kind: "missing", term: unknownTopic }, true);
-			} else if (unknownTopic) {
-				setPendingLearning(unknownTopic);
-				response = formatDefinition({ kind: "missing", term: unknownTopic });
-			} else {
-				// The AI conversation is off until the room asks the route, so he describes himself as today.
-				response = answerFromMemory(text, view.memory, guest ? messages.length : view.history.length, guest, false);
+
+		// Which of today's replies this message gets, worked out with no side effects.
+		const unknownTopic = findUnknownTopic(text, view.memory);
+		const { branch, pendingTopic } = pickBranch({
+			learning,
+			correctedName,
+			answeredName,
+			foundName,
+			lookedBack: asksOwnName && wantsNameFromChat(text),
+			recall: !crisis && wantsRecall(text),
+			turnReply: turn?.reply ?? null,
+			guest,
+			taughtSlang: taughtSlang !== null,
+			learnedFact: learnedFact !== null,
+			mathResult,
+			lookupTerm,
+			unknownTopic,
+		});
+		// Today's reply for a branch the model may write, also with no side effects. A lookup's is known only once it ends.
+		const ruleReply = ((): string | null => {
+			switch (branch) {
+				case "recall":
+					return recallReply(view.history);
+				case "turn":
+					return turn?.reply ?? null;
+				case "math":
+					return `That comes to ${mathResult}.`;
+				case "unknownTopic":
+					return unknownTopic === null ? null : formatDefinition({ kind: "missing", term: unknownTopic }, guest);
+				case "memory":
+					// His self-description follows whether the AI is on, not a pause after a crisis this visit.
+					return answerFromMemory(text, view.memory, guest ? messages.length : view.history.length, guest, aiEnabledRef.current);
+				default:
+					return null;
 			}
-		}
+		})();
+		const writer = writerFor({
+			branch,
+			aiOn: aiOn(),
+			guest,
+			preparedReply: prepared?.reply ?? null,
+			ruleReply,
+			textLength: text.length,
+			hasGenome: agent.genome !== null,
+		});
+
+		// Today's reply for the branch, with what it saves or asks. Used when code writes the reply, and when the model can't.
+		const codeReply = (): string => {
+			if (branch === "learning" && learning) {
+				// Saved as "meaning:<term>", so it answers "what does <term> mean" later and is never mixed up
+				// with ordinary facts ("my dog is Nala" is not the meaning of "dog").
+				const explanation = text.replace(/[.!?]+$/, "").replace(/^([A-Z])(?=[a-z])/, (c) => c.toLowerCase());
+				const learnedTopic = { key: `meaning:${learning}`, value: explanation };
+				setMemory((current) => [
+					...current.filter((fact) => fact.key !== learnedTopic.key),
+					learnedTopic,
+				]);
+				setPendingLearning(null);
+				void saveFact(learnedTopic);
+				return `Understood. "${learning}" means ${explanation}. I'll remember that.`;
+			}
+			if (branch === "correctedName" && correctedName) {
+				rememberName(correctedName);
+				return `My apologies, ${correctedName}. I've corrected that.`;
+			}
+			if (branch === "answeredName" && answeredName) {
+				rememberName(answeredName);
+				return `Nice to meet you, ${answeredName}! I'll remember that.`;
+			}
+			if (branch === "foundName" && foundName) {
+				rememberName(foundName);
+				return `You're ${foundName}. My apologies, I should have caught that.`;
+			}
+			if (branch === "lookedBack") return "I looked back but couldn't find it. What's your name?";
+			// Nothing a guest says is kept, so Osmo says so rather than pretending to note it.
+			if (branch === "guestNotes") return GUEST_NO_NOTES;
+			if (branch === "slang" && taughtSlang) {
+				const slangFact = { key: `slang:${taughtSlang.word}`, value: taughtSlang.meaning };
+				setMemory((current) => [...current.filter((fact) => fact.key !== slangFact.key), slangFact]);
+				void saveFact(slangFact);
+				return `Understood. When you say "${taughtSlang.word}", I'll read it as "${taughtSlang.meaning}".`;
+			}
+			if (branch === "fact" && learnedFact) {
+				setMemory((current) => [
+					...current.filter((fact) => fact.key !== learnedFact.key),
+					learnedFact,
+				]);
+				void saveFact(learnedFact);
+				return `Noted. Your ${learnedFact.key} is ${learnedFact.value}.`;
+			}
+			// A topic he doesn't know: he asks Gur to explain it, and saves the answer next turn.
+			if (pendingTopic) setPendingLearning(pendingTopic);
+			// Recall, processTurn's reply, arithmetic, an unknown topic or his memory; "" for a lookup, filled in when it ends.
+			return ruleReply ?? "";
+		};
 
 		// A guest's turn is for its reply only: his mood, bond and session stay exactly as they were.
-		if (turn && !guest) {
-			if (turn.state.genome && turn.state.genome !== agent.genome) {
+		const applyTurn = (kept: TurnResult | null) => {
+			if (!kept || guest) return;
+			if (kept.state.genome && kept.state.genome !== agent.genome) {
 				try {
-					window.localStorage.setItem("osmo-seed", String(turn.state.genome.seed));
+					window.localStorage.setItem("osmo-seed", String(kept.state.genome.seed));
 				} catch {
 					/* remembering the seed is best-effort */
 				}
 			}
-			setAgent(turn.state);
-			setSession(turn.session);
+			setAgent(kept.state);
+			setSession(kept.session);
 			if (canSaveRef.current) {
 				// Serialize saves so a verdict never runs before its dilemma row exists.
 				persistQueueRef.current = persistQueueRef.current.then(() =>
-					persistTurn(turn.state, turn.effects),
+					persistTurn(kept.state, kept.effects),
 				);
 			}
-		}
+		};
 
 		// A guest's line and Osmo's reply to it are marked, so they never feed Gur's context later.
 		const mark = guest ? ({ speaker: "guest" } as const) : {};
 		const userMessage: ChatMessage = { role: "user", text, ...mark };
-		// A spoken message leaves a half-typed draft alone.
-		if (via === "typed") setInput("");
+		// Set once this turn's reply is delivered, so the wait's catch-all never adds a second one.
+		let replied = false;
 		// Every reply ends here: typed out by the circle, and handed to the voice.
 		// The user's message sits at messages.length, so the reply is at messages.length + 1; the
-		// composer is locked during a lookup, so nothing can land in between.
-		const deliver = (reply: string) => {
+		// composer is locked while Osmo waits, so nothing can land in between.
+		// A quiet reply is only shown and saved: it doesn't move the heart, start the typing or reach the voice.
+		const deliver = (reply: string, how: { quiet: boolean } = { quiet: false }) => {
+			replied = true;
 			const agentMessage: ChatMessage = { role: "agent", text: greetGuest(reply, guest && (options.greet ?? false), crisis), ...mark };
-			// Cut off any reply still being spoken, then speak the new one (or show it at once).
-			heart.rest();
-			setSpeaking(reduceMotionRef.current ? null : { index: messages.length + 1, chars: 0 });
+			if (!how.quiet) {
+				// Cut off any reply still being spoken, then speak the new one (or show it at once).
+				heart.rest();
+				setSpeaking(reduceMotionRef.current ? null : { index: messages.length + 1, chars: 0 });
+			}
 			setMessages((current) => [...current, agentMessage]);
 			void saveMessages([userMessage, agentMessage]);
 			// Handed over once sendText has returned, so the voice always knows its message was taken
 			// before the reply arrives, even when the reply is ready at once.
-			queueMicrotask(() => onReplyRef.current?.(agentMessage.text, via));
+			if (!how.quiet) queueMicrotask(() => onReplyRef.current?.(agentMessage.text, via));
 		};
-		setMessages((current) => [...current, userMessage]);
-		if (lookupTerm && response === "") {
-			setThinking(true);
-			void lookupWord(lookupTerm, {
+		// A word question waits for the dictionary, inside the turn's one wait.
+		const lookUp = async (term: string, wait: Waiting) => {
+			wait.on = "lookup";
+			const result = await lookupWord(term, {
 				fetch: (url, init) => fetch(url, init),
 				taught: taughtMeanings(view.memory),
 				cacheGet: canSaveRef.current ? getCachedLookup : undefined,
 				cachePut: canSaveRef.current && !guest ? putCachedLookup : undefined,
-			})
-				.catch((): Lookup => ({ kind: "missing", term: lookupTerm }))
-				.then((result) => {
-					if (result.kind === "missing" && !guest) setPendingLearning(result.term);
+			}).catch((): Lookup => ({ kind: "missing", term }));
+			if (result.kind === "missing" && !guest) setPendingLearning(result.term);
+			deliver(formatDefinition(result, guest));
+		};
+		// One wait per turn: thinking and the waiting turn are set once when it starts waiting, and cleared once
+		// when its reply is out (after a lookup, if there is one), on every path, so the room can't stay locked.
+		const startWait = (on: Waiting["on"], controller: AbortController | null, work: (wait: Waiting) => Promise<void>) => {
+			const wait: Waiting = { id: messages.length, on, controller, quiet: false, line: userMessage };
+			waitingRef.current = wait;
+			setThinking(true);
+			void (async () => {
+				try {
+					await work(wait);
+				} catch {
+					// Anything unexpected still ends in one reply, so a spoken turn never leaves the voice waiting.
+					if (!replied && !wait.quiet) deliver(ruleReply ?? "I'm not sure I follow. Could you rephrase that?");
+				} finally {
+					if (waitingRef.current === wait) waitingRef.current = null;
 					setThinking(false);
-					deliver(formatDefinition(result, guest));
-				});
+				}
+			})();
+		};
+
+		if (writer === "model" && turn && prepared) {
+			// A spoken message leaves a half-typed draft alone.
+			if (via === "typed") setInput("");
+			setMessages((current) => [...current, userMessage]);
+			const controller = new AbortController();
+			startWait("model", controller, async (wait) => {
+				// Reading the session can refresh the token over the network, with no limit of its own.
+				const signedIn = await Promise.race([
+					ensureSession().catch(() => null),
+					new Promise<null>((resolve) => setTimeout(() => resolve(null), ASK_TIMEOUT_MS)),
+				]);
+				const body = signedIn
+					? chatBody({ text, messages, memory: view.memory, facts: prepared.facts, state: prepared.state, math: branch === "math" ? mathResult : null })
+					: null;
+				const answer = signedIn && body ? await askForReply(fetch, signedIn.access_token, body, controller.signal) : null;
+				if (answer) {
+					setAiUsage((current) => nextUsage(current, answer));
+					// A crisis flag, a 403 or "off": nothing more is posted this visit.
+					if (answer.kind === "crisis" || (answer.kind === "fallback" && answer.stop)) aiStoppedRef.current = true;
+					// A 403 or "off" means it's really off; a crisis only pauses it for this visit.
+					if (answer.kind === "fallback" && answer.stop) aiEnabledRef.current = false;
+				}
+				// His state is applied only now that it's known whose reply is used.
+				applyTurn(keptTurn<TurnResult>(answer?.kind === "model" ? "model" : "code", prepared, turn));
+				if (answer?.kind === "model") {
+					deliver(answer.reply);
+				} else if (answer?.kind === "crisis") {
+					// The model saw talk of self-harm that the code missed: the reply is code's.
+					deliver(CRISIS_REPLY);
+				} else {
+					// Any other answer (a fallback, a failed request, no session): today's reply for the branch.
+					const response = codeReply();
+					if (branch === "lookup" && lookupTerm) await lookUp(lookupTerm, wait);
+					else deliver(response);
+				}
+			});
+			return true;
+		}
+
+		const response = codeReply();
+		applyTurn(turn);
+		// A spoken message leaves a half-typed draft alone.
+		if (via === "typed") setInput("");
+		setMessages((current) => [...current, userMessage]);
+		if (branch === "lookup" && lookupTerm) {
+			startWait("lookup", null, (wait) => lookUp(lookupTerm, wait));
 			return true;
 		}
 		deliver(response);
