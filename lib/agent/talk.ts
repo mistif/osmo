@@ -1,5 +1,5 @@
 import { blendLabel, dominantEmotions } from "./heart";
-import { BASELINE, type Activations, type AgentState, type Emotion } from "./state";
+import { BASELINE, EMOTIONS, type Activations, type AgentState, type Emotion } from "./state";
 import { BANNED_WORDS } from "./lexicon/banned";
 import { FEELING_SYNONYMS, feelingFor } from "./lexicon/feelings";
 import { PHRASES } from "./lexicon/phrases";
@@ -543,11 +543,15 @@ const ADJECTIVE: Record<Emotion, string> = {
 	boredom: "bored",
 };
 
-export function feelingPhrase(a: Activations, baseline: Activations = BASELINE): string {
-	const label = blendLabel(dominantEmotions(a, 3, baseline));
-	if (label === "calm") return "calm";
-	const toAdjective = (name: string) => ADJECTIVE[name as Emotion] ?? name;
+// A mood label ("sadness", "joy and trust") in adjectives ("sad", "happy and at ease"). "calm", a named blend
+// ("bittersweet") and any word that isn't an emotion stay as they are.
+export function feelingWords(label: string): string {
+	const toAdjective = (name: string) => ((EMOTIONS as readonly string[]).includes(name) ? ADJECTIVE[name as Emotion] : name);
 	return label.split(" and ").map(toAdjective).join(" and ");
+}
+
+export function feelingPhrase(a: Activations, baseline: Activations = BASELINE): string {
+	return feelingWords(blendLabel(dominantEmotions(a, 3, baseline)));
 }
 
 // ---- 4. Answer in proper sentences ----------------------------------------

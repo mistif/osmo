@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BASELINE, defaultState, type Activations } from "./state";
-import { causeOf, fallbackReply, feelingPhrase, normalize, parse, respond, SLANG } from "./talk";
+import { causeOf, fallbackReply, feelingPhrase, feelingWords, normalize, parse, respond, SLANG } from "./talk";
+import { moodLabel } from "./heart";
 import { mergedLexicon } from "./personality/assemble";
 
 const base = (): Activations => ({ ...BASELINE });
@@ -132,6 +133,34 @@ describe("feelingPhrase", () => {
 
 	it("keeps named blends", () => {
 		expect(feelingPhrase({ ...base(), joy: 0.85, sadness: 0.5 })).toBe("bittersweet");
+	});
+});
+
+describe("feelingWords", () => {
+	it("turns a mood label into the header's adjectives", () => {
+		expect(feelingWords("calm")).toBe("calm");
+		expect(feelingWords("sadness")).toBe("sad");
+		expect(feelingWords("loneliness")).toBe("lonely");
+		expect(feelingWords("joy and trust")).toBe("happy and at ease");
+	});
+
+	it("keeps named blends", () => {
+		for (const blend of ["bittersweet", "anxious anticipation", "conflicted", "longing", "content but restless"]) {
+			expect(feelingWords(blend), blend).toBe(blend);
+		}
+	});
+
+	it("says the same as feelingPhrase for the same mood", () => {
+		const moods: Partial<Activations>[] = [{}, { sadness: 0.5 }, { sadness: 0.5, loneliness: 0.4 }, { joy: 0.85, sadness: 0.5 }, { fear: 0.6, anger: 0.5 }];
+		for (const mood of moods) {
+			const a = { ...base(), ...mood };
+			expect(feelingWords(moodLabel(a)), JSON.stringify(mood)).toBe(feelingPhrase(a));
+		}
+	});
+
+	it("leaves a word that isn't an emotion as it is, even one every object has", () => {
+		expect(feelingWords("toString")).toBe("toString");
+		expect(feelingWords("constructor and joy")).toBe("constructor and happy");
 	});
 });
 
