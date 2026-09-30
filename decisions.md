@@ -59,13 +59,18 @@ Gur's decisions and the cross-lane rulings, oldest first. Append only. Each entr
   - The room is **voice only by default**: him, subtitles of what he says, what he heard, and the mic. The conversation as text is a per-device setting, off by default. His last words stay on screen; fading them is a per-device setting.
   - His natural voice is **fable** at speed 1.15, chosen from samples. The first-sound guard is 4 s, because the model takes about 2.1 s per sentence.
 
+- **2026-09-30 (main), Gur approved the AI conversation:** asked by main to "approve the language agent's spec and confirm the OpenAI data-sharing trade", Gur answered "yes sounds good". So:
+  - The phase 1 spec (`docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md`) is approved; language may build it.
+  - The sharing trade is accepted: OpenAI may use what Osmo sends (Gur's messages, the memory facts, mood and history in prompts, guests' words, and the spoken text).
+  - Context: he had just said Osmo is "so bad at conversation" and "just gets stuck" after testing voice mode.
+
 ## Waiting on Gur
 
 - Turn off Supabase sign-ups: Authentication → Sign In / Providers → "Allow new users to sign up".
 - Train the wake word (`docs/osmo-wake-word.md`).
 - If Safari on the iPhone won't share the microphone with its recognizer, messages spoken with the mic button there are always labelled "Someone else". Decide what to do about it once it's seen.
 - Decide whether preview deployments get the environment variables.
-- **Confirm the sharing trade before the AI conversation goes live.** The free allowance is for traffic shared with OpenAI, which means OpenAI may use what Osmo sends to improve its models: Gur's messages, the memory facts, mood and history in each prompt, and guests' words. With sharing on for the key's project, this also covers the speaking voice's text.
+- ~~**Confirm the sharing trade before the AI conversation goes live.**~~ Confirmed 2026-09-30 (see Settled). The free allowance is for traffic shared with OpenAI, which means OpenAI may use what Osmo sends to improve its models: Gur's messages, the memory facts, mood and history in each prompt, and guests' words. With sharing on for the key's project, this also covers the speaking voice's text.
 - Set a monthly spend limit in the OpenAI dashboard as a backstop. (Language, 2026-09-29: use a project hard spend limit, not a zero credit balance. OpenAI's help center says the free daily tokens need a positive credit balance.)
 - Before Osmo's AI conversation goes live, set `OPENAI_RESERVE_FRACTION=0.28` in the Investing project's `.env`, so the two systems together stay inside the free pools.
 - Consider giving Osmo its own OpenAI project and key, separate from the investing agents. The dashboard then shows Osmo's daily usage on its own, and each project gets its own budget. Check first that data sharing, and so the free allowance, is on for the new project.
