@@ -17,6 +17,9 @@ export type FlavorContext = {
 const LIGHT_INTENTS = new Set(["greeting", "howAreYou", "thanks", "laughter", "ack", "compliment"]);
 const HEAVY_TONES = new Set(["sadness", "fear", "anger", "guilt", "loneliness"]);
 
+// A turn that gets no extras: his mood is heavy, or the message is sensitive. Used here and by prepareTurn.
+export const heavyTurn = (tone: string, sensitive: boolean): boolean => HEAVY_TONES.has(tone) || sensitive;
+
 const FORMAL_SWAPS: [RegExp, string][] = [
 	[/\bHey\b/g, "Hello"],
 	[/\bHi\b/g, "Greetings"],
@@ -83,7 +86,7 @@ function welcomesBack(ctx: MilestoneContext): boolean {
 // (it waits for a better moment), and only one that fits now. flavorTurn says it; prepareTurn in mind.ts hands it to a
 // language model to say.
 export function milestoneDue(ctx: MilestoneContext): MilestoneId | null {
-	if (!ctx.bond || welcomesBack(ctx) || HEAVY_TONES.has(ctx.tone) || ctx.sensitive) return null;
+	if (!ctx.bond || welcomesBack(ctx) || heavyTurn(ctx.tone, ctx.sensitive)) return null;
 	if (ctx.intent === "misunderstood" || ctx.intent === "rudeFeedback") return null;
 	return ctx.bond.toMention.find((id) => fitsNow(id, ctx.intent)) ?? null;
 }
@@ -100,7 +103,7 @@ export function flavorTurn(reply: string, ctx: FlavorContext): { text: string; m
 	// The session's turn restarts at 0 on every page load, so rolls and picks follow the lifetime message count.
 	const turn = bond ? bond.messages : ctx.turn;
 
-	const heavy = HEAVY_TONES.has(ctx.tone) || ctx.sensitive;
+	const heavy = heavyTurn(ctx.tone, ctx.sensitive);
 	const calmEnough = intent !== "howAreYou" || ctx.tone === "calm";
 	const light = LIGHT_INTENTS.has(intent) && calmEnough && !heavy;
 

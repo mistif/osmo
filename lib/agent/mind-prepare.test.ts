@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultState, type AgentState } from "./state";
-import { newSession, prepareTurn, processTurn, type Session } from "./mind";
+import { CRISIS_CAUSE, newSession, prepareTurn, processTurn, type Session } from "./mind";
 import { emptyBond, stageOf } from "./bond/bond";
 import { moodLabel } from "./heart";
 import { moodTheme } from "./mood-theme";
@@ -159,6 +159,7 @@ describe("prepareTurn: the facts a prompt may use", () => {
 			cause: "of what you shared with me",
 			stage: stageOf(r.state.bond),
 			milestone: "days7",
+			heavy: false,
 			awayMs: 5_000,
 			userName: "Gur",
 			turn: 3,
@@ -170,6 +171,22 @@ describe("prepareTurn: the facts a prompt may use", () => {
 		const r = prepareTurn(withBond(), session, "the weather is fine", c);
 		expect(r.facts).toMatchObject({ cause: null, stage: "stranger", milestone: null, awayMs: 0, userName: null, turn: 0 });
 		expect(typeof r.facts.feeling).toBe("string");
+	});
+
+	it("marks a heavy turn, so the model adds no extras", () => {
+		expect(prepareTurn(withBond(), session, "my mom died last week", ctx()).facts.heavy).toBe(true);
+		expect(prepareTurn(withBond(), session, "you are useless", ctx()).facts.heavy).toBe(true);
+		expect(prepareTurn(withBond(), session, "the weather is fine", ctx()).facts.heavy).toBe(false);
+	});
+
+	it("never hands a crisis cause to the model, on that turn or the next", () => {
+		const crisis = prepareTurn(withBond(), session, "i want to kill myself", ctx());
+		expect(crisis.session.cause).toBe(CRISIS_CAUSE);
+		expect(crisis.facts.cause).toBeNull();
+		const next = prepareTurn(crisis.state, crisis.session, "the weather is fine", ctx());
+		expect(next.facts.cause).toBeNull();
+		const feeling = prepareTurn(crisis.state, crisis.session, "i feel so lonely today", ctx());
+		expect(feeling.facts.cause).not.toBeNull();
 	});
 
 	it("gives a guest in crisis no reason either", () => {

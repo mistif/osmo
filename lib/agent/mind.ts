@@ -18,7 +18,7 @@ import { moodLabel, stepHeart } from "./heart";
 import { withBaseFeelings } from "./lexicon/feelings";
 import { moodTheme, type MoodTheme } from "./mood-theme";
 import { adoptGenome, assemble, resolve } from "./personality/assemble";
-import { flavorTurn, milestoneDue } from "./personality/flavor";
+import { flavorTurn, heavyTurn, milestoneDue } from "./personality/flavor";
 import { afterReroll, describeMadeOf, isAskMadeOf, isConfirmRoll, parseReroll, REROLL_PROMPT } from "./personality/readout";
 import type { AgentState } from "./state";
 import { CRISIS_REPLY, isCrisis } from "./safety";
@@ -128,7 +128,7 @@ function startTurn(state: AgentState, session: Session, text: string, ctx: TurnC
 		return {
 			decided: {
 				state: s,
-				session: { ...sess, last: null, cause: "you told me you're hurting" },
+				session: { ...sess, last: null, cause: CRISIS_CAUSE },
 				reply: CRISIS_REPLY,
 				effects,
 			},
@@ -390,6 +390,9 @@ export function processTurn(state: AgentState, session: Session, text: string, c
 }
 
 // What a prompt may know about him this turn. For a guest, only how he feels: never why, never the bond, never Gur's name.
+// The cause a crisis leaves behind. prepareTurn never hands it to a model; the route can check for it too.
+export const CRISIS_CAUSE = "you told me you're hurting";
+
 export type TurnFacts = {
 	// How he feels, in words ("calm", "a little lonely").
 	feeling: string;
@@ -399,6 +402,8 @@ export type TurnFacts = {
 	stage: Stage;
 	// A milestone he hasn't mentioned yet.
 	milestone: MilestoneId | null;
+	// A heavy mood or a sensitive message: the same rule that stops flavorTurn adding extras.
+	heavy: boolean;
 	// Time since the previous message.
 	awayMs: number;
 	userName: string | null;
@@ -422,7 +427,7 @@ function sensitiveTurn(parts: ReturnType<typeof understand>): boolean {
 
 // An open turn left the way step 6 leaves it once it has answered: the new cause, the milestone that's due marked as
 // said (the model is asked to say it), and a first feeling not thanked for this turn not brought up later.
-function leaveForModel(open: OpenTurn, ctx: TurnContext): { result: TurnResult; milestone: MilestoneId | null } {
+function leaveForModel(open: OpenTurn, ctx: TurnContext): { result: TurnResult; milestone: MilestoneId | null; heavy: boolean } {
 	const { s, sess, p, awayMs, trimmed, effects } = open;
 	const parts = understand(trimmed, ctx.slang, {
 		recent: ctx.recent,
@@ -430,10 +435,12 @@ function leaveForModel(open: OpenTurn, ctx: TurnContext): { result: TurnResult; 
 		personal: ctx.vocabulary ? new Map(Object.entries(ctx.vocabulary)) : undefined,
 	});
 	const cause = parts.map((x) => causeOf(x.intent)).find((c) => c !== null) ?? null;
+	const tone = moodTheme(s.activations, p.baseline).tone;
+	const sensitive = sensitiveTurn(parts);
 	const milestone = milestoneDue({
 		intent: parts[0]?.intent.type ?? "",
-		tone: moodTheme(s.activations, p.baseline).tone,
-		sensitive: sensitiveTurn(parts),
+		tone,
+		sensitive,
 		bond: s.bond,
 		awayMs,
 	});
@@ -441,6 +448,7 @@ function leaveForModel(open: OpenTurn, ctx: TurnContext): { result: TurnResult; 
 	return {
 		result: { state: { ...s, bond: mentioned(said, "firstFeeling") }, session: cause ? { ...sess, cause } : sess, reply: null, effects },
 		milestone,
+		heavy: heavyTurn(tone, sensitive),
 	};
 }
 
@@ -453,19 +461,19 @@ function leaveForModel(open: OpenTurn, ctx: TurnContext): { result: TurnResult; 
 export function prepareTurn(state: AgentState, session: Session, text: string, ctx: TurnContext): PreparedTurn {
 	const guest = ctx.guest === true;
 	const start = startTurn(state, session, text, ctx);
-	const { result, milestone } =
-		"decided" in start
-			? { result: start.decided, milestone: null }
-			: guest
-				? { result: { state: start.open.s, session: start.open.sess, reply: null, effects: [] }, milestone: null }
-				: leaveForModel(start.open, ctx);
+	const open = !("decided" in start) && !guest ? leaveForModel(start.open, ctx) : null;
+	const result: TurnResult =
+		"decided" in start ? start.decided : (open?.result ?? { state: start.open.s, session: start.open.sess, reply: null, effects: [] });
 	const baseline = resolve(result.state.genome).baseline;
+	const tone = moodTheme(result.state.activations, baseline).tone;
 	const facts: TurnFacts = {
 		feeling: moodLabel(result.state.activations, baseline),
-		tone: moodTheme(result.state.activations, baseline).tone,
-		cause: guest ? null : result.session.cause,
+		tone,
+		// What a crisis left behind stays between him and Gur.
+		cause: guest || result.session.cause === CRISIS_CAUSE ? null : result.session.cause,
 		stage: guest ? "stranger" : stageOf(result.state.bond),
-		milestone,
+		milestone: open?.milestone ?? null,
+		heavy: open ? open.heavy : heavyTurn(tone, false),
 		awayMs: guest || ctx.lastAt === null ? 0 : ctx.now - ctx.lastAt,
 		userName: guest ? null : (ctx.userName ?? null),
 		turn: guest ? 0 : session.turns,
