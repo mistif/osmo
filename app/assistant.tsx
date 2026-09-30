@@ -347,7 +347,7 @@ export default function AgentChat() {
 				}
 				const [loaded, facts, history] = await Promise.all([
 					loadState(),
-					supabase.from("memory_facts").select("key,value"),
+					supabase.from("memory_facts").select("key,value").order("updated_at"),
 					supabase.from("messages").select("role,text,speaker").order("created_at").order("id"),
 				]);
 				canSaveRef.current = loaded.ok;
