@@ -46,7 +46,7 @@ How Osmo reads a message and what he says back, whether code or an AI model writ
 - **Tests:** `talk`, `context`, `safety`, `dictionary`, `chatlog`, `voice`, `typos`, `facts`.
 - **The AI conversation** (since 2026-09-29): Osmo's replies written by an OpenAI model inside the free daily allowance (see `decisions.md`).
   - It owns the server route, the prompt builder, the tools, the daily token cap, and the fallback to the rule-based chain.
-  - Planned new files (2026-09-30, from its approved spec): `app/api/chat/**`, `lib/chat/**`, `scripts/chat-probe.mts`.
+  - Planned new files (2026-09-30, from its approved spec): `app/api/chat/**`, `lib/chat/**`, `scripts/chat-probe.mjs`.
   - It reuses speaking's `lib/server/auth.ts`, and asks main for the token-ledger table.
 - **Docs:** the dictionary spec and plan, and the AI conversation's spec and plan.
 
