@@ -3,7 +3,9 @@
 Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk.
 
 ## Now
-**Waiting for Gur to review the AI conversation implementation plan and choose how it is built.** The plan is `my-app/docs/superpowers/plans/2026-09-30-osmo-ai-conversation.md` (`576359d`, local): 16 tasks with complete code. It was reviewed on three lenses with skeptics, fixed, and rebuilt task by task in a scratch copy, where 988 tests pass, tsc is clean and eslint has no errors. No code is in the repo yet. Main has already applied `ai_calls` (verified live) and ordered `memory_facts` (`baa0c4e`).
+**Building the AI conversation plan inline (Gur chose native, 2026-09-30).** Files I'm holding: `lib/chat/**`, `app/api/chat/**`, `scripts/chat-probe.mjs`, `lib/agent/talk.ts`, `context.ts`, `lib/facts.ts`, and my part of `app/assistant.tsx` (the chain, `sendText`, `deliver`, and the model path). Also done: Osmo's memory of Gur wiped at his request (see `decisions.md`).
+
+**Was:** waiting for Gur to review the plan. The plan is `my-app/docs/superpowers/plans/2026-09-30-osmo-ai-conversation.md` (`576359d`, local): 16 tasks with complete code. It was reviewed on three lenses with skeptics, fixed, and rebuilt task by task in a scratch copy, where 988 tests pass, tsc is clean and eslint has no errors. No code is in the repo yet. Main has already applied `ai_calls` (verified live) and ordered `memory_facts` (`baa0c4e`).
 
 ## Just landed
 - **Pushed `main` to `b26f156` at Gur's direct request (2026-09-30), and it's live.** It includes the merge of cloud's `09b2a41` and my spec `56d2784`. The details and checks are in `decisions.md`.
@@ -71,10 +73,7 @@ Nothing. Everything of mine on `main` is ready to ship.
 - A name that is also donor slang ("Zenn") gets rewritten.
 
 ### Test data in Gur's account
-These came from live checks, and Gur knows about them. Delete them only if he asks.
-- The memory fact `ephemrl`, from "what does serendipity mean".
-- The user_words `valo`, `vlao`, `zenko` and `ephemrel`.
-- One exchange, "what does ephemeral mean", from checking the voice chain on 2026-09-27.
+None left. Osmo's memory of Gur was wiped at his request on 2026-09-30 (see `decisions.md`).
 
 ---
 

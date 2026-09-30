@@ -65,6 +65,13 @@ Gur's decisions and the cross-lane rulings, oldest first. Append only. Each entr
   - Context: he had just said Osmo is "so bad at conversation" and "just gets stuck" after testing voice mode.
 - **2026-09-30 (language), Gur confirmed it to language directly,** and changed one choice in the spec. **Short spoken follow-ups reach the model.** A spoken line the voice counts as his, whether by its score or by the 1.5-second carry-over, can get a model reply. He picked this over keeping carry-over lines rule-based, because the room is voice-first now. He accepts that a guest's short remark inside his conversation could get a model reply. So `SendOptions.recognized` isn't needed. The spec is updated in `66393bf`.
 
+- **2026-09-30 (language), Gur wiped Osmo's memory of him and gave him who Gur is.** Asked directly (AskUserQuestion), Gur chose "wipe facts, chat and words, plus his heart and bond" and "who you are" from a profile he pasted. Done in one transaction on his user only:
+  - Deleted: all 252 messages, every memory fact except `name`, the 5 learned words and 3 cached lookups (the old test data), event_log, dilemma_log, emotion_associations and mood_days.
+  - `agent_state`: the row and his **genome are kept** (seed 42, same donors), so his personality is unchanged. Mood, coupling, weights, outlook and bond are what the room gives a new Osmo (`adoptGenome(defaultState(), genome, {resetWeights:false})`); the bond is empty.
+  - Voiceprints are kept.
+  - 15 new facts, in this order after `name`: full name, school, major, transfer goal, home, location, job, business, projects, programming languages, internship goal, likes, workouts, favorite game, reply style. Left out on purpose: other people, accounts, security events, subscriptions, schedules, application statuses and deadlines. These facts go to OpenAI once the AI conversation is on.
+  - Main was told before the reset.
+
 ## Waiting on Gur
 
 - Turn off Supabase sign-ups: Authentication → Sign In / Providers → "Allow new users to sign up".
