@@ -31,9 +31,17 @@ Not holding any shared file open. No uncommitted work of mine in `my-app`.
   along. Verified from the outside, not from a desk: Vercel production `dpl_HJzJLPLU5qhia5VTWL94zCiuBhvs` built
   `b26f156` and is READY, and `POST https://osmo-xyz.vercel.app/api/speak` with no token returns
   `401 {"error":"unauthorized"}` — so the route is deployed and guarded in production.
-  - **Vercel has no `OPENAI_API_KEY` and no `CHATGPT_KEY`** (checked the project's variables: only Supabase and
-    Postgres, all Production-target). So the live site quietly uses the built-in voice, which is the designed
-    fallback and the same as before. Only Gur types keys; told him where.
+  - **Gur added `OPENAI_API_KEY` to Vercel (Production, sensitive) on 2026-09-30, and production now has it.**
+    He added it about five minutes *after* the then-current deployment was built, so that build could not see it —
+    Vercel injects variables at deploy time. Redeployed the same commit `cdb592f` at his OK:
+    `dpl_3jNCzTyhUwBmoLcxJ75QQnw51ifC`, READY in ~37 s, `osmo-xyz.vercel.app` reassigned with `aliasError: null`.
+    Production smoke check after it: `/` 200, `/lock` 200, `/api/speak` 401 with no token and 401 with a bogus one.
+    - **The target is Production only**, so branch previews still have no key. The preview-env gap other lanes hit
+      is unchanged and remains Gur's call.
+    - **Nobody can verify the key actually works without Gur.** `/api/speak` checks auth before the key, so an
+      unauthenticated call returns 401 either way, and a valid token would mean using his session. The proof is
+      him turning the switch on and hearing it. If the key were wrong or out of credit, the route would 502 and he
+      would simply hear the built-in voice — no error surfaces to him by design.
 
 - **`3902078` on `main`: Osmo's natural voice, behind a setting that is off.**
   OpenAI `gpt-4o-mini-tts` via a new `POST /api/speak`, one clip per sentence with a breath between
