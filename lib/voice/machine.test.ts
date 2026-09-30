@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectorOn, FOLLOW_UP_MS, initialVoice, micOpen, recognizerOn, step, type VoiceEvent, type VoiceState } from "./machine";
+import { detectorOn, FOLLOW_UP_MS, GREET_AGAIN_MS, greetDue, initialVoice, micOpen, recognizerOn, step, type VoiceEvent, type VoiceState } from "./machine";
 import { WAKE } from "./wake";
 
 const run = (events: VoiceEvent[], start: VoiceState = initialVoice(0)) => events.reduce(step, start);
@@ -80,10 +80,14 @@ describe("step", () => {
 		expect(step(followup, { type: "dropped", now: 50 }).mode).toBe("sleeping");
 	});
 
-	it("remembers a guest was greeted, until the conversation ends", () => {
-		const greeted = step(step(listening(), { type: "wake", now: 1 }), { type: "greeted" });
-		expect(greeted.greeted).toBe(true);
-		expect(step(greeted, { type: "dropped", now: 2 }).greeted).toBe(false);
+	// A guest who wakes him again a minute later isn't met for the first time again.
+	it("greets a guest once, and again only after a long quiet", () => {
+		const greeted = step(step(listening(), { type: "wake", now: 1 }), { type: "greeted", now: 1 });
+		expect(greetDue(greeted, 2)).toBe(false);
+		const later = step(step(greeted, { type: "dropped", now: 2 }), { type: "wake", now: 60_000 });
+		expect(greetDue(later, 60_000)).toBe(false);
+		expect(greetDue(later, 1 + GREET_AGAIN_MS)).toBe(true);
+		expect(greetDue(step(listening(), { type: "wake", now: 1 }), 1)).toBe(true);
 	});
 
 	it("speaks a typed reply from sleep, then sleeps again without a follow-up", () => {
@@ -129,7 +133,7 @@ describe("step", () => {
 	it("ignores a late voice check once the conversation is over", () => {
 		const sleeping = listening();
 		expect(step(sleeping, { type: "judged", speaker: "you" })).toBe(sleeping);
-		expect(step(sleeping, { type: "greeted" })).toBe(sleeping);
+		expect(step(sleeping, { type: "greeted", now: 1 })).toBe(sleeping);
 		const off = initialVoice();
 		expect(step(off, { type: "judged", speaker: "you" })).toBe(off);
 	});

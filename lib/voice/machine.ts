@@ -16,8 +16,8 @@ export type VoiceState = {
 	heard: boolean;
 	// This conversation has recognized Gur.
 	owner: boolean;
-	// A guest has been greeted in this conversation.
-	greeted: boolean;
+	// When a guest was last greeted (ms), kept across conversations so waking him again doesn't repeat it.
+	greetedAt: number | null;
 	// The reply being spoken belongs to a spoken conversation, so a follow-up window comes after it.
 	conversation: boolean;
 };
@@ -28,7 +28,7 @@ export type VoiceEvent =
 	| { type: "mic"; now: number }
 	| { type: "speech"; now: number }
 	| { type: "judged"; speaker: Speaker }
-	| { type: "greeted" }
+	| { type: "greeted"; now: number }
 	| { type: "sent"; now: number }
 	| { type: "dropped"; now: number }
 	| { type: "reply"; via: Via; spoken: boolean; now: number }
@@ -42,12 +42,12 @@ export type VoiceEvent =
 export const FOLLOW_UP_MS = 6000;
 
 export function initialVoice(now = 0): VoiceState {
-	return { mode: "off", listening: false, since: now, heard: false, owner: false, greeted: false, conversation: false };
+	return { mode: "off", listening: false, since: now, heard: false, owner: false, greetedAt: null, conversation: false };
 }
 
 // Back to waiting: asleep if listening is on, otherwise off. The conversation is over.
 function rest(s: VoiceState, now: number): VoiceState {
-	return { ...s, mode: s.listening ? "sleeping" : "off", since: now, heard: false, owner: false, greeted: false, conversation: false };
+	return { ...s, mode: s.listening ? "sleeping" : "off", since: now, heard: false, owner: false, conversation: false };
 }
 
 // A conversation runs from waking (or the mic button) until he rests again.
@@ -57,6 +57,10 @@ export const inConversation = (s: VoiceState) =>
 export const detectorOn = (s: VoiceState) => s.mode === "sleeping";
 export const recognizerOn = (s: VoiceState) => s.mode === "awake" || s.mode === "followup";
 // The microphone, and the listening line under the text box, are on exactly when one of them runs.
+// A guest is greeted again only after this long without one.
+export const GREET_AGAIN_MS = 10 * 60_000;
+export const greetDue = (s: VoiceState, now: number) => s.greetedAt === null || now - s.greetedAt >= GREET_AGAIN_MS;
+
 export const micOpen = (s: VoiceState) => detectorOn(s) || recognizerOn(s);
 
 export function step(s: VoiceState, e: VoiceEvent): VoiceState {
@@ -77,7 +81,7 @@ export function step(s: VoiceState, e: VoiceEvent): VoiceState {
 		case "judged":
 			return inConversation(s) && e.speaker === "you" && !s.owner ? { ...s, owner: true } : s;
 		case "greeted":
-			return inConversation(s) && !s.greeted ? { ...s, greeted: true } : s;
+			return inConversation(s) && greetDue(s, e.now) ? { ...s, greetedAt: e.now } : s;
 		case "sent":
 			return s.mode === "awake" ? { ...s, mode: "thinking", since: e.now } : s;
 		case "dropped":

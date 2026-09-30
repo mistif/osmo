@@ -4,10 +4,10 @@
 
 import type { SendOptions, Speaker, Via } from "./guest";
 import { speechSeconds, trimSilence } from "./levels";
-import { detectorOn, inConversation, initialVoice, micOpen, recognizerOn, step, type VoiceEvent, type VoiceState } from "./machine";
+import { detectorOn, greetDue, inConversation, initialVoice, micOpen, recognizerOn, step, type VoiceEvent, type VoiceState } from "./machine";
 import type { SampleRing } from "./ring";
 import { messageFrom, spokenSeconds } from "./utterance";
-import { bestScore, judge, type Voiceprint } from "./voiceprint";
+import { bestScore, CARRY_OVER_SECONDS, judge, type Voiceprint } from "./voiceprint";
 
 export const MIC_BLOCKED = "I can't hear you. Allow the microphone for this site in your browser settings, then try again.";
 export const NO_MIC = "I can't find a microphone on this device.";
@@ -364,8 +364,9 @@ export class VoiceEngine {
 			return;
 		}
 		this.send({ type: "judged", speaker });
-		const greet = speaker === "guest" && !this.state.greeted;
-		if (greet) this.send({ type: "greeted" });
+		const now = this.deps.now();
+		const greet = speaker === "guest" && greetDue(this.state, now);
+		if (greet) this.send({ type: "greeted", now });
 		let accepted: boolean;
 		try {
 			accepted = this.config?.sendText(message, { via: "voice", speaker, greet }) ?? false;
@@ -390,7 +391,12 @@ export class VoiceEngine {
 				return null;
 			}
 		}
-		return judge({ score, speechSeconds: seconds, ownerSoFar: this.state.owner });
+		const speaker = judge({ score, speechSeconds: seconds, ownerSoFar: this.state.owner });
+		// Dev only, for tuning MATCH_THRESHOLD against real voices: how close this line was to Gur's voiceprints.
+		if (process.env.NODE_ENV !== "production") {
+			console.info(`[osmo voice] ${speaker} score=${score.toFixed(3)} speech=${seconds.toFixed(1)}s carried=${this.state.owner && seconds < CARRY_OVER_SECONDS} "${message}"`);
+		}
+		return speaker;
 	}
 
 	private heardProblem(id: number, problem: HearProblem): void {
