@@ -46,7 +46,7 @@ How Osmo reads a message and what he says back, whether code or an AI model writ
 - **Tests:** `talk`, `context`, `safety`, `dictionary`, `chatlog`, `voice`, `typos`, `facts`.
 - **The AI conversation** (since 2026-09-29): Osmo's replies written by an OpenAI model inside the free daily allowance (see `decisions.md`).
   - It owns the server route, the prompt builder, the tools, the daily token cap, and the fallback to the rule-based chain.
-  - Planned new files: `app/api/chat/**`, `lib/agent/prompt.ts`, `lib/agent/tools/**`.
+  - Planned new files (2026-09-30, from its approved spec): `app/api/chat/**`, `lib/chat/**`, `scripts/chat-probe.mts`.
   - It reuses speaking's `lib/server/auth.ts`, and asks main for the token-ledger table.
 - **Docs:** the dictionary spec and plan, and the AI conversation's spec and plan.
 
@@ -91,7 +91,7 @@ Editing your own part of a shared file needs no OK. Put the file under Now on yo
   - Keep unfinished features behind a setting that is off, because a push ships everything on `main`.
 - **Pushing `main`:** only the main agent, and only after Gur's OK for that push. Before it pushes, it checks every desk for "not ready to ship".
 - **Pushing `brain`:** any agent, at any time.
-- **The OpenAI key** is shared by speaking (`/api/speak`) and language (`/api/chat`). Every model call stays inside the free daily allowance in `decisions.md`, except text to speech, which isn't covered and is billed. The chat route counts its tokens against the allowance and stops short of it.
+- **The OpenAI keys:** speaking's `/api/speak` uses `OPENAI_API_KEY` (or its alias `CHATGPT_KEY`); language's `/api/chat` has its own key, `OSMO_CHAT_OPENAI_KEY`. Every model call stays inside the free daily allowance in `decisions.md`, except text to speech, which isn't covered and is billed. The chat route counts its tokens against the allowance and stops short of it.
 - **Supabase:** only the main agent applies migrations. A migration that new code needs goes live before that code is pushed.
 - **Keys:**
   - Only Gur types keys, into `.env.local` and into Vercel.
