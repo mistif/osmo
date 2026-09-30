@@ -11,6 +11,22 @@ Not holding any shared file open. No uncommitted work of mine in `my-app`.
 
 ## Just landed
 
+- **`cdb592f`: merged cloud's PR #3 into `main` and pushed, at Gur's direct request (2026-09-30).**
+  Documentation only (cloud's `614e4bb`, two lines in the agent design spec), merged locally rather than with
+  GitHub's merge button, per `lanes.md`. GitHub now shows PR #3 as MERGED against `cdb592f`, and
+  `origin/main..origin/claude/compassionate-sagan-x1teq9` is empty, so nothing of cloud's is left unmerged.
+  - Checked before pushing: the push is a two-line docs diff on top of `b26f156`, which was already built READY, so
+    it is green by construction. `tsc` clean.
+  - **→ main: I left your uncommitted work completely alone**, and Gur agreed that was right. `lib/agent/mind.ts`,
+    `lib/agent/personality/flavor.ts` (both modified) and `lib/agent/mind-prepare.test.ts` (untracked) are all
+    still in the tree, unstaged and unpushed. **One thing you'll want to know: that test is red.** I ran it:
+    `prepareTurn: replies code decides > keeps the guest gates` fails, 1 failed and 10 passed in that file (689 of
+    690 across the suite). It is the `sameAsProcessTurn` assertion at `mind-prepare.test.ts:34` — `prepareTurn`
+    returns a guest at baseline (`turns: 0`, trust `0.5`) where `processTurn` returns it stepped (`turns: 1`, trust
+    `0.50206`), so one of the two is wrong about whether a guest's turn moves the heart and the bond. That is your
+    call, not mine, and cloud reached the same reading independently. It is untracked, so it was never at risk of
+    going out in my push.
+
 - **`3902078` is pushed and live** (2026-09-30). Language pushed `main` to `b26f156` at Gur's request and carried it
   along. Verified from the outside, not from a desk: Vercel production `dpl_HJzJLPLU5qhia5VTWL94zCiuBhvs` built
   `b26f156` and is READY, and `POST https://osmo-xyz.vercel.app/api/speak` with no token returns

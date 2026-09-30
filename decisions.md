@@ -73,3 +73,7 @@ Gur's decisions and the cross-lane rulings, oldest first. Append only. Each entr
   - His delivery is **two tones**: composed essentially always, and grave only when his mood is clearly negative and strongly felt (`valence <= -0.45` and `strength >= 0.6`). Gur's steer: he is JARVIS, so he stays relative and only goes out of line if something is really bad.
   - Continuous mood modulation and a "bright" tone were rejected: imperceptible, and they wreck the clip cache.
   - Cost control is **a monthly spend limit in the OpenAI dashboard**, not a rate limiter, which can't be made reliable on serverless. The route requires a signed-in user and caps each request at 400 characters.
+- **2026-09-30 (speaking), Gur's "commit and merge everything, and make Vercel up to date":**
+  - Cloud's **PR #3 was merged locally and `main` pushed to `cdb592f`** by the speaking lane, at Gur's explicit per-push OK. Docs only. PR #3 now reads MERGED on GitHub, and no cloud branch commit is left off `main`.
+  - **Main's uncommitted `prepareTurn` work was deliberately not committed.** `lib/agent/mind-prepare.test.ts` is red (`keeps the guest gates`), it is main's lane, and language has an open Ask for two fields to be added before it lands. Gur agreed to leave it. A push is a deploy, so a known-red test must not go with one.
+  - **Vercel has no `OPENAI_API_KEY` (nor `CHATGPT_KEY`).** Production therefore uses the built-in voice, which is the natural voice's designed fallback, not a fault. Only Gur types keys; he adds it when he wants the natural voice live.
