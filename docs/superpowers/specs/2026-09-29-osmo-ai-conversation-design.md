@@ -29,6 +29,8 @@ Osmo answers almost anything and holds a real conversation, while staying himsel
 The review turned up cases the decisions above don't settle. Each is decided here the cautious way. Any of them can be changed.
 1. **A separate OpenAI project and key for the conversation** (`OSMO_CHAT_OPENAI_KEY`). Data sharing is switched on per project, not per request. If the conversation used the key `/api/speak` uses, switching sharing on for it would also share every sentence the natural voice speaks, crisis replies included, and text to speech gets no free tokens. With its own project, only the conversation is shared, and the dashboard and spend limit cover Osmo alone.
 2. **Short spoken follow-ups keep the rule-based replies.** Once the voice has recognized Gur, a follow-up with under 1.5 seconds of speech counts as his even when his voice doesn't match. That line could be a guest's, so its reply isn't written by the model. Only typed lines, and spoken lines whose own voice score matches his, get a model reply. The short line still stays in the conversation, like every line of his, so later requests can include it in the recent chat. If short follow-ups feel clumsy, the alternative is to let them through and accept that a guest's short line could get a model reply.
+
+   Since 2026-09-30 the room is voice-only by default (no text box unless "Show the conversation as text" is on), so this choice touches most of the conversation. Quick replies like "why?", "yeah" or "go on" are usually under 1.5 seconds and often too short to score, so they'd get rule-based answers in the middle of a model conversation. Until main adds `recognized`, no spoken line gets a model reply at all.
 3. **After a crisis message, Osmo stays on the rule-based replies until the room is reloaded.** The model also acts as a second crisis detector. If it sees talk of self-harm that the code missed, the code gives the crisis reply, not the model.
 4. **Some replies that save nothing stay in code:**
    - "what are you made of", "how close are we", "when did we meet" and the re-roll nudges, because `prepareTurn` decides them and they read data the prompt doesn't carry;
@@ -124,7 +126,7 @@ For an everyday reply the model may write, the browser:
 The browser keeps saving the conversation, `agent_state`, `mood_days`, facts and vocabulary itself, as today. The route writes only the token ledger.
 
 ### 6. A crisis message is never dropped
-Today `sendText` returns `false` while `thinking`, and the voice drops the message. The composer, the mic button and Send are locked while Osmo waits, but a spoken message can still arrive: by the wake word, or in the follow-up window after a spoken reply. With the model the wait can reach 15 seconds.
+Today `sendText` returns `false` while `thinking`, and the voice drops the message. The composer, the mic button and Send are locked while Osmo waits, but a spoken message can still arrive: by the wake word, or in the follow-up window after a spoken reply. With the model the wait can reach 15 seconds. This only happens while a typed message is waiting, so only when the conversation is shown as text. In voice-only mode a spoken message puts the voice itself into waiting, and it hears nothing more until the reply comes.
 
 So `isCrisis` is checked before the `thinking` gate. A crisis message that arrives while Osmo is waiting, for a model reply or a dictionary lookup, is answered at once:
 - **The crisis reply goes out now.**
