@@ -11,7 +11,7 @@ import { moodTheme } from "@/lib/agent/mood-theme";
 import { adoptGenome, assemble, newSeed, resolve } from "@/lib/agent/personality/assemble";
 import { charDelay, speechBeat } from "@/lib/agent/speech";
 import { beatTargets, BETWEEN_WORDS, currentSentence, wordTargets } from "@/lib/room/heart-motion";
-import { fallbackReply, feelingPhrase, GUEST_NO_NOTES } from "@/lib/agent/talk";
+import { feelingPhrase, GUEST_NO_NOTES } from "@/lib/agent/talk";
 import { formatDefinition, lookupWord, parseLookup, type Lookup } from "@/lib/agent/dictionary";
 import { getCachedLookup, putCachedLookup } from "@/lib/agent/dictionary-store";
 import { learnFromMessage } from "@/lib/agent/lexicon/vocabulary";
@@ -32,7 +32,8 @@ import {
 import { greetGuest, type SendOptions, type Via } from "@/lib/voice/guest";
 import { isCrisis } from "@/lib/agent/safety";
 import { defaultState, type AgentState } from "@/lib/agent/state";
-import { cleanMemoryKey, learnFact, learnSlang, type MemoryFact } from "@/lib/facts";
+import { learnFact, learnSlang, type MemoryFact } from "@/lib/facts";
+import { answerFromMemory, calculateMath, findUnknownTopic, isBuiltInTopic } from "@/lib/chat/answers";
 import { newId } from "@/lib/uuid";
 import { Panel, PanelLinks, usePanels } from "@/components/osmo/panel";
 import { MemoryPanel } from "@/components/osmo/memory-panel";
@@ -51,206 +52,6 @@ type ChatMessage = {
 };
 
 const font = Bricolage_Grotesque({ subsets: ["latin"], display: "swap" });
-
-const agentKnowledge: MemoryFact[] = [
-	{
-		key: "local agent",
-		value: "an assistant that runs in your browser, using its built-in knowledge and what you teach it",
-	},
-	{
-		key: "internet access",
-		value: "used only to look up word definitions from Datamuse and Wiktionary, and only the word itself is sent",
-	},
-	{
-		key: "memory",
-		value: "saved to your private account, so facts and learned explanations carry over between conversations",
-	},
-	{
-		key: "math",
-		value: "basic arithmetic, percentages, powers, and parentheses are supported locally",
-	},
-	{
-		key: "conversation learning",
-		value: "when the agent does not know a topic, it asks the user to explain it and saves that explanation",
-	},
-	{
-		key: "history",
-		value: "the study of people, societies, and events from the past",
-	},
-	{
-		key: "ancient egypt",
-		value: "a civilization in northeastern Africa known for the Nile River, hieroglyphics, pyramids, and pharaohs",
-	},
-	{
-		key: "roman empire",
-		value: "a large ancient empire centered on Rome that shaped law, government, language, engineering, and culture",
-	},
-	{
-		key: "industrial revolution",
-		value: "the period when mechanized manufacturing and factories transformed economies and societies, beginning in Britain in the 18th century",
-	},
-	{
-		key: "world war ii",
-		value: "a global war from 1939 to 1945 involving the Allied and Axis powers",
-	},
-	{
-		key: "democracy",
-		value: "a form of government in which political power is exercised by the people, directly or through representatives",
-	},
-	{
-		key: "scientific method",
-		value: "a process of asking questions, forming hypotheses, testing them with evidence, and revising conclusions",
-	},
-	{
-		key: "gravity",
-		value: "the attractive force between objects with mass; it keeps people on Earth and planets in orbit",
-	},
-	{
-		key: "evolution",
-		value: "the change in inherited traits in populations across generations, with natural selection as one important mechanism",
-	},
-	{
-		key: "dna",
-		value: "a molecule that stores genetic instructions used by living organisms",
-	},
-	{
-		key: "solar system",
-		value: "the Sun and the planets, moons, asteroids, comets, and other objects that orbit it",
-	},
-	{
-		key: "earth",
-		value: "the third planet from the Sun and the only world currently known to support life",
-	},
-	{
-		key: "computer",
-		value: "a machine that processes information according to programmed instructions",
-	},
-	{
-		key: "artificial intelligence",
-		value: "computer systems designed to perform tasks that usually require human reasoning, perception, or language ability",
-	},
-	{
-		key: "internet",
-		value: "a worldwide network of connected computer networks; this agent uses it only to look up word definitions",
-	},
-];
-
-// One remembered fact as a spoken sentence; internal keys ("slang:bet") are never read out.
-function describeFact(fact: MemoryFact): string {
-	const [kind, term] = fact.key.includes(":") ? fact.key.split(/:(.*)/) : ["", fact.key];
-	if (kind === "slang") return `You use "${term}" to mean ${fact.value}.`;
-	if (kind === "meaning") return `"${term}" means ${fact.value}.`;
-	if (fact.key === "name") return `Your name is ${fact.value}.`;
-	if (fact.key === "likes") return `You like ${fact.value}.`;
-	return `Your ${fact.key} is ${fact.value}.`;
-}
-
-// Greetings, feelings and small talk are handled by the conversation layer (lib/agent/talk.ts).
-function answerFromMemory(text: string, memory: MemoryFact[], turn: number, guest = false) {
-	const normalizedText = text.toLowerCase();
-
-	if (/what do you know|what have you remembered|list my memories/.test(normalizedText)) {
-		if (memory.length === 0) return "I don't know anything about you yet.";
-		return `Here's what I remember. ${memory.map(describeFact).join(" ")}`;
-	}
-
-	// An explained term ("meaning:zorp blat") answers questions about that term.
-	const meaning = memory.find((item) => item.key.startsWith("meaning:") && normalizedText.includes(item.key.slice("meaning:".length)));
-	if (meaning) return `In your usage, ${meaning.key.slice("meaning:".length)} means ${meaning.value}.`;
-
-	const fact = memory.find((item) => !item.key.includes(":") && normalizedText.includes(item.key));
-	if (fact) return `Your ${fact.key} is ${fact.value}.`;
-
-	if (/\b(?:what(?:'s| is)?|whats|do you know|remember) my name\b/.test(normalizedText)) {
-		// A guest's name can't be saved, so Osmo doesn't ask for it.
-		return guest ? "I'm afraid I don't know your name." : "I don't know your name yet. What should I call you?";
-	}
-
-	const builtInFact = agentKnowledge.find((item) => normalizedText.includes(item.key));
-	if (builtInFact) return `About ${builtInFact.key}: ${builtInFact.value}.`;
-
-	// Each exchange adds two messages, so halve the count to step through the fallbacks one by one.
-	return fallbackReply(Math.floor(turn / 2), text, guest);
-}
-
-function findUnknownTopic(text: string, memory: MemoryFact[]) {
-	const topicMatch = text.match(/^(?:what is|what's|who is|tell me about|explain)\s+(.+?)[?.!]*$/i);
-	if (!topicMatch) return null;
-
-	const topic = cleanMemoryKey(topicMatch[1]);
-	if (
-		topic.startsWith("my ") || topic.startsWith("your ") || topic === "you" ||
-		memory.some((fact) => topic.includes(fact.key.replace(/^(?:meaning|slang):/, ""))) ||
-		agentKnowledge.some((fact) => topic.includes(fact.key))
-	) return null;
-	return topic;
-}
-
-function calculateMath(text: string): number | null {
-	const expression = text
-		.toLowerCase()
-		.replace(/^(calculate|what is|solve)\s+/, "")
-		.replace(/[?=]/g, "")
-		.trim();
-	if (!/[0-9]/.test(expression) || !/^[0-9()+\-*/^%.\s]+$/.test(expression)) return null;
-
-	const tokens = expression.match(/\d*\.?\d+|[()+\-*/^%]/g) ?? [];
-	if (tokens.join("") !== expression.replace(/\s/g, "")) return null;
-
-	let position = 0;
-	const parseExpression = (): number => {
-		let value = parseTerm();
-		while (tokens[position] === "+" || tokens[position] === "-") {
-			const operator = tokens[position++];
-			const right = parseTerm();
-			value = operator === "+" ? value + right : value - right;
-		}
-		return value;
-	};
-	const parseTerm = (): number => {
-		let value = parsePower();
-		while (tokens[position] === "*" || tokens[position] === "/") {
-			const operator = tokens[position++];
-			const right = parsePower();
-			value = operator === "*" ? value * right : value / right;
-		}
-		return value;
-	};
-	const parsePower = (): number => {
-		let value = parsePrimary();
-		if (tokens[position] === "^") {
-			position++;
-			value = value ** parsePower();
-		}
-		return value;
-	};
-	const parsePrimary = (): number => {
-		if (tokens[position] === "-") {
-			position++;
-			return -parsePrimary();
-		}
-		if (tokens[position] === "(") {
-			position++;
-			const value = parseExpression();
-			if (tokens[position] !== ")") throw new Error("Missing closing parenthesis");
-			position++;
-			return value;
-		}
-		const value = Number(tokens[position++]);
-		if (tokens[position] === "%") {
-			position++;
-			return value / 100;
-		}
-		return value;
-	};
-
-	try {
-		const result = parseExpression();
-		return position === tokens.length && Number.isFinite(result) ? result : null;
-	} catch {
-		return null;
-	}
-}
 
 // Without a saved genome (first visit, or saving is unavailable) the seed is remembered in this browser.
 function stableSeed(): number {
@@ -495,7 +296,7 @@ export default function AgentChat() {
 		// "what does X mean" and friends: looked up once nothing earlier has claimed the message.
 		// His own knowledge ("what is history") answers first; only an exact match counts, so "earthquake" still gets looked up.
 		const askedTerm = crisis ? null : parseLookup(text);
-		const lookupTerm = askedTerm && !agentKnowledge.some((fact) => fact.key === askedTerm) ? askedTerm : null;
+		const lookupTerm = askedTerm && !isBuiltInTopic(askedTerm) ? askedTerm : null;
 
 		// Learn the user's own words (names, in-jokes, jargon). Not from a crisis message, and not from a
 		// word question, whose term goes to the dictionary (a misspelled one must never become "theirs").
@@ -561,7 +362,8 @@ export default function AgentChat() {
 				setPendingLearning(unknownTopic);
 				response = formatDefinition({ kind: "missing", term: unknownTopic });
 			} else {
-				response = answerFromMemory(text, view.memory, guest ? messages.length : view.history.length, guest);
+				// The AI conversation is off until the room asks the route, so he describes himself as today.
+				response = answerFromMemory(text, view.memory, guest ? messages.length : view.history.length, guest, false);
 			}
 		}
 
