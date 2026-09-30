@@ -3,7 +3,7 @@
 Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk.
 
 ## Now
-**Writing the implementation plan for the AI conversation.** Gur approved the spec on 2026-09-30, and changed choice 2 (`66393bf`, local). No code yet. The spec, first committed as `56d2784` (on GitHub): `my-app/docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md`. It went through four review rounds, with every finding checked by a skeptic. It opens with seven cautious choices for Gur to check. No code yet, and I'm not editing any shared file.
+**Waiting for Gur to review the AI conversation implementation plan and choose how it is built.** The plan is `my-app/docs/superpowers/plans/2026-09-30-osmo-ai-conversation.md` (`576359d`, local): 16 tasks with complete code. It was reviewed on three lenses with skeptics, fixed, and rebuilt task by task in a scratch copy, where 988 tests pass, tsc is clean and eslint has no errors. No code is in the repo yet. Main has already applied `ai_calls` (verified live) and ordered `memory_facts` (`baa0c4e`).
 
 ## Just landed
 - **Pushed `main` to `b26f156` at Gur's direct request (2026-09-30), and it's live.** It includes the merge of cloud's `09b2a41` and my spec `56d2784`. The details and checks are in `decisions.md`.
