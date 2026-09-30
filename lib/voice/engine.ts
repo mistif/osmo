@@ -67,7 +67,8 @@ export type VoiceDeps = {
 export type SpeechHooks = {
 	onSpeechStart(): void;
 	onNoWordTiming(): void;
-	onWord(end: number): void;
+	// The end of each spoken word in the reply, and the word itself.
+	onWord(end: number, word: string): void;
 	onSpeechEnd(): void;
 };
 export type SendText = (text: string, options: SendOptions) => boolean;
@@ -453,10 +454,10 @@ export class VoiceEngine {
 			current?.cancel();
 		}, text.length * SPEECH_WATCHDOG_MS_PER_CHAR + SPEECH_WATCHDOG_EXTRA_MS);
 		const spoken = this.deps.say(text, {
-			onWord: (_start, end) => {
+			onWord: (start, end) => {
 				if (this.speakingNow !== token) return;
 				timed = true;
-				speech.onWord(end);
+				speech.onWord(end, text.slice(start, end));
 			},
 			onEnd: ended,
 		});

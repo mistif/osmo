@@ -1,10 +1,13 @@
-/* Osmo's lock screen: only his circle, his name and one way in. */
+/* Osmo's lock screen: only him, his name and one way in. */
 .lock {
 	--bone: #f3efe8;
 	--aura-a: hsl(172 38% 50%);
 	--base: hsl(172 30% 10%);
 	min-height: 100svh;
-	/* The bloom scales the circle far past the screen; clip it so it never grows the page or flashes scrollbars. */
+	--aura-b: hsl(212 38% 50%);
+	--pulse: 5.4s;
+	--strength: 0.45;
+	/* The bloom scales him far past the screen; clip it so it never grows the page or flashes scrollbars. */
 	overflow: clip;
 	display: grid;
 	place-items: center;
@@ -22,13 +25,9 @@
 	text-align: center;
 }
 
-.circle {
-	width: 7.5rem;
-	aspect-ratio: 1;
-	border-radius: 50%;
-	border: 1px solid color-mix(in oklab, var(--aura-a) 60%, transparent);
-	background: radial-gradient(closest-side, color-mix(in oklab, var(--aura-a) 14%, transparent), transparent 74%);
-	animation: breathe 5.4s ease-in-out infinite;
+.figure {
+	--figure: 11rem;
+	margin: -1rem 0;
 }
 
 .name {
@@ -102,8 +101,8 @@
 	cursor: wait;
 }
 
-/* The one bold moment: the circle blooms outward and the room takes over. */
-.opening .circle {
+/* The one bold moment: he blooms outward and the room takes over. */
+.opening .figure {
 	animation: bloom 0.7s cubic-bezier(0.5, 0, 0.75, 0) forwards;
 }
 .opening .name,
@@ -115,18 +114,6 @@
 	transition: opacity 0.25s ease;
 }
 
-@keyframes breathe {
-	0%,
-	100% {
-		scale: 1;
-		opacity: 0.85;
-	}
-	50% {
-		scale: 1.04;
-		opacity: 1;
-	}
-}
-
 @keyframes bloom {
 	to {
 		scale: 14;
@@ -135,10 +122,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.circle {
-		animation: none;
-	}
-	.opening .circle {
+	.opening .figure {
 		animation: none;
 		opacity: 0;
 		transition: opacity 0.2s ease;

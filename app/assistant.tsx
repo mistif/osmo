@@ -10,6 +10,7 @@ import { loadState, persistTurn } from "@/lib/agent/agent-state";
 import { moodTheme } from "@/lib/agent/mood-theme";
 import { adoptGenome, assemble, newSeed, resolve } from "@/lib/agent/personality/assemble";
 import { charDelay, speechBeat } from "@/lib/agent/speech";
+import { beatTargets, BETWEEN_WORDS, currentSentence, wordTargets } from "@/lib/room/heart-motion";
 import { fallbackReply, feelingPhrase, GUEST_NO_NOTES } from "@/lib/agent/talk";
 import { formatDefinition, lookupWord, parseLookup, type Lookup } from "@/lib/agent/dictionary";
 import { getCachedLookup, putCachedLookup } from "@/lib/agent/dictionary-store";
@@ -39,6 +40,8 @@ import { InsightsPanel } from "@/components/osmo/insights-panel";
 import { SettingsPanel } from "@/components/osmo/settings-panel";
 import { SPEECH_CHAR_MS } from "@/lib/voice/voices";
 import { useVoice } from "@/components/osmo/use-voice";
+import { useHeartMotion } from "@/components/osmo/use-heart-motion";
+import { Figure } from "@/components/osmo/figure";
 
 type ChatMessage = {
 	role: "user" | "agent";
@@ -290,12 +293,11 @@ export default function AgentChat() {
 	const baseline = resolve(agent.genome).baseline;
 	const theme = moodTheme(agent.activations, baseline);
 
-	// Osmo "speaks" each reply: it types out, and the circle and ripples follow the rhythm.
+	// Osmo "speaks" each reply: it types out, and his heart and rings follow the rhythm.
 	const stageRef = useRef<HTMLDivElement>(null);
 	const reduceMotionRef = useRef(false);
 	const [speaking, setSpeaking] = useState<{ index: number; chars: number } | null>(null);
-	const [waves, setWaves] = useState<{ id: number; amp: number }[]>([]);
-	const waveIdRef = useRef(0);
+	const heart = useHeartMotion(stageRef);
 	// How the typed-out reply keeps time: its own timer, his spoken words, or speaking pace when the device gives no word timing.
 	const paceRef = useRef<"timer" | "words" | "stretched">("timer");
 	// Which reply his voice is saying. Only that one follows his words; any other reply keeps the timer.
@@ -312,11 +314,10 @@ export default function AgentChat() {
 	useEffect(() => {
 		if (!speaking) return;
 		const text = messages[speaking.index]?.text ?? "";
-		const stage = stageRef.current;
 		if (speaking.chars >= text.length) {
-			// Let the last word's voice fade before settling back to a still circle.
+			// Let the last word's voice fade before settling back to a still heart.
 			const done = setTimeout(() => {
-				stage?.style.setProperty("--voice", "0");
+				heart.rest();
 				setSpeaking(null);
 			}, 160);
 			return () => clearTimeout(done);
@@ -330,16 +331,12 @@ export default function AgentChat() {
 		const pace = spoken && paceRef.current === "stretched" ? SPEECH_CHAR_MS : charDelay(text.length, theme.pulseSeconds);
 		const wait = pace + breath + (speaking.chars === 0 ? 350 : 0);
 		const timer = setTimeout(() => {
-			const loudness = Math.min(1, beat.voice * (0.6 + 0.4 * theme.strength));
-			stage?.style.setProperty("--voice", loudness.toFixed(2));
-			if (beat.wordStart) {
-				const id = ++waveIdRef.current;
-				setWaves((current) => [...current.slice(-5), { id, amp: loudness }]);
-			}
+			heart.aim(beatTargets(text[speaking.chars], beat, theme.strength));
+			if (beat.wordStart) heart.roll();
 			setSpeaking({ index: speaking.index, chars: speaking.chars + 1 });
 		}, wait);
 		return () => clearTimeout(timer);
-	}, [speaking, messages, theme.pulseSeconds, theme.strength]);
+	}, [speaking, messages, theme.pulseSeconds, theme.strength, heart]);
 
 	useEffect(() => {
 		(async () => {
@@ -419,18 +416,16 @@ export default function AgentChat() {
 				// A fresh object, so the effect runs again at the new pace.
 				setSpeaking((s) => (s && s.index === spokenIndexRef.current ? { ...s } : s));
 			},
-			onWord: (end) => {
+			onWord: (end, word) => {
 				setSpeaking((s) => (s && s.index === spokenIndexRef.current ? { ...s, chars: Math.max(s.chars, end) } : s));
 				if (reduceMotionRef.current) return;
-				const stage = stageRef.current;
-				stage?.style.setProperty("--voice", "0.8");
-				setTimeout(() => stage?.style.setProperty("--voice", "0.2"), 170);
-				const id = ++waveIdRef.current;
-				setWaves((current) => [...current.slice(-5), { id, amp: 0.8 }]);
+				heart.aim(wordTargets(word));
+				heart.roll();
+				setTimeout(() => heart.aim(BETWEEN_WORDS), 170);
 			},
 			onSpeechEnd: () => {
 				paceRef.current = "timer";
-				stageRef.current?.style.setProperty("--voice", "0");
+				heart.rest();
 				setSpeaking((s) => (s && s.index === spokenIndexRef.current ? { ...s, chars: Number.MAX_SAFE_INTEGER } : s));
 			},
 		},
@@ -600,7 +595,7 @@ export default function AgentChat() {
 		const deliver = (reply: string) => {
 			const agentMessage: ChatMessage = { role: "agent", text: greetGuest(reply, guest && (options.greet ?? false), crisis), ...mark };
 			// Cut off any reply still being spoken, then speak the new one (or show it at once).
-			stageRef.current?.style.setProperty("--voice", "0");
+			heart.rest();
 			setSpeaking(reduceMotionRef.current ? null : { index: messages.length + 1, chars: 0 });
 			setMessages((current) => [...current, agentMessage]);
 			void saveMessages([userMessage, agentMessage]);
@@ -632,6 +627,11 @@ export default function AgentChat() {
 		sendTextRef.current = sendText;
 	});
 
+	// The subtitle under him: the sentence he's saying. After the last word it keeps the reply's last
+	// sentence while it fades (figure.module.css shows it only while data-speaking is set).
+	const spokenText = speaking ? messages[speaking.index]?.text.slice(0, speaking.chars) : [...messages].reverse().find((m) => m.role === "agent")?.text;
+	const said = spokenText ? currentSentence(spokenText) : null;
+
 	const stageStyle = {
 		"--aura-a": theme.colorA,
 		"--aura-b": theme.colorB,
@@ -650,15 +650,7 @@ export default function AgentChat() {
 			<div className={styles.aura} aria-hidden="true">
 				<span className={`${styles.orb} ${styles.orbA}`} />
 				<span className={`${styles.orb} ${styles.orbB}`} />
-				<span className={styles.core} />
-				{waves.map((wave) => (
-					<span
-						key={wave.id}
-						className={styles.wave}
-						style={{ "--amp": wave.amp.toFixed(2) } as CSSProperties}
-						onAnimationEnd={() => setWaves((current) => current.filter((w) => w.id !== wave.id))}
-					/>
-				))}
+				<Figure className={styles.figure} said={said} />
 			</div>
 
 			<main className={styles.column}>

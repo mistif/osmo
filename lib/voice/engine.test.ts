@@ -229,7 +229,7 @@ describe("VoiceEngine", () => {
 		expect(h.said[0].text).toBe("Good evening.");
 		expect(h.speech.onSpeechStart).toHaveBeenCalled();
 		h.said[0].hooks.onWord(0, 4);
-		expect(h.speech.onWord).toHaveBeenCalledWith(4);
+		expect(h.speech.onWord).toHaveBeenCalledWith(4, "Good");
 		h.said[0].hooks.onEnd();
 		expect(h.speech.onSpeechEnd).toHaveBeenCalled();
 		expect(h.mode()).toBe("followup");

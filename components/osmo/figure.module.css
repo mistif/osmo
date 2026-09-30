@@ -1,0 +1,237 @@
+/* Osmo: an organic heart with three dashed rings turning around it (see figure.tsx).
+   Colours, pulse and voice come from the ancestor's variables; the state from its data attributes. */
+
+.figure {
+	--size: var(--figure, min(20rem, 80vw));
+	/* --voice, --open, --flow and --r1..3 are set per frame by the room while he speaks (the fallbacks below are his rest). */
+	--tilt: 58deg;
+	--sag: 0deg;
+	--turn: 1; /* the mood's own ring speed */
+	position: relative;
+	display: grid;
+	justify-items: center;
+	width: var(--size);
+}
+
+/* ---------- the rings ---------- */
+.rings {
+	position: relative;
+	width: 100%;
+	aspect-ratio: 1;
+	perspective: 900px;
+}
+
+.ring {
+	position: absolute;
+	inset: 0;
+	transform-style: preserve-3d;
+	transform: rotateX(calc(var(--tilt) + var(--sag))) rotateY(var(--ry)) rotateZ(var(--rz));
+	transition: transform 900ms cubic-bezier(0.3, 0.8, 0.3, 1);
+}
+
+.ring svg {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	overflow: visible;
+	transform: scale(calc(var(--r) * (1 + var(--voice, 0) * 0.06)));
+	transition: transform 160ms ease-out;
+	animation: spin calc(var(--dur) / var(--turn) / var(--flow, 1)) linear infinite;
+	animation-direction: var(--dir, normal);
+}
+
+.ring circle {
+	fill: none;
+	stroke: color-mix(in oklab, var(--aura-a) 85%, white);
+	stroke-width: var(--stroke, 1.6);
+	stroke-linecap: round;
+	stroke-dasharray: var(--dash);
+	filter: drop-shadow(0 0 3px var(--aura-a));
+	opacity: calc(0.55 + var(--strength, 0.5) * 0.3 + var(--voice, 0) * 0.25);
+	transition: opacity 160ms;
+}
+
+.ring:nth-child(1) { --ry: -18deg; --rz: 0deg;  --r: 0.58; --dur: 26s; --dash: 5 4; }
+.ring:nth-child(2) { --ry: 30deg;  --rz: 35deg; --r: 0.8;  --dur: 40s; --dash: 16 10; --dir: reverse; }
+.ring:nth-child(3) { --ry: -10deg; --rz: 70deg; --r: 1;    --dur: 58s; --dash: 2 8; }
+
+@keyframes spin {
+	to {
+		rotate: 360deg;
+	}
+}
+
+/* ---------- the heart ---------- */
+.heart {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 38%;
+	aspect-ratio: 1;
+	translate: -50% -50%;
+	filter: blur(1.6px) drop-shadow(0 0 calc(18px + var(--voice, 0) * 22px) color-mix(in oklab, var(--aura-a) 55%, transparent));
+	/* Loudness swells it; on a vowel it opens taller and narrower, like a mouth. */
+	transform: scale(calc(1 + var(--voice, 0) * 0.16)) scale(calc(1 - var(--open, 0) * 0.07), calc(1 + var(--open, 0) * 0.14));
+	animation: heartbeat var(--pulse, 5s) ease-in-out infinite;
+}
+
+.heart i {
+	position: absolute;
+	inset: 0;
+	mix-blend-mode: screen;
+	background: radial-gradient(
+		circle at 40% 35%,
+		color-mix(in oklab, var(--aura-a) 80%, white),
+		color-mix(in oklab, var(--aura-a) 60%, transparent) 55%,
+		transparent 88%
+	);
+	opacity: calc(0.45 + var(--strength, 0.5) * 0.4);
+	border-radius: var(--r1, 60% 40% 30% 70% / 60% 30% 70% 40%);
+	/* Each word rolls the heart into a new shape. */
+	transition: border-radius 420ms cubic-bezier(0.4, 0.1, 0.3, 1);
+	animation: drift calc(var(--pulse, 5s) * 1.6) ease-in-out infinite;
+}
+
+.heart i:nth-child(2) {
+	border-radius: var(--r2, 30% 60% 70% 40% / 50% 60% 30% 60%);
+	scale: 0.95;
+	rotate: 40deg;
+	animation-delay: calc(var(--pulse, 5s) * -0.6);
+	animation-direction: reverse;
+	background: radial-gradient(
+		circle at 60% 60%,
+		color-mix(in oklab, var(--aura-b) 85%, white),
+		color-mix(in oklab, var(--aura-b) 60%, transparent) 55%,
+		transparent 88%
+	);
+}
+
+.heart i:nth-child(3) {
+	border-radius: var(--r3, 50% 50% 40% 60% / 40% 60% 60% 40%);
+	scale: 0.86;
+	rotate: -60deg;
+	animation-delay: calc(var(--pulse, 5s) * -1.1);
+	opacity: 0.85;
+}
+
+@keyframes heartbeat {
+	0%,
+	100% {
+		scale: 1;
+	}
+	50% {
+		scale: 1.08;
+	}
+}
+
+@keyframes drift {
+	0%,
+	100% {
+		rotate: 0deg;
+	}
+	50% {
+		rotate: 10deg;
+	}
+}
+
+/* ---------- the subtitle ---------- */
+.said {
+	margin: 0.25rem 0 0;
+	max-width: min(28rem, 90vw);
+	font-size: 1rem;
+	line-height: 1.4;
+	text-align: center;
+	text-wrap: balance;
+	color: color-mix(in oklab, var(--bone) 80%, transparent);
+	opacity: 0;
+	/* Lingers after the last word, then fades. */
+	transition: opacity 1.2s ease 1.4s;
+}
+
+/* ---------- states, from the ancestor ---------- */
+[data-speaking] .said {
+	opacity: 1;
+	transition: opacity 0.3s ease;
+}
+/* While speaking the room drives the heart; the idle breath and drift stop so they never fight. */
+[data-speaking] .heart,
+[data-speaking] .heart i {
+	animation: none;
+}
+
+/* Listening: the rings turn to face you and pull in; the heart rounds off and holds still. */
+[data-listening] .figure {
+	--tilt: 26deg;
+}
+[data-listening] .ring svg {
+	transform: scale(calc(var(--r) * 0.88));
+}
+[data-listening] .ring circle {
+	opacity: 0.95;
+	stroke-width: 1.9;
+}
+[data-listening] .heart i {
+	border-radius: 50%;
+}
+
+/* Moods */
+[data-tone="sadness"] .figure,
+[data-tone="loneliness"] .figure {
+	--sag: 16deg;
+}
+[data-tone="sadness"] .ring circle,
+[data-tone="loneliness"] .ring circle {
+	opacity: 0.4;
+}
+[data-tone="sadness"] .heart,
+[data-tone="loneliness"] .heart {
+	filter: blur(4px) saturate(0.7);
+	transform: scaleY(0.85) translateY(6%);
+}
+[data-tone="joy"] .figure,
+[data-tone="hope"] .figure {
+	--tilt: 50deg;
+	--turn: 1.6;
+}
+[data-tone="fear"] .rings {
+	animation: tremble 0.35s ease-in-out infinite;
+}
+[data-tone="anger"] .figure {
+	--stroke: 2.2;
+	--turn: 2.2;
+}
+
+@keyframes tremble {
+	0%,
+	100% {
+		translate: 0 0;
+	}
+	25% {
+		translate: -2px 1px;
+	}
+	75% {
+		translate: 2px -1px;
+	}
+}
+
+/* ---------- reduced motion: keep the form and colours, stop the movement ---------- */
+@media (prefers-reduced-motion: reduce) {
+	.ring,
+	.ring svg,
+	.ring circle,
+	.heart,
+	.heart i,
+	.said {
+		transition: none;
+	}
+	.ring svg,
+	.heart,
+	.heart i,
+	[data-tone="fear"] .rings {
+		animation: none;
+	}
+	.heart {
+		transform: none;
+	}
+}

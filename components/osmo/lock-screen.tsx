@@ -13,6 +13,7 @@ import {
 } from "@/lib/shell/passkeys";
 import { unlockMessage } from "@/lib/shell/unlock-errors";
 import styles from "./lock.module.css";
+import { Figure } from "./figure";
 
 const font = Bricolage_Grotesque({ subsets: ["latin"], display: "swap" });
 
@@ -84,7 +85,7 @@ export function LockScreen() {
 	return (
 		<main className={`${styles.lock} ${font.className} ${step === "opening" ? styles.opening : ""}`}>
 			<div className={styles.inner}>
-				<div className={styles.circle} aria-hidden="true" />
+				<Figure className={styles.figure} />
 				<h1 className={styles.name}>Osmo</h1>
 
 				{step === "locked" && (

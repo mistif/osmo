@@ -43,7 +43,7 @@
 		--base 1.8s ease;
 }
 
-/* ---------- The room: two breathing auras, and a circle that ripples when Osmo speaks ---------- */
+/* ---------- The room: two breathing auras, and Osmo himself (components/osmo/figure.tsx) ---------- */
 
 .aura {
 	position: absolute;
@@ -85,41 +85,17 @@
 	animation-delay: calc(var(--pulse) / -2);
 }
 
-/* Waiting: a circle breathing faintly. Speaking: it swells with the voice, and ripples leave it on each word. */
-.core,
-.wave {
+/* Osmo sits above the conversation's middle; the log scrolls over the lower rings. */
+.figure {
 	position: absolute;
 	left: 50%;
 	top: 40%;
-	width: min(20rem, 70vw);
-	aspect-ratio: 1;
 	translate: -50% -50%;
-	border-radius: 50%;
 }
 
-.core {
-	border: 1px solid color-mix(in oklab, var(--aura-a) 60%, transparent);
-	background: radial-gradient(
-		closest-side,
-		color-mix(in oklab, var(--aura-a) calc(var(--strength) * 20%), transparent),
-		transparent 74%
-	);
-	transform: scale(calc(1 + var(--voice) * 0.22));
-	transition: transform 90ms ease-out;
-	/* Idle breath on `scale`, separate from the voice's `transform`, so the two never fight. */
-	animation: idle var(--pulse) ease-in-out infinite;
-}
-
-/* While Osmo speaks, the voice drives the circle and heart instead. */
-.stage[data-speaking] .core,
+/* While Osmo speaks, the voice drives the heart in the header instead of its idle breath. */
 .stage[data-speaking] .heart {
 	animation: none;
-}
-
-.wave {
-	border: 1.5px solid color-mix(in oklab, var(--aura-a) 70%, transparent);
-	opacity: 0;
-	animation: wave 1.5s ease-out forwards;
 }
 
 @keyframes breathe {
@@ -134,18 +110,6 @@
 	}
 }
 
-@keyframes idle {
-	0%,
-	100% {
-		scale: 1;
-		opacity: 0.85;
-	}
-	50% {
-		scale: 1.03;
-		opacity: 1;
-	}
-}
-
 @keyframes idle-heart {
 	0%,
 	100% {
@@ -153,17 +117,6 @@
 	}
 	50% {
 		scale: 1.14;
-	}
-}
-
-@keyframes wave {
-	0% {
-		transform: scale(1.02);
-		opacity: calc(0.3 + var(--amp) * 0.6);
-	}
-	100% {
-		transform: scale(calc(1.6 + var(--amp) * 0.9));
-		opacity: 0;
 	}
 }
 
@@ -504,20 +457,6 @@
 	}
 }
 
-/* Listening: the circle's edge brightens and it breathes faster, so it's clear he's hearing you. */
-.stage[data-listening] .core {
-	border-color: color-mix(in oklab, var(--aura-a) 95%, transparent);
-	animation: listen 1.2s ease-in-out infinite;
-}
-@keyframes listen {
-	0%,
-	100% {
-		scale: 1;
-	}
-	50% {
-		scale: 1.07;
-	}
-}
 .voiceLine,
 .voiceError {
 	flex: none;
@@ -552,10 +491,6 @@
 	.stage[data-tone="fear"] .agent.speaking .bubble {
 		animation: none;
 	}
-	.wave {
-		display: none;
-	}
-	.core,
 	.heart {
 		transform: none;
 		transition: none;
@@ -567,8 +502,5 @@
 	.aura,
 	.column {
 		transition: none;
-	}
-	.stage[data-listening] .core {
-		animation: none;
 	}
 }
