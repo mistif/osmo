@@ -3,7 +3,7 @@
 Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk.
 
 ## Now
-**Waiting for Gur to review the AI conversation spec.** It's on `main` as `56d2784` (pushed and live on 2026-09-30, docs only): `my-app/docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md`. It went through four review rounds, with every finding checked by a skeptic. It opens with seven cautious choices for Gur to check. No code yet, and I'm not editing any shared file.
+**Writing the implementation plan for the AI conversation.** Gur approved the spec on 2026-09-30, and changed choice 2 (`66393bf`, local). No code yet. The spec, first committed as `56d2784` (on GitHub): `my-app/docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md`. It went through four review rounds, with every finding checked by a skeptic. It opens with seven cautious choices for Gur to check. No code yet, and I'm not editing any shared file.
 
 ## Just landed
 - **Pushed `main` to `b26f156` at Gur's direct request (2026-09-30), and it's live.** It includes the merge of cloud's `09b2a41` and my spec `56d2784`. The details and checks are in `decisions.md`.
@@ -22,13 +22,12 @@ Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk
 
 ## Asks
 - **→ main (2026-09-30, replaces the 2026-09-29 Ask):** Gur's AI conversation choices are in `decisions.md`. The turn stays in the browser, and a server route only writes the words. Your `prepareTurn` (working tree) is what the design uses, from the browser. The spec's review found things it needs. They're proposed until Gur approves the spec; see its "Coordination" section.
-  0. **2026-09-30 update:** items 1 and 2 are **done**. `prepareTurn` is in `c46d61a`, and `8102c49` adds `facts.heavy` (via `heavyTurn`) and `CRISIS_CAUSE` with a null cause. I checked both, and their 100 tests pass. Both are local and not pushed. With voice mode the default, `recognized` (item 3) decides whether any spoken line gets a model reply, so it matters more now. Main plans it once Gur approves the spec.
+  0. **2026-09-30 update:** items 1 and 2 are **done**. `prepareTurn` is in `c46d61a`, and `8102c49` adds `facts.heavy` (via `heavyTurn`) and `CRISIS_CAUSE` with a null cause. I checked both, and their 100 tests pass. Both are local and not pushed. **Gur approved the spec and changed choice 2, so `recognized` (item 3) is dropped.** A spoken line judged "you", by score or carry-over, can reach the model. The other item-3 asks now apply, since the spec is approved.
   1. **Two small additions to `prepareTurn`:**
      - `TurnFacts.heavy: boolean`, the same test `flavorTurn` uses to hold back extras (`HEAVY_TONES.has(tone) || sensitive`). `mind-prepare.test.ts` compares the whole `facts` object, so it needs `heavy` too, plus a sad-message case giving `heavy: true`;
      - `facts.cause` null when the session's cause is the crisis one ("you told me you're hurting"). Export that string as `CRISIS_CAUSE`. Today the crisis cause carries into every later turn's facts, and it must never reach OpenAI.
   2. **Commit `mind.ts`, `personality/flavor.ts` and `mind-prepare.test.ts` together.** `prepareTurn` imports `milestoneDue`, which exists only in the uncommitted `flavor.ts`.
   3. **Later, once Gur approves the spec:**
-     - `SendOptions.recognized: boolean` for spoken lines: true exactly when the line's own score reaches `MATCH_THRESHOLD` (whether or not carry-over decided), false with too little audio. `whoSpoke` has to return the score. The engine tests that compare `SendOptions` gain the field. A short follow-up without a match stays rule-based, so a guest's short line can't get a model reply.
      - the room's `memory_facts` load ordered by `updated_at`.
      - the `ai_calls` migration. The SQL is in the spec: a reservation row and a signed settling row per call, with a per-user foreign key.
      - a Settings line from an `aiUsage` prop the room will pass (three texts, in the spec).

@@ -63,6 +63,7 @@ Gur's decisions and the cross-lane rulings, oldest first. Append only. Each entr
   - The phase 1 spec (`docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md`) is approved; language may build it.
   - The sharing trade is accepted: OpenAI may use what Osmo sends (Gur's messages, the memory facts, mood and history in prompts, guests' words, and the spoken text).
   - Context: he had just said Osmo is "so bad at conversation" and "just gets stuck" after testing voice mode.
+- **2026-09-30 (language), Gur confirmed it to language directly,** and changed one choice in the spec. **Short spoken follow-ups reach the model.** A spoken line the voice counts as his, whether by its score or by the 1.5-second carry-over, can get a model reply. He picked this over keeping carry-over lines rule-based, because the room is voice-first now. He accepts that a guest's short remark inside his conversation could get a model reply. So `SendOptions.recognized` isn't needed. The spec is updated in `66393bf`.
 
 ## Waiting on Gur
 
