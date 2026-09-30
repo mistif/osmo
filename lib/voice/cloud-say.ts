@@ -11,7 +11,9 @@ import { type SpeechTone, wordsSpokenBy, wordSpans } from "./tts";
 
 // How long the first clip may take before he gives up and uses the device's voice instead.
 // He must never sit in silence: the worst case is that he sounds like he did before.
-export const FIRST_SOUND_GUARD_MS = 1200;
+// Measured on 2026-09-30: gpt-4o-mini-tts delivers a sentence in about 2.1 s (first byte at 1.25 s),
+// plus the route's own time, so anything under 3 s hands every new sentence to the device's voice.
+export const FIRST_SOUND_GUARD_MS = 4000;
 
 export type Clip = {
 	// Seconds. May be 0 or NaN until the browser knows.
