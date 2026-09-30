@@ -57,7 +57,16 @@ export function VoiceSettings({ voice }: { voice: VoiceControls }) {
 			{!voice.listenSupported && <p className={styles.note}>Listening needs Chrome, Edge or Safari. I can still speak.</p>}
 			{voice.listenSupported && voice.wakeReady === false && <p className={styles.note}>His wake word isn&apos;t trained yet.</p>}
 
-			<Switch label="Speak typed replies too" on={voice.speakTyped} onChange={voice.setSpeakTyped} disabled={voice.voiceName === null} />
+			<Switch label="Show the conversation as text" on={voice.showChat} onChange={voice.setShowChat} />
+			<p className={styles.note}>
+				{voice.showChat
+					? "You can type to me, and everything we say stays on screen."
+					: voice.listenSupported
+						? "The room is just me and the mic. Turn this on to type instead."
+						: "This browser can't listen, so the conversation stays on screen here."}
+			</p>
+			{voice.showChat && <Switch label="Speak typed replies too" on={voice.speakTyped} onChange={voice.setSpeakTyped} disabled={voice.voiceName === null} />}
+			<Switch label="Fade my words after I say them" on={voice.fadeSaid} onChange={voice.setFadeSaid} />
 
 			{voice.teaching ? (
 				<VoiceTeaching

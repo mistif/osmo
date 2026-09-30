@@ -144,15 +144,25 @@
 	text-align: center;
 	text-wrap: balance;
 	color: color-mix(in oklab, var(--bone) 80%, transparent);
-	opacity: 0;
-	/* Lingers after the last word, then fades. */
-	transition: opacity 1.2s ease 1.4s;
+	transition: opacity 0.3s ease;
+}
+
+/* What he heard: above him, quieter than his own words. */
+.heard {
+	margin: 0 0 0.5rem;
+	max-width: min(28rem, 90vw);
+	font-size: 0.95rem;
+	line-height: 1.4;
+	text-align: center;
+	text-wrap: balance;
+	color: color-mix(in oklab, var(--bone) 60%, transparent);
 }
 
 /* ---------- states, from the ancestor ---------- */
-[data-speaking] .said {
-	opacity: 1;
-	transition: opacity 0.3s ease;
+/* With the fade setting on, his words linger after the last word, then go. */
+[data-fade]:not([data-speaking]) .said {
+	opacity: 0;
+	transition: opacity 1.2s ease 1.4s;
 }
 /* While speaking the room drives the heart; the idle breath and drift stop so they never fight. */
 [data-speaking] .heart,
@@ -222,7 +232,8 @@
 	.ring circle,
 	.heart,
 	.heart i,
-	.said {
+	.said,
+	.heard {
 		transition: none;
 	}
 	.ring svg,

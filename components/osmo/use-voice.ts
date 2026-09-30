@@ -102,6 +102,8 @@ export function useVoice(options: { speech: SpeechHooks; sendTextRef: { current:
 		listening: settings.listen,
 		speakTyped: settings.speakTyped,
 		naturalVoice: settings.naturalVoice,
+		showChat: settings.showChat,
+		fadeSaid: settings.fadeSaid,
 		// undefined while checking, null when the device has no English voice.
 		voiceName: voice === undefined ? undefined : voice ? displayVoiceName(voice.name) : null,
 		listenSupported,
@@ -131,6 +133,8 @@ export function useVoice(options: { speech: SpeechHooks; sendTextRef: { current:
 			unlockVoices();
 			setVoiceSettings({ naturalVoice: on });
 		},
+		setShowChat: (on: boolean) => setVoiceSettings({ showChat: on }),
+		setFadeSaid: (on: boolean) => setVoiceSettings({ fadeSaid: on }),
 		startTeaching() {
 			setTeaching("settings");
 		},

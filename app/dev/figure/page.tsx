@@ -3,6 +3,7 @@
 // A dev-only room for Osmo's figure: every mood and state, and a reply spoken through the same
 // driver as the real room (speechBeat → heart motion). Not served in production.
 import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { Mic } from "lucide-react";
 import { Bricolage_Grotesque } from "next/font/google";
 import { notFound } from "next/navigation";
 import styles from "../../assistant.module.css";
@@ -28,6 +29,7 @@ export default function FigurePage() {
 	const [mood, setMood] = useState<Emotion | "calm">("calm");
 	const [listening, setListening] = useState(false);
 	const [chars, setChars] = useState<number | null>(null);
+	const [fade, setFade] = useState(false);
 	const stageRef = useRef<HTMLDivElement>(null);
 	const heart = useHeartMotion(stageRef);
 	const theme = moodTheme(feeling(mood));
@@ -65,11 +67,16 @@ export default function FigurePage() {
 			data-tone={theme.tone}
 			data-speaking={chars !== null ? "" : undefined}
 			data-listening={listening ? "" : undefined}
+			data-fade={fade ? "" : undefined}
 		>
 			<div className={styles.aura} aria-hidden="true">
 				<span className={`${styles.orb} ${styles.orbA}`} />
 				<span className={`${styles.orb} ${styles.orbB}`} />
-				<Figure className={styles.figure} said={chars === null ? currentSentence(LINE) : currentSentence(LINE.slice(0, chars))} />
+				<Figure
+					className={styles.figure}
+					said={chars === null ? currentSentence(LINE) : currentSentence(LINE.slice(0, chars))}
+					heard={listening ? "Osmo, what did I say yesterday" : null}
+				/>
 			</div>
 			<main className={styles.column}>
 				<header className={styles.head}>
@@ -79,17 +86,26 @@ export default function FigurePage() {
 						<p className={styles.mood}>Dev: every mood and state</p>
 					</div>
 				</header>
-				<p style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center", marginTop: "auto" }}>
+				<p style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center", marginTop: "0.5rem" }}>
 					<select value={mood} onChange={(e) => setMood(e.target.value as Emotion | "calm")} data-testid="mood">
 						{MOODS.map((m) => <option key={m} value={m}>{m}</option>)}
 					</select>
-					<button type="button" className={styles.send} onClick={() => setListening((v) => !v)} aria-pressed={listening}>
+					<button type="button" className={styles.mic} style={{ width: "auto", padding: "0 1rem", height: "2.5rem" }} onClick={() => setListening((v) => !v)} aria-pressed={listening}>
 						{listening ? "Stop listening" : "Listen"}
 					</button>
-					<button type="button" className={styles.send} onClick={() => setChars(0)} disabled={chars !== null}>
+					<button type="button" className={styles.mic} style={{ width: "auto", padding: "0 1rem", height: "2.5rem" }} onClick={() => setChars(0)} disabled={chars !== null}>
 						Speak
 					</button>
+					<button type="button" className={styles.mic} style={{ width: "auto", padding: "0 1rem", height: "2.5rem" }} onClick={() => setFade((v) => !v)} aria-pressed={fade}>
+						{fade ? "Words fade" : "Words stay"}
+					</button>
 				</p>
+				{/* The voice-only room's bottom: the mic alone. */}
+				<form className={styles.composer} onSubmit={(e) => e.preventDefault()}>
+					<button type="button" className={styles.mic} aria-label="Talk to Osmo" onClick={() => setListening((v) => !v)}>
+						<Mic aria-hidden="true" size={22} />
+					</button>
+				</form>
 			</main>
 		</div>
 	);

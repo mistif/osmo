@@ -348,6 +348,26 @@
 	padding: 0.25rem 0 1.25rem;
 }
 
+/* Voice only (no data-chat): no text, no log; the mic alone, large, at the bottom. */
+.stage:not([data-chat]) .field,
+.stage:not([data-chat]) .send {
+	display: none;
+}
+.stage:not([data-chat]) .composer {
+	margin-top: auto;
+	justify-content: center;
+	padding-bottom: 2rem;
+}
+.stage:not([data-chat]) .mic {
+	width: 4.5rem;
+	height: 4.5rem;
+	border-width: 1.5px;
+}
+.stage:not([data-chat]) .voiceLine,
+.stage:not([data-chat]) .voiceError {
+	text-align: center;
+}
+
 .field {
 	flex: 1;
 	min-width: 0;

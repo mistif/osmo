@@ -630,7 +630,12 @@ export default function AgentChat() {
 	// The subtitle under him: the sentence he's saying. After the last word it keeps the reply's last
 	// sentence while it fades (figure.module.css shows it only while data-speaking is set).
 	const spokenText = speaking ? messages[speaking.index]?.text.slice(0, speaking.chars) : [...messages].reverse().find((m) => m.role === "agent")?.text;
-	const said = spokenText ? currentSentence(spokenText) : null;
+	// A browser that can't listen has no way in but typing, so it shows the conversation whatever the setting.
+	const voiceOnly = !voice.showChat && voice.listenSupported;
+	// Voice only: while he thinks, "One moment…" sits under him, and what he heard you say sits above him.
+	const said = thinking && voiceOnly ? "One moment…" : spokenText ? currentSentence(spokenText) : null;
+	const lastHeard = [...messages].reverse().find((m) => m.role === "user")?.text ?? null;
+	const heard = voiceOnly ? (voice.liveText ?? (thinking ? lastHeard : null)) : null;
 
 	const stageStyle = {
 		"--aura-a": theme.colorA,
@@ -646,11 +651,13 @@ export default function AgentChat() {
 			data-speaking={speaking ? "" : undefined}
 			data-panel={panels.panel ?? undefined}
 			data-listening={voice.mode === "awake" || voice.mode === "followup" ? "" : undefined}
+			data-chat={voiceOnly ? undefined : ""}
+			data-fade={voice.fadeSaid ? "" : undefined}
 		>
 			<div className={styles.aura} aria-hidden="true">
 				<span className={`${styles.orb} ${styles.orbA}`} />
 				<span className={`${styles.orb} ${styles.orbB}`} />
-				<Figure className={styles.figure} said={said} />
+				<Figure className={styles.figure} said={said} heard={heard} />
 			</div>
 
 			<main className={styles.column}>
@@ -665,6 +672,7 @@ export default function AgentChat() {
 					<PanelLinks panel={panels.panel} toggle={panels.toggle} linkRef={panels.linkRef} />
 				</header>
 
+				{!voiceOnly && (
 				<ol
 					className={styles.log}
 					aria-label="Conversation with Osmo"
@@ -693,6 +701,7 @@ export default function AgentChat() {
 				)}
 				<li ref={latestMessageRef} className={styles.end} aria-hidden="true" />
 				</ol>
+				)}
 
 				<form onSubmit={sendMessage} className={styles.composer}>
 					<input

@@ -8,6 +8,8 @@ type Props = {
 	className?: string;
 	// The subtitle under him: the sentence he's saying, or null for none.
 	said?: string | null;
+	// What he heard you say, shown above him while he listens and thinks; null for none.
+	heard?: string | null;
 };
 
 const Ring = () => (
@@ -18,10 +20,11 @@ const Ring = () => (
 	</div>
 );
 
-export function Figure({ className = "", said = null }: Props) {
+export function Figure({ className = "", said = null, heard = null }: Props) {
 	return (
-		<div className={`${styles.figure} ${className}`} aria-hidden="true">
-			<div className={styles.rings}>
+		<div className={`${styles.figure} ${className}`}>
+			{heard !== null && <p className={styles.heard}>{heard}</p>}
+			<div className={styles.rings} aria-hidden="true">
 				<Ring />
 				<Ring />
 				<Ring />
@@ -31,7 +34,11 @@ export function Figure({ className = "", said = null }: Props) {
 					<i />
 				</div>
 			</div>
-			{said !== null && <p className={styles.said}>{said}</p>}
+			{said !== null && (
+				<p className={styles.said} aria-live="polite">
+					{said}
+				</p>
+			)}
 		</div>
 	);
 }
