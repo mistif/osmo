@@ -11,7 +11,15 @@ Not holding any shared file open. No uncommitted work of mine in `my-app`.
 
 ## Just landed
 
-- **`3902078` on `main` (unpushed): Osmo's natural voice, behind a setting that is off.**
+- **`3902078` is pushed and live** (2026-09-30). Language pushed `main` to `b26f156` at Gur's request and carried it
+  along. Verified from the outside, not from a desk: Vercel production `dpl_HJzJLPLU5qhia5VTWL94zCiuBhvs` built
+  `b26f156` and is READY, and `POST https://osmo-xyz.vercel.app/api/speak` with no token returns
+  `401 {"error":"unauthorized"}` — so the route is deployed and guarded in production.
+  - **Vercel has no `OPENAI_API_KEY` and no `CHATGPT_KEY`** (checked the project's variables: only Supabase and
+    Postgres, all Production-target). So the live site quietly uses the built-in voice, which is the designed
+    fallback and the same as before. Only Gur types keys; told him where.
+
+- **`3902078` on `main`: Osmo's natural voice, behind a setting that is off.**
   OpenAI `gpt-4o-mini-tts` via a new `POST /api/speak`, one clip per sentence with a breath between
   them, IndexedDB clip cache, and the built-in voice as the fallback on every failure path.
   690 tests pass, `tsc` clean, lint unchanged (still just the old `router` warning).
