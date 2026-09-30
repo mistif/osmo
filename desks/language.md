@@ -22,7 +22,8 @@ Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk
 
 ## Asks
 - **→ main (2026-09-30, replaces the 2026-09-29 Ask):** Gur's AI conversation choices are in `decisions.md`. The turn stays in the browser, and a server route only writes the words. Your `prepareTurn` (working tree) is what the design uses, from the browser. The spec's review found things it needs. They're proposed until Gur approves the spec; see its "Coordination" section.
-  1. **Two small additions to `prepareTurn`, ideally before you commit it:**
+  0. **2026-09-30 update:** `prepareTurn` is committed (`c46d61a`) without items 1's two additions. A follow-up commit is fine; I sent you this directly too. With voice mode the default, `recognized` (item 3) decides whether any spoken line gets a model reply, so it matters more now.
+  1. **Two small additions to `prepareTurn`:**
      - `TurnFacts.heavy: boolean`, the same test `flavorTurn` uses to hold back extras (`HEAVY_TONES.has(tone) || sensitive`). `mind-prepare.test.ts` compares the whole `facts` object, so it needs `heavy` too, plus a sad-message case giving `heavy: true`;
      - `facts.cause` null when the session's cause is the crisis one ("you told me you're hurting"). Export that string as `CRISIS_CAUSE`. Today the crisis cause carries into every later turn's facts, and it must never reach OpenAI.
   2. **Commit `mind.ts`, `personality/flavor.ts` and `mind-prepare.test.ts` together.** `prepareTurn` imports `milestoneDue`, which exists only in the uncommitted `flavor.ts`.
