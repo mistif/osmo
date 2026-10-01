@@ -10,8 +10,13 @@ const CRISIS_WORD = /(^|[^A-Za-z])CRISIS([^A-Za-z]|$)/;
 // A sentence ends at . ! or ?, perhaps with closing quotes, brackets or markdown marks after it,
 // before a space or the end. "3.50" never matches, because a digit follows its stop.
 const SENTENCE_END = /[.!?]+["'”’»)\]}*_`]*(?=\s|$)/g;
-// A title is always followed by a name, so its full stop never ends a sentence ("Dr. Patel").
-const TITLE = /(?:^|[^A-Za-z])(?:mr|mrs|ms|dr|prof)$/i;
+// A title is always followed by a name, and "vs." by its other side, so their full stop never ends a sentence
+// ("Dr. Patel", "Arsenal vs. Chelsea").
+const TITLE = /(?:^|[^A-Za-z])(?:mr|mrs|ms|dr|prof|vs)$/i;
+// With more text after it, a full stop is inside the sentence when it closes a dotted abbreviation ("U.S.", "a.m.",
+// "e.g.") or a lone capital initial ("John F. Kennedy"). At the very end of the text it still ends one ("at 9 a.m.").
+const DOTTED = /(?:^|[^\p{L}])(?:\p{L}\.)+\p{L}$/u;
+const INITIAL = /(?:^|\s)\p{Lu}$/u;
 
 // A code fence, or a line that only draws a rule ("---", "***").
 const FENCE_OR_RULE = /^\s*(?:```.*|(?:[-*_=~]\s*){3,})$/;
@@ -41,8 +46,14 @@ export function isCrisisFlag(raw: string): boolean {
 function sentenceEnds(text: string): number[] {
 	const ends: number[] = [];
 	for (const match of text.matchAll(SENTENCE_END)) {
-		if (match[0] === "." && TITLE.test(text.slice(Math.max(0, match.index - 5), match.index))) continue;
-		ends.push(match.index + match[0].length);
+		const end = match.index + match[0].length;
+		if (match[0] === ".") {
+			const before = text.slice(Math.max(0, match.index - 12), match.index);
+			if (TITLE.test(before)) continue;
+			const more = text.slice(end).trim() !== "";
+			if (more && (DOTTED.test(before) || INITIAL.test(before))) continue;
+		}
+		ends.push(end);
 	}
 	return ends;
 }

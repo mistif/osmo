@@ -59,6 +59,13 @@ describe("lastFullSentence", () => {
 		expect(lastFullSentence("I met Dr. Pat")).toBe("");
 		expect(lastFullSentence("Hello. I met Dr.")).toBe("Hello.");
 	});
+
+	it("never stops inside an abbreviation, but a reply that ends with one is whole", () => {
+		expect(lastFullSentence("You could meet at 9 a.m. at the stat")).toBe("");
+		expect(lastFullSentence("Hello. It's Arsenal vs.")).toBe("Hello.");
+		expect(lastFullSentence("Come at 9 a.m.")).toBe("Come at 9 a.m.");
+		expect(lastFullSentence("Hello. He moved to the U.S.")).toBe("Hello. He moved to the U.S.");
+	});
 });
 
 describe("speakable", () => {
@@ -128,6 +135,20 @@ describe("speakable", () => {
 	it("never cuts at a title's full stop or inside a decimal", () => {
 		expect(speakable("One. Two. Ask Dr. Patel. Bye.")).toBe("One. Two. Ask Dr. Patel.");
 		expect(speakable("It costs 3.50 today. Fine. Good. Done.")).toBe("It costs 3.50 today. Fine. Good.");
+	});
+
+	it("never cuts the third sentence at an abbreviation or an initial", () => {
+		for (const reply of [
+			"Good match. Both sides are strong. It's Arsenal vs. Chelsea on Sunday.",
+			"Rates may drop. Inflation is falling. The U.S. economy looks steady.",
+			"Leave early. Traffic is lighter then. Meet her at 9 a.m. at the station.",
+			"Try a sauce. Keep it simple. Something green, e.g. pesto, works well.",
+			"It was bold. It was costly. It was John F. Kennedy's plan.",
+		]) {
+			expect(speakable(reply), reply).toBe(reply);
+		}
+		// Hebrew has no capitals, so its full stops still end sentences.
+		expect(speakable("שלום. מה שלומך. טוב. ביי.")).toBe("שלום. מה שלומך. טוב.");
 	});
 
 	it("keeps at most 400 characters, dropping whole sentences from the end so the first stays", () => {
