@@ -6,6 +6,7 @@ Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk
 **The AI conversation, phase 1, is built and on local `main`, switched off.** It's waiting for Gur: first the one real probe call, then his go-live checklist. Nothing is pushed. Not holding any shared file open.
 
 ## Just landed
+- `0bb1ccf` (local main): **the AI conversation uses the natural voice's OpenAI key** unless `OSMO_CHAT_OPENAI_KEY` is set (Gur's call, see `decisions.md`). `chatKey` in `lib/chat/allowance.ts`; the probe uses it too. 995 tests pass. Spec choice 1, `.env.example` and my `project.md` rows updated.
 - **The AI conversation, phase 1:** local commits `fade564..fabd741` (`feat(chat): …`, `refactor(room): …`, two `fix(chat): …` from the final review), built in a worktree at Gur's choice and fast-forwarded into local `main` on 2026-10-01. The spec is `docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md`; the plan is `docs/superpowers/plans/2026-09-30-osmo-ai-conversation.md`.
   - **It ships dark.** It's off unless `OSMO_CHAT=on`, the key, the owner id and the cap are all set. Until then `/api/chat` answers `off` or 403 and never calls OpenAI.
   - **Checks on `fabd741`:** 994 tests pass (708 before + 286), lint has 0 errors, `tsc` is clean, and `next build` passed (it lists `ƒ /api/chat`).
@@ -23,7 +24,7 @@ Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk
 - **Osmo's memory of Gur was wiped at his request** (2026-09-30, details in `decisions.md`): his personality and voiceprint kept, 16 identity facts seeded.
 
 ## Next
-1. **Gur:** the one real probe call (`node scripts/chat-probe.mjs`), then his go-live checklist (the spec, "Before it goes live"). At go-live: the `decisions.md` entry replacing the 2026-09-26 internet rule.
+1. **Gur:** the one real probe call (`node scripts/chat-probe.mjs`, with the voice's key already in `.env.local`), then his go-live checklist (the spec, "Before it goes live"). At go-live: the `decisions.md` entry replacing the 2026-09-26 internet rule.
 2. Waiting for Gur to say go:
    - **`isCrisis` misses "kill my self" (two words) and Swedish or Hebrew phrasings** (found in the final review; `safety.ts`, mine, not in this build). Speech-to-text can write "my self". Offered to Gur as its own fix, test first.
    - **Cloud findings 1, 2, 4, 8 and 10:** small fixes in the language chain. Each gets a failing test first.
@@ -38,7 +39,8 @@ Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk
 
      Until then, lint shows one unused-variable warning for `aiUsage`.
   2. **`ai_calls`:** checked live read-only (12 columns, RLS, read and insert policies only, 11 constraints, the day index). Please add it to `project.md`'s tables.
-  3. **For the voice lane (yours):** `VoiceEngine.dispose()` keeps its config, so an `onReply` after the room unmounts (a reply landing just after Lock) can still be spoken on `/lock`. It predates this build (a lookup could do it), but model waits make the window a little longer. Ignoring `onReply` once disposed would close it.
+  3. **`lanes.md` line 94** (yours) says `/api/chat` has its own key. Since 2026-10-01 it uses `/api/speak`'s `OPENAI_API_KEY` (or `CHATGPT_KEY`) unless `OSMO_CHAT_OPENAI_KEY` is set. Please update it.
+  4. **For the voice lane (yours):** `VoiceEngine.dispose()` keeps its config, so an `onReply` after the room unmounts (a reply landing just after Lock) can still be spoken on `/lock`. It predates this build (a lookup could do it), but model waits make the window a little longer. Ignoring `onReply` once disposed would close it.
 - **→ Gur:** the probe call, then the go-live checklist.
 
 ## Answers

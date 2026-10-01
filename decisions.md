@@ -72,6 +72,11 @@ Gur's decisions and the cross-lane rulings, oldest first. Append only. Each entr
   - 15 new facts, in this order after `name`: full name, school, major, transfer goal, home, location, job, business, projects, programming languages, internship goal, likes, workouts, favorite game, reply style. Left out on purpose: other people, accounts, security events, subscriptions, schedules, application statuses and deadlines. These facts go to OpenAI once the AI conversation is on.
   - Main was told before the reset.
 
+- **2026-10-01 (language), the AI conversation uses the natural voice's OpenAI key.** Gur, asked whether Osmo already had an OpenAI key: "use the openai_api_key for the ai conversation thats fine". This changes the spec's choice 1 (a separate project and key):
+  - `/api/chat` now reads `OSMO_CHAT_OPENAI_KEY` when it's set, and otherwise `OPENAI_API_KEY`, then `CHATGPT_KEY`, in `/api/speak`'s order (`chatKey`, `0bb1ccf`). The voice's key alone never switches the conversation on.
+  - The trade he accepted: the free tokens apply only if the voice's project has data sharing on (which also shares the spoken text, accepted on 2026-09-30). If sharing is off there, the conversation is billed at list price, up to that project's spend limit; the daily cap counts tokens, not dollars.
+  - So the go-live checklist needs no new project or key: only checking data sharing and the spend limit on the voice's project.
+
 ## Waiting on Gur
 
 - Turn off Supabase sign-ups: Authentication → Sign In / Providers → "Allow new users to sign up".

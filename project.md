@@ -37,10 +37,10 @@ Osmo is a chat companion for one person, Gur. Today he is rule-based: every repl
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | `.env.local`, Vercel Production | everything |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `.env.local`, Vercel Production | everything (public by design; row-level security protects the data) |
-| `OPENAI_API_KEY` (preferred), or `CHATGPT_KEY` (accepted alias; the name Gur typed on 2026-09-29) | `.env.local` now; Vercel when Gur wants them live | speaking: `/api/speak` (billed). `/api/chat` never reads it. |
+| `OPENAI_API_KEY` (preferred), or `CHATGPT_KEY` (accepted alias; the name Gur typed on 2026-09-29) | `.env.local` now; Vercel when Gur wants them live | speaking: `/api/speak` (billed). Language: `/api/chat` uses it too when `OSMO_CHAT_OPENAI_KEY` is unset (Gur's call, 2026-10-01: one project for both). |
 | `OSMO_CHAT` | `.env.local`; Vercel Production when Gur turns it on | language: `/api/chat`. Exactly `on` turns the AI conversation on; anything else is off. |
 | `OSMO_OWNER_ID` | `.env.local`, Vercel Production | language: `/api/chat`. Gur's Supabase user id (a uuid, not a secret). Unset or empty means 403 for everyone. |
-| `OSMO_CHAT_OPENAI_KEY` | `.env.local`, Vercel Production | language: `/api/chat`. The key of the conversation's own OpenAI project, the one with data sharing on. Server-only; there's no fallback to `OPENAI_API_KEY`. |
+| `OSMO_CHAT_OPENAI_KEY` | `.env.local`, Vercel Production | language: `/api/chat`. Optional since 2026-10-01: a key for a project of the conversation's own. Unset (Gur's choice) means the voice's `OPENAI_API_KEY`, else `CHATGPT_KEY`. Server-only. |
 | `OSMO_CHAT_MODEL` | optional | language: `/api/chat`. A dated snapshot from `lib/chat/allowance.ts`; unset means `gpt-5.4-mini-2026-03-17`. An unlisted model means off. |
 | `OSMO_MINI_TOKENS_PER_DAY` | `.env.local`, Vercel Production | language: `/api/chat`. Osmo's share of the small pool per UTC day, digits only (Gur's value: 700000). Missing or invalid means off. |
 | `OSMO_TOKENS_RESERVE` | optional | language: `/api/chat`. The margin kept back, written `0` or `0.x`; unset or malformed means 0.1. |
@@ -124,7 +124,7 @@ It checks `Authorization: Bearer <Supabase access token>` and returns the user, 
 
 ### The AI conversation (owner: language; spec `docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md`)
 - **Off until Gur turns it on.**
-  - It needs `OSMO_CHAT=on`, `OSMO_CHAT_OPENAI_KEY`, `OSMO_OWNER_ID` and a valid `OSMO_MINI_TOKENS_PER_DAY` (see Keys).
+  - It needs `OSMO_CHAT=on`, an OpenAI key (`OSMO_CHAT_OPENAI_KEY`, else the voice's `OPENAI_API_KEY` or `CHATGPT_KEY`), `OSMO_OWNER_ID` and a valid `OSMO_MINI_TOKENS_PER_DAY` (see Keys).
   - Anything missing or malformed means off, and every reply comes from the rule-based chain, as before.
 - **The turn stays in the browser.** `sendText` runs the chain in today's order (`pickBranch` in `lib/chat/branch.ts`).
   - **The model writes** the words of the everyday branches: recall, `processTurn`'s everyday reply, arithmetic (handed the exact result), word questions, unknown topics, and answers from memory.
