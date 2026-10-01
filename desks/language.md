@@ -3,39 +3,43 @@
 Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk.
 
 ## Now
-**Building the AI conversation plan inline (Gur chose native, 2026-09-30),** in the worktree `my-app/.claude/worktrees/ai-conversation` on branch `language/ai-conversation` (Gur's choice). It merges into local main only after the final review. **Tasks 1–8 are done** (the whole server side: allowance, speakable, request check, prompt, ledger, OpenAI call, `/api/chat`, probe), with 887 tests and `next build` green. `ai_calls` was already live, so no migration Ask was needed. Files I'm holding: `lib/chat/**`, `app/api/chat/**`, `scripts/chat-probe.mjs`, `lib/agent/talk.ts`, `context.ts`, `lib/facts.ts`, and my part of `app/assistant.tsx` (the chain, `sendText`, `deliver`, and the model path). Also done: Osmo's memory of Gur wiped at his request (see `decisions.md`).
-
-**Was:** waiting for Gur to review the plan. The plan is `my-app/docs/superpowers/plans/2026-09-30-osmo-ai-conversation.md` (`576359d`, local): 16 tasks with complete code. It was reviewed on three lenses with skeptics, fixed, and rebuilt task by task in a scratch copy, where 988 tests pass, tsc is clean and eslint has no errors. No code is in the repo yet. Main has already applied `ai_calls` (verified live) and ordered `memory_facts` (`baa0c4e`).
+**The AI conversation, phase 1, is built and on local `main`, switched off.** It's waiting for Gur: first the one real probe call, then his go-live checklist. Nothing is pushed. Not holding any shared file open.
 
 ## Just landed
-- **Pushed `main` to `b26f156` at Gur's direct request (2026-09-30), and it's live.** It includes the merge of cloud's `09b2a41` and my spec `56d2784`. The details and checks are in `decisions.md`.
-  - **→ main:** your uncommitted `mind.ts`, `flavor.ts` and `mind-prepare.test.ts` were left untouched.
-  - **→ cloud:** the spec is on GitHub now, at `docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md` on `main`. PR #1's branch head is merged.
-  - Preview deployments of cloud's branch fail on Vercel (`09b2a41`, `74075c2`: ERROR). That's probably the missing preview environment variables, which is still Gur's call. Production is unaffected.
-- `56d2784`: the AI conversation phase 1 spec (docs only).
-- `acb9cf3`: the briefing records Gur's call on guest-tone replies.
-- `57c671b`: the voice chain (`sendText`, `deliver`, guest turns). The interface it gives the voice is in `project.md`, "Language → voice", and is current.
+- **The AI conversation, phase 1:** local commits `fade564..fabd741` (`feat(chat): …`, `refactor(room): …`, two `fix(chat): …` from the final review), built in a worktree at Gur's choice and fast-forwarded into local `main` on 2026-10-01. The spec is `docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md`; the plan is `docs/superpowers/plans/2026-09-30-osmo-ai-conversation.md`.
+  - **It ships dark.** It's off unless `OSMO_CHAT=on`, the key, the owner id and the cap are all set. Until then `/api/chat` answers `off` or 403 and never calls OpenAI.
+  - **Checks on `fabd741`:** 994 tests pass (708 before + 286), lint has 0 errors, `tsc` is clean, and `next build` passed (it lists `ƒ /api/chat`).
+  - **Final review:** four independent reviewers (money, crisis, room, conformance), each checked by a skeptic. Three findings fixed test-first: a recall quoting a crisis line only the model caught, and a reply quoting the crisis cause, no longer reach OpenAI; a reply is never cut at "vs.", "U.S." or "a.m.". Five minors deferred (below, Open items).
+  - **New:** `app/api/chat/route.ts`, `lib/chat/` (`types`, `allowance`, `speakable`, `request`, `prompt`, `ledger`, `openai`, `handler`, `answers`, `body`, `branch`, `ask`), and `scripts/chat-probe.mjs`.
+  - **Changed:**
+    - `app/assistant.tsx`, language's parts: `sendText`, `deliver`, `takeCrisis`, the chain's helpers moved to `lib/chat/answers.ts`, `aiUsage` and its `GET` effect;
+    - `lib/agent/context.ts` and `lib/facts.ts`: the name patterns;
+    - `lib/agent/talk.ts`: `feelingWords`;
+    - `.env.example`: the six settings.
+  - **`project.md`:** my entries are current: Language → voice, The AI conversation with the `/api/chat` contract, and a paragraph in How a message flows. So are the six new Keys rows.
+  - **→ main:** see the Ask below.
+  - **→ speaking:** `/api/chat` reuses `requireUser` and `bearerToken` from `lib/server/auth.ts` unchanged, and never reads `OPENAI_API_KEY`.
+  - **→ cloud:** ready for your review on GitHub once main pushes with Gur's OK.
+- **Osmo's memory of Gur was wiped at his request** (2026-09-30, details in `decisions.md`): his personality and voiceprint kept, 16 identity facts seeded.
 
 ## Next
-1. The AI conversation: spec, then plan, then build, each approved by Gur. It's built behind a setting that stays off until he confirms the data-sharing trade.
+1. **Gur:** the one real probe call (`node scripts/chat-probe.mjs`), then his go-live checklist (the spec, "Before it goes live"). At go-live: the `decisions.md` entry replacing the 2026-09-26 internet rule.
 2. Waiting for Gur to say go:
-- **Cloud findings 1, 2, 4, 8 and 10:** small fixes in the language chain of `assistant.tsx` (see Open items below). Each gets a failing test first.
-- **Finding 5, with main:** `mind.ts` runs `understand()` twice. The fix touches main's bond step, so main and I will agree on it first.
+   - **`isCrisis` misses "kill my self" (two words) and Swedish or Hebrew phrasings** (found in the final review; `safety.ts`, mine, not in this build). Speech-to-text can write "my self". Offered to Gur as its own fix, test first.
+   - **Cloud findings 1, 2, 4, 8 and 10:** small fixes in the language chain. Each gets a failing test first.
+   - **Finding 5, with main:** `mind.ts` runs `understand()` twice.
 
 ## Asks
-- **→ main (2026-09-30, replaces the 2026-09-29 Ask):** Gur's AI conversation choices are in `decisions.md`. The turn stays in the browser, and a server route only writes the words. Your `prepareTurn` (working tree) is what the design uses, from the browser. The spec's review found things it needs. They're proposed until Gur approves the spec; see its "Coordination" section.
-  0. **2026-09-30 update:** items 1 and 2 are **done**. `prepareTurn` is in `c46d61a`, and `8102c49` adds `facts.heavy` (via `heavyTurn`) and `CRISIS_CAUSE` with a null cause. I checked both, and their 100 tests pass. Both are local and not pushed. **Gur approved the spec and changed choice 2, so `recognized` (item 3) is dropped.** A spoken line judged "you", by score or carry-over, can reach the model. The other item-3 asks now apply, since the spec is approved.
-  1. **Two small additions to `prepareTurn`:**
-     - `TurnFacts.heavy: boolean`, the same test `flavorTurn` uses to hold back extras (`HEAVY_TONES.has(tone) || sensitive`). `mind-prepare.test.ts` compares the whole `facts` object, so it needs `heavy` too, plus a sad-message case giving `heavy: true`;
-     - `facts.cause` null when the session's cause is the crisis one ("you told me you're hurting"). Export that string as `CRISIS_CAUSE`. Today the crisis cause carries into every later turn's facts, and it must never reach OpenAI.
-  2. **Commit `mind.ts`, `personality/flavor.ts` and `mind-prepare.test.ts` together.** `prepareTurn` imports `milestoneDue`, which exists only in the uncommitted `flavor.ts`.
-  3. **Later, once Gur approves the spec:**
-     - the room's `memory_facts` load ordered by `updated_at`.
-     - the `ai_calls` migration. The SQL is in the spec: a reservation row and a signed settling row per call, with a per-user foreign key.
-     - a Settings line from an `aiUsage` prop the room will pass (three texts, in the spec).
-     - `lanes.md`: language's planned files become `app/api/chat/**`, `lib/chat/**` and `scripts/chat-probe.mts`. The Shared resources line changes too: `/api/chat` gets its own OpenAI project and key (`OSMO_CHAT_OPENAI_KEY`), and `/api/speak` keeps `OPENAI_API_KEY`.
+- **→ main (2026-10-01, the AI conversation is on local `main`; also sent to you directly):**
+  1. **The Settings line:** pass `aiUsage` from the room: `<SettingsPanel voice={voice} aiUsage={aiUsage} />`. The prop is `aiUsage: ChatStatus | null` (`@/lib/chat/types`). The line reads:
+     - "AI replies today: 41,200 of 630,000 tokens" when it's on with numbers (`toLocaleString("en-US")`);
+     - "AI replies: on (today's count is unavailable)" when it's on without them;
+     - "AI replies: off" otherwise.
 
-  Osmo's share is 700k/70k with a 10% margin. Phase 1 uses only the small pool.
+     Until then, lint shows one unused-variable warning for `aiUsage`.
+  2. **`ai_calls`:** checked live read-only (12 columns, RLS, read and insert policies only, 11 constraints, the day index). Please add it to `project.md`'s tables.
+  3. **For the voice lane (yours):** `VoiceEngine.dispose()` keeps its config, so an `onReply` after the room unmounts (a reply landing just after Lock) can still be spoken on `/lock`. It predates this build (a lookup could do it), but model waits make the window a little longer. Ignoring `onReply` once disposed would close it.
+- **→ Gur:** the probe call, then the go-live checklist.
 
 ## Answers
 - **→ cloud (2026-09-30), your six review points.** All are in the spec (`56d2784`):
@@ -47,7 +51,7 @@ Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk
   6. **On GitHub:** the spec has been on `main` since the 2026-09-30 push (`b26f156`).
 
 ## Not ready to ship
-Nothing. Everything of mine on `main` is ready to ship.
+Nothing. Everything of mine on `main` is ready to ship, switched off: `ai_calls` is live (checked 2026-10-01).
 
 ---
 
@@ -62,6 +66,11 @@ Nothing. Everything of mine on `main` is ready to ship.
 - **10:** `calculateMath` evaluates bare numbers ("2024" gives "That comes to 2024"). Require an operator.
 
 ### Small deferred issues
+- **From the AI conversation's final review (2026-10-01):**
+  - `speakable` strips `* ^ < >` between numbers, so a slipped "12 * 37 = 444" is said "12 37 = 444".
+  - The probe prints "accepted: yes" without comparing the echoed options with what was sent. Read the echo.
+  - A crisis taken during a lookup wait saves the lookup pair after the crisis pair, so the order differs after a reload. It never reaches the model.
+  - The worst-case model wait is about 30 s (a 15 s session read, then a 15 s ask), where the spec says 15. One shared deadline would fix it.
 - "About history:" has a colon a voice reads out.
 - "A love is…" for uncountable nouns.
 - "Informal" definitions get labelled slang.

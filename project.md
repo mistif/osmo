@@ -37,7 +37,13 @@ Osmo is a chat companion for one person, Gur. Today he is rule-based: every repl
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | `.env.local`, Vercel Production | everything |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `.env.local`, Vercel Production | everything (public by design; row-level security protects the data) |
-| `OPENAI_API_KEY` (preferred), or `CHATGPT_KEY` (accepted alias; the name Gur typed on 2026-09-29) | `.env.local` now; Vercel when Gur wants them live | speaking: `/api/speak` (billed). Language: `/api/chat` (planned; free allowance only). Both read `OPENAI_API_KEY` first. |
+| `OPENAI_API_KEY` (preferred), or `CHATGPT_KEY` (accepted alias; the name Gur typed on 2026-09-29) | `.env.local` now; Vercel when Gur wants them live | speaking: `/api/speak` (billed). `/api/chat` never reads it. |
+| `OSMO_CHAT` | `.env.local`; Vercel Production when Gur turns it on | language: `/api/chat`. Exactly `on` turns the AI conversation on; anything else is off. |
+| `OSMO_OWNER_ID` | `.env.local`, Vercel Production | language: `/api/chat`. Gur's Supabase user id (a uuid, not a secret). Unset or empty means 403 for everyone. |
+| `OSMO_CHAT_OPENAI_KEY` | `.env.local`, Vercel Production | language: `/api/chat`. The key of the conversation's own OpenAI project, the one with data sharing on. Server-only; there's no fallback to `OPENAI_API_KEY`. |
+| `OSMO_CHAT_MODEL` | optional | language: `/api/chat`. A dated snapshot from `lib/chat/allowance.ts`; unset means `gpt-5.4-mini-2026-03-17`. An unlisted model means off. |
+| `OSMO_MINI_TOKENS_PER_DAY` | `.env.local`, Vercel Production | language: `/api/chat`. Osmo's share of the small pool per UTC day, digits only (Gur's value: 700000). Missing or invalid means off. |
+| `OSMO_TOKENS_RESERVE` | optional | language: `/api/chat`. The margin kept back, written `0` or `0.x`; unset or malformed means 0.1. |
 | `NEXT_PUBLIC_OSMO_DEMO` | local only, never in production | the bond demo switch |
 
 Vercel's variables target Production only, so preview deployments of other branches fail at build. Adding the Preview target is Gur's call.
@@ -75,6 +81,8 @@ The language chain is `sendText` in `app/assistant.tsx`, owned by language. It r
 10. Answers from memory and built-in knowledge.
 11. Fallback.
 
+When the AI conversation is on (see "The AI conversation" under Interfaces), an OpenAI model writes the words of steps 4, 5 (everyday conversation only), 7, 8, 9, 10 and 11, and code keeps the rest. Whenever the model can't answer, the step's own reply is used, as before, with its dictionary lookup or its offer to learn.
+
 **Memory keys:**
 - `name`;
 - `slang:<term>` (the meaning as typed);
@@ -86,10 +94,20 @@ Keys are lowercase. The Memory panel edits values only.
 ## Interfaces between lanes
 
 ### Language → voice (owner: language)
-- `sendText(text, { via: "typed" | "voice", speaker: "you" | "guest", greet? }): boolean` returns `false` when it can't take a message: the text is empty, Osmo hasn't loaded, or a lookup is running. It never throws; a throw counts as a dropped message.
+- `sendText(text, { via: "typed" | "voice", speaker: "you" | "guest", greet? }): boolean` returns `false` when it can't take a message: the text is empty, Osmo hasn't loaded, or he's waiting (on a model reply or a lookup) and the message isn't a crisis message. It never throws; a throw counts as a dropped message.
+- **A crisis message is taken while Osmo waits.**
+  - `sendText` returns `true`.
+  - It adds the line and `CRISIS_REPLY` at once, and hands the reply to the voice with the message's own `via`.
+  - The waiting turn then finishes quietly:
+    - a pending model request is aborted, and its turn gets no reply of its own;
+    - a pending lookup's reply is shown and saved, but not handed to the voice.
+  - Only a typed turn can be waiting when this happens. In voice-only mode, a spoken message puts the voice itself into waiting, with the mic closed.
 - `deliver(reply)` calls `onReplyRef.current?.(reply, via)` inside `queueMicrotask`, with the **whole** reply as one string. The voice engine speaks one string per reply.
+  - A reply the model writes arrives the same way, after about 30 seconds at most, with "One moment…" shown meanwhile.
+  - Every other message `sendText` takes gets exactly one reply this way, fallbacks included.
+- **A spoken line the voice counts as Gur's,** by its score or by the 1.5-second carry-over, is treated like a typed line of his and can get a model reply. A line judged a guest's never reaches the model.
 - **Guest turns** read `GUEST_MEMORY` and an empty history (`turnView`), pass `guest: true` to `processTurn`, and discard the state. They save both rows with `speaker = 'guest'`, and prefix the first reply with `greetGuest`.
-- The crisis check stays code and runs first.
+- The crisis check stays code and runs first, before the waiting gate.
 
 ### The voice engine → speaking (owner: main; speaking implements it)
 `VoiceDeps.say(text, { onWord(start, end), onEnd() }): { cancel() }`, in `lib/voice/engine.ts`:
@@ -104,14 +122,47 @@ Keys are lowercase. The Memory panel edits values only.
 ### Server auth (owner: speaking; planned `lib/server/auth.ts`)
 It checks `Authorization: Bearer <Supabase access token>` and returns the user, or a 401. `/api/speak` uses it, and `/api/chat` will later. There's no service-role key anywhere.
 
-### The AI conversation → voice and the rest (owner: language; design by cloud)
-- Listed free-allowance models only. A daily token count stays under the limits, and the rule-based chain answers once the day's allowance is used up or on any model error.
-- Whole replies per `deliver` (or a "final text" event).
-- `sendText` still returns false while a turn is in flight.
-- The guest rules move into the prompt: a guest prompt gets no memory, no bond, no name and no `cause`.
-- The crisis check stays code, and the `speaker` rows stay.
-- His self-description, "internet only for word definitions", lives in `agentKnowledge` (language) and must change when the model lands.
-- **`/api/chat` contract (draft, not built):** `POST` with `Authorization: Bearer <Supabase access token>` (checked by speaking's `lib/server/auth.ts`) and body `{ text: string, speaker: "you" | "guest" }`. Response `{ reply: string, state: AgentState, source: "model" | "fallback" }`, or a 401. The route saves the two `messages` rows and `agent_state` itself, so `sendText` only shows the reply and takes the new state for the mood theme. Streaming, if added, ends in the same final object.
+### The AI conversation (owner: language; spec `docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md`)
+- **Off until Gur turns it on.**
+  - It needs `OSMO_CHAT=on`, `OSMO_CHAT_OPENAI_KEY`, `OSMO_OWNER_ID` and a valid `OSMO_MINI_TOKENS_PER_DAY` (see Keys).
+  - Anything missing or malformed means off, and every reply comes from the rule-based chain, as before.
+- **The turn stays in the browser.** `sendText` runs the chain in today's order (`pickBranch` in `lib/chat/branch.ts`).
+  - **The model writes** the words of the everyday branches: recall, `processTurn`'s everyday reply, arithmetic (handed the exact result), word questions, unknown topics, and answers from memory.
+  - **Code keeps** the crisis reply, every reply that saves or changes something, the name questions and name answers, `prepareTurn`'s own replies, guests' replies, and messages over 2,000 characters (`writerFor`).
+- **One state step per turn:** `prepareTurn`'s state is kept for a model reply, and `processTurn`'s for anything else (`keptTurn`).
+- **Any failure falls back** to today's reply for that branch, with its side effects: a lookup, or the "Could you explain it?" offer.
+  - A 401 never signs Gur out.
+  - After a crisis (the code's, or the model answering `CRISIS`), a 403 or `off`, the room posts nothing more until it reloads.
+- **What's sent:**
+  - the message;
+  - the last 20 lines of Gur's own conversation, with crisis lines and guest lines left out;
+  - his memory facts;
+  - Osmo's feeling and its cause, the bond stage, a due milestone and the time away;
+  - Osmo's donors and values.
+
+  Never the crisis cause, his vocabulary, or anything from other tables.
+- **The budget:**
+  - Only the dated snapshots in `lib/chat/allowance.ts`, and only the small pool in phase 1.
+  - Osmo's share is `OSMO_MINI_TOKENS_PER_DAY` less a 10% margin: 630,000 of 700,000.
+  - Every call is reserved in `ai_calls` at an upper-bound estimate before it's made, and settled after with a signed row.
+- **`aiUsage`:** the room keeps `aiUsage: ChatStatus | null` (`@/lib/chat/types`) and passes it to `SettingsPanel` for the usage line.
+  - `GET /api/chat` sets it on load.
+  - Each answer's `usage` updates it (`nextUsage` in `lib/chat/ask.ts`).
+- **His self-description** (`agentKnowledge(aiOn)` in `lib/chat/answers.ts`) says, when it's on, that an OpenAI model writes his everyday replies, and what is sent there.
+- **`/api/chat` contract** (built: `lib/chat/handler.ts`, route `app/api/chat/route.ts`):
+  - **Auth.** Every request needs `Authorization: Bearer <Supabase access token>`, checked by speaking's `requireUser`: 401 without a valid one. The user must be `OSMO_OWNER_ID`, compared trimmed and lowercased: 403 otherwise, and 403 for everyone when it's unset.
+  - **Responses.** Every response is JSON with `cache-control: no-store`. Errors are `{ error: "unauthorized" | "forbidden" | "bad_request" | "method" }` with 401, 403, 400 or 405.
+  - **`GET`** answers `ChatStatus`: `{ enabled: boolean, usedToday: number | null, usable: number | null }`. The counts are null when it's off or when today's ledger can't be read.
+  - **`POST`** takes `ChatBody` (`lib/chat/types.ts`): `{ text, history, memory, facts, persona, hint? }`, within `LIMITS`:
+    - text: 1 to 2,000 characters;
+    - history: up to 20 lines, each up to 2,000;
+    - memory: up to 200 facts, key and value each up to 300;
+    - `facts` strings: up to 200.
+
+    Anything outside them is a 400, and so is a genome that `sanitizeGenome` would repair. The browser's `chatBody` trims to the limits first.
+  - **The `POST` answer** is `ChatAnswer`: `{ source: "model", reply, usage }` or `{ source: "fallback", reason: "off" | "allowance" | "error" | "empty" | "crisis", usage }`. `usage` is `{ usedToday, usable }` for the pool, including this call, or null when today's rows weren't read.
+  - **What the route writes.** It reads and writes only `ai_calls`, as Gur through row-level security, with no service-role key. The browser keeps saving `messages`, `agent_state`, `mood_days`, facts and vocabulary itself. There's no streaming.
+  - **The browser's side** is `lib/chat/ask.ts`: `askStatus`, `askForReply` (a 15-second limit; it never throws) and `nextUsage`.
 
 ## Docs
 
