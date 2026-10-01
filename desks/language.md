@@ -3,9 +3,10 @@
 Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk.
 
 ## Now
-**The AI conversation, phase 1, is built and on local `main`, switched off.** It's waiting for Gur: first the one real probe call, then his go-live checklist. Nothing is pushed. Not holding any shared file open.
+**The AI conversation, phase 1, is live on Vercel and switched off** (pushed `0bb1ccf` at Gur's request on 2026-10-01; see `decisions.md`). It's waiting for Gur: the one real probe call, then the Vercel settings that switch it on. Not holding any shared file open.
 
 ## Just landed
+- **Pushed `main` to `0bb1ccf` at Gur's request (2026-10-01); it's live** (`dpl_HwJuJxURbyuUtKbvdiN8JYTmAjHL`). **→ main:** your `prepareTurn`, memory order, wake word (`31f78df`, served at `/models/wake/osmo.onnx`) and guest greeting went out with it; `voice:check` and a clean `npm run build` passed first.
 - `0bb1ccf` (local main): **the AI conversation uses the natural voice's OpenAI key** unless `OSMO_CHAT_OPENAI_KEY` is set (Gur's call, see `decisions.md`). `chatKey` in `lib/chat/allowance.ts`; the probe uses it too. 995 tests pass. Spec choice 1, `.env.example` and my `project.md` rows updated.
 - **The AI conversation, phase 1:** local commits `fade564..fabd741` (`feat(chat): …`, `refactor(room): …`, two `fix(chat): …` from the final review), built in a worktree at Gur's choice and fast-forwarded into local `main` on 2026-10-01. The spec is `docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md`; the plan is `docs/superpowers/plans/2026-09-30-osmo-ai-conversation.md`.
   - **It ships dark.** It's off unless `OSMO_CHAT=on`, the key, the owner id and the cap are all set. Until then `/api/chat` answers `off` or 403 and never calls OpenAI.

@@ -77,6 +77,13 @@ Gur's decisions and the cross-lane rulings, oldest first. Append only. Each entr
   - The trade he accepted: the free tokens apply only if the voice's project has data sharing on (which also shares the spoken text, accepted on 2026-09-30). If sharing is off there, the conversation is billed at list price, up to that project's spend limit; the daily cap counts tokens, not dollars.
   - So the go-live checklist needs no new project or key: only checking data sharing and the spend limit on the voice's project.
 
+- **2026-10-01 (language), the fifth push: `main` to `0bb1ccf`, at Gur's direct request** ("push everything so it up on vercel"). It covered 29 commits from `7290102`:
+  - main's `prepareTurn` (`c46d61a`, `8102c49`), the memory load order (`baa0c4e`), the trained wake word (`31f78df`) and the guest greeting (`1094157`);
+  - language's AI conversation (spec, plan, the build, the review fixes, and the shared key, `0bb1ccf`).
+  - Before pushing: 995 tests and `npm run voice:check` passed, and `npm run build` passed in a clean worktree of `0bb1ccf`.
+  - Vercel production `dpl_HwJuJxURbyuUtKbvdiN8JYTmAjHL` is READY on osmo-xyz.vercel.app. `/` and `/lock` answer 200, `/api/chat` and `/api/speak` answer 401 without a sign-in, and `/models/wake/osmo.onnx` is served.
+  - The AI conversation is live but **switched off**: Vercel has no `OSMO_CHAT`, `OSMO_OWNER_ID` or cap, so every reply is still the rule-based chain.
+
 ## Waiting on Gur
 
 - Turn off Supabase sign-ups: Authentication → Sign In / Providers → "Allow new users to sign up".
