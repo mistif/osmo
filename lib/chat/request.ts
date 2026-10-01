@@ -111,10 +111,10 @@ export function checkBody(raw: unknown): Checked {
 	const hint = checkHint(raw.hint);
 	if (text === "" || text.length > LIMITS.text || !history || !memory || !facts || !persona || hint === null) return { ok: false };
 
-	// The crisis defence. The browser never sends crisis lines, but the route doesn't rely on that.
+	// The crisis defence. The browser never sends crisis lines or the crisis cause, but the route doesn't rely on that.
 	const body: ChatBody = {
 		text,
-		history: history.filter((line) => !isCrisis(line.text)),
+		history: history.filter((line) => !isCrisis(line.text) && !line.text.includes(CRISIS_CAUSE)),
 		memory: memory.filter((fact) => !isCrisis(`${fact.key} ${fact.value}`)),
 		facts: { ...facts, cause: facts.cause === CRISIS_CAUSE ? null : facts.cause },
 		persona,

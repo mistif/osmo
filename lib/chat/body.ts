@@ -21,20 +21,33 @@ function clip(text: string, max: number): string {
 	return text.slice(0, end);
 }
 
-// Whether a line of Gur's conversation stays out of the model's history. It depends only on the line and its two
-// neighbours. Out go: his crisis line and Osmo's reply to it; the crisis reply and the line it answered (a crisis the
-// model flagged); any line of Osmo's that matches (a recall quoting a crisis message); and any line of his with no
-// reply of its own (a turn cut short by a crisis, which might be one the code missed).
+// Whether a line of Gur's stays out of the model's history. It depends only on the line and its two neighbours. Out
+// go: his crisis line; a line the crisis reply answered (a crisis the model flagged); and a line with no reply of its
+// own (a turn cut short by a crisis, which might be one the code missed).
+function userLeftOut(lines: readonly RoomLine[], i: number): boolean {
+	const next = lines[i + 1];
+	return isCrisis(lines[i].text) || next?.role !== "agent" || next.text === CRISIS_REPLY;
+}
+
+// Whether a line of Gur's conversation stays out of the model's history. Out go his lines above, and of Osmo's: the
+// crisis reply and his reply to a crisis line; any line that matches (a recall quoting a crisis message); a line that
+// gives the crisis cause as his reason; and a recall that quotes, word for word, a line of Gur's that is left out, so
+// a crisis only the model caught is never sent back through a recall.
 function leftOut(lines: readonly RoomLine[], i: number): boolean {
 	const line = lines[i];
 	const before = lines[i - 1];
-	const next = lines[i + 1];
-	if (line.role === "user") return isCrisis(line.text) || next?.role !== "agent" || next.text === CRISIS_REPLY;
-	return line.text === CRISIS_REPLY || (before?.role === "user" && isCrisis(before.text)) || isCrisis(line.text);
+	if (line.role === "user") return userLeftOut(lines, i);
+	if (line.text === CRISIS_REPLY || (before?.role === "user" && isCrisis(before.text)) || isCrisis(line.text)) return true;
+	if (line.text.includes(CRISIS_CAUSE)) return true;
+	for (let j = i - 1; j >= 0; j--) {
+		if (lines[j].role === "user" && line.text.includes(`"${lines[j].text}"`) && userLeftOut(lines, j)) return true;
+	}
+	return false;
 }
 
 // The last 20 lines of Gur's conversation the model may see, oldest first, each cut to the route's limit. Read from
-// the newest back, so a long chat costs no more than a short one.
+// the newest back, so a long chat costs little more than a short one: only a recall's quote check looks further back,
+// and it compares strings, running the crisis check only on a line a reply quotes.
 export function modelHistory(messages: readonly RoomLine[]): HistoryLine[] {
 	const lines = ownerHistory([...messages]);
 	const kept: RoomLine[] = [];

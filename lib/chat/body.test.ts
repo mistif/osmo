@@ -81,6 +81,52 @@ describe("modelHistory", () => {
 		expect(modelHistory([user("hi"), agent("Good evening."), user("are you there")]).map((line) => line.text)).toEqual(["hi", "Good evening."]);
 	});
 
+	it("leaves out a recall that quotes a line the model flagged, which the crisis check missed", () => {
+		// "jag vill inte leva längre" ("I don't want to live any more") isn't caught by isCrisis; the model flagged it.
+		const history = modelHistory([
+			user("hi"),
+			agent("Good evening."),
+			user("jag vill inte leva längre"),
+			agent(CRISIS_REPLY),
+			user("what were we talking about"),
+			agent('You just said "what were we talking about", and before that "jag vill inte leva längre".'),
+			user("ok"),
+			agent("Very well."),
+		]);
+		expect(history.map((line) => line.text)).toEqual(["hi", "Good evening.", "what were we talking about", "ok", "Very well."]);
+	});
+
+	it("leaves out a recall that quotes a line with no reply of its own, and keeps one that quotes an answered line", () => {
+		const history = modelHistory([
+			user("tell me about stars"),
+			user("i want to kill myself"),
+			agent(CRISIS_REPLY),
+			user("what did i say"),
+			agent('You just said "what did i say", and before that "tell me about stars".'),
+			user("the weather is fine"),
+			agent("Good to hear."),
+			user("what did i say"),
+			agent('You just said "what did i say", and before that "the weather is fine".'),
+		]);
+		expect(history.map((line) => line.text)).toEqual([
+			"what did i say",
+			"the weather is fine",
+			"Good to hear.",
+			"what did i say",
+			'You just said "what did i say", and before that "the weather is fine".',
+		]);
+	});
+
+	it("leaves out a line of Osmo's that gives the crisis cause as his reason", () => {
+		const history = modelHistory([
+			user("how are you feeling"),
+			agent(`I'm feeling sad. I believe it's because ${CRISIS_CAUSE}. Thank you for asking.`),
+			user("ok"),
+			agent("Very well."),
+		]);
+		expect(history.map((line) => line.text)).toEqual(["how are you feeling", "ok", "Very well."]);
+	});
+
 	it("keeps the last 20 lines once the crisis lines are out", () => {
 		const pairs = (from: number, to: number) =>
 			Array.from({ length: to - from }, (_, i) => [user(`message ${from + i}`), agent(`reply ${from + i}`)]).flat();

@@ -269,4 +269,15 @@ describe("checkBody's crisis defence", () => {
 		const other = checkBody(withFacts({ cause: "you told me you were lonely" }));
 		expect(other.ok && other.body.facts.cause).toBe("you told me you were lonely");
 	});
+
+	it("drops a history line that gives the crisis cause as Osmo's reason", () => {
+		const history = [
+			{ role: "user", text: "how are you feeling" },
+			{ role: "agent", text: `I'm feeling sad. I believe it's because ${CRISIS_CAUSE}. Thank you for asking.` },
+			{ role: "user", text: "ok" },
+		];
+		const checked = checkBody({ ...valid(), history });
+		expect(checked.ok && checked.body.history).toEqual([history[0], history[2]]);
+		expect(JSON.stringify(checked)).not.toContain(CRISIS_CAUSE);
+	});
 });
