@@ -148,11 +148,23 @@ describe("readConfig", () => {
 		}
 	});
 
-	it("is off without its own key, and never borrows the voice's", () => {
+	it("is off with no key at all, blank ones included", () => {
 		for (const value of [undefined, "", "   "]) {
 			expect(readConfig({ ...ON, OSMO_CHAT_OPENAI_KEY: value }), JSON.stringify(value)).toBeNull();
+			expect(readConfig({ ...ON, OSMO_CHAT_OPENAI_KEY: value, OPENAI_API_KEY: value, CHATGPT_KEY: value }), JSON.stringify(value)).toBeNull();
 		}
-		expect(readConfig({ ...ON, OSMO_CHAT_OPENAI_KEY: undefined, OPENAI_API_KEY: "sk-voice", CHATGPT_KEY: "sk-voice" })).toBeNull();
+	});
+
+	it("uses the voice's key when it has none of its own, in the voice's order", () => {
+		// Gur's call on 2026-10-01: the conversation shares /api/speak's key and project.
+		const shared = { ...ON, OSMO_CHAT_OPENAI_KEY: undefined };
+		expect(readConfig({ ...shared, OPENAI_API_KEY: "sk-voice", CHATGPT_KEY: "sk-alias" })?.key).toBe("sk-voice");
+		expect(readConfig({ ...shared, CHATGPT_KEY: " sk-alias\n" })?.key).toBe("sk-alias");
+		expect(readConfig({ ...shared, OPENAI_API_KEY: "  ", CHATGPT_KEY: "sk-alias" })?.key).toBe("sk-alias");
+		// Its own key, when set, still comes first.
+		expect(readConfig({ ...ON, OPENAI_API_KEY: "sk-voice" })?.key).toBe("sk-chat");
+		// The voice's key alone never switches it on.
+		expect(readConfig({ OPENAI_API_KEY: "sk-voice", OSMO_MINI_TOKENS_PER_DAY: "700000" })).toBeNull();
 	});
 
 	it("drops whitespace pasted around the key", () => {

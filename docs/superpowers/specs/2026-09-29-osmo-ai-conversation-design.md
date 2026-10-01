@@ -27,7 +27,7 @@ Osmo answers almost anything and holds a real conversation, while staying himsel
 
 ## Choices this design makes, for Gur to check
 The review turned up cases the decisions above don't settle. Each was decided the cautious way, and Gur approved them on 2026-09-30, except choice 2, which he changed.
-1. **A separate OpenAI project and key for the conversation** (`OSMO_CHAT_OPENAI_KEY`). Data sharing is switched on per project, not per request. If the conversation used the key `/api/speak` uses, switching sharing on for it would also share every sentence the natural voice speaks, crisis replies included, and text to speech gets no free tokens. With its own project, only the conversation is shared, and the dashboard and spend limit cover Osmo alone.
+1. **Changed by Gur on 2026-10-01: the conversation uses the natural voice's key and project.** `readConfig` takes `OSMO_CHAT_OPENAI_KEY` when it's set, and otherwise `OPENAI_API_KEY`, then `CHATGPT_KEY`, in `/api/speak`'s order (`chatKey` in `lib/chat/allowance.ts`). The voice's key alone never switches it on. Gur accepted the trade: the free tokens apply only if that project has data sharing on, which also shares the spoken text (accepted on 2026-09-30); if it doesn't, the conversation is billed, up to the project's spend limit. What follows was the original choice. **A separate OpenAI project and key for the conversation** (`OSMO_CHAT_OPENAI_KEY`). Data sharing is switched on per project, not per request. If the conversation used the key `/api/speak` uses, switching sharing on for it would also share every sentence the natural voice speaks, crisis replies included, and text to speech gets no free tokens. With its own project, only the conversation is shared, and the dashboard and spend limit cover Osmo alone.
 2. **Short spoken follow-ups reach the model (Gur's choice, 2026-09-30).** Once the voice has recognized Gur, a follow-up with under 1.5 seconds of speech counts as his even when his voice doesn't match. Any spoken line the voice counts as his, by score or by that carry-over, is treated like a typed line of his and can get a model reply.
    - **Why:** the room is voice-only by default since 2026-09-30, and quick replies like "why?", "yeah" or "go on" are usually too short to score. Keeping them rule-based would put stuck-sounding answers in the middle of a model conversation.
    - **The accepted risk:** a guest's short remark inside Gur's conversation can get a model reply that draws on his memory and recent chat.
@@ -363,7 +363,7 @@ The pool ids are `mini` (the small pool) and `large`, the same values the ledger
 |---|---|---|
 | `OSMO_CHAT` | exactly `on` turns the AI conversation on; anything else is off | `on`, once he's confirmed the data-sharing trade |
 | `OSMO_OWNER_ID` | his Supabase user id (a uuid, not a secret) | his id |
-| `OSMO_CHAT_OPENAI_KEY` | the key of the conversation's own OpenAI project, which has data sharing on. There's no fallback to `/api/speak`'s key. | the new project's key |
+| `OSMO_CHAT_OPENAI_KEY` | optional since 2026-10-01: a key for a project of the conversation's own. Unset means `/api/speak`'s key (`OPENAI_API_KEY`, else `CHATGPT_KEY`). | unset (Gur's choice) |
 | `OSMO_CHAT_MODEL` | a snapshot from the allowlist; default `gpt-5.4-mini-2026-03-17` | unset |
 | `OSMO_MINI_TOKENS_PER_DAY` | Osmo's share of the small pool | `700000` |
 | `OSMO_TOKENS_RESERVE` | the safety margin; default `0.1`, accepted from 0 up to below 1 | unset |
@@ -447,8 +447,8 @@ If nothing speakable is left, the answer is a fallback with `reason: "empty"`. T
 
 ## Privacy and safety
 - **Off until Gur says so.** Nothing reaches OpenAI through `/api/chat` until he has:
-  - switched data sharing on for the conversation's own project;
-  - added its key;
+  - decided where data sharing is on (since 2026-10-01 the conversation uses the voice's project unless it has its own key);
+  - had a key in place (the voice's, or its own);
   - set `OSMO_CHAT=on`.
 
   Switching sharing on is his confirmation of the trade: with the free allowance, OpenAI may use what Osmo sends to improve its models. `/api/speak` keeps its own key on a project without sharing, so what the natural voice speaks isn't shared.
@@ -487,7 +487,7 @@ If nothing speakable is left, the answer is a fallback with `reason: "empty"`. T
 - **Owner history is 20 messages,** with crisis lines removed (decision 6), instead of 30 dropping to 10.
 - **The cap is Osmo's share** (700,000), with the margin applied in code, instead of pre-reduced cap values. Only the small pool is used in phase 1.
 - **An explicit `OSMO_CHAT` switch,** separate from the caps, so it reads plainly in the Vercel settings.
-- **Its own key, `OSMO_CHAT_OPENAI_KEY`,** from its own project, instead of the key `/api/speak` uses.
+- **Its own key, `OSMO_CHAT_OPENAI_KEY`,** from its own project, instead of the key `/api/speak` uses. *(Changed by Gur on 2026-10-01: it uses `/api/speak`'s key unless its own is set; see choice 1.)*
 - **Pinned snapshots** instead of aliases, with the served model checked on every call.
 - **Plain `fetch` rather than the `openai` package,** matching `/api/speak` and the investing project. There's one call per turn, so the SDK's tool loop isn't needed until phase 2.
 - **A reservation and a signed settling row per call,** instead of a per-day aggregate with a database function. It's insert-only, fails closed, and can't be lowered by anything but the route.
@@ -544,6 +544,8 @@ The agent design stays the plan for phases 2 to 4. Its cloud lane updates it to 
 - **Cloud:** reviews the code on GitHub, and marks phase 1 of the agent design as superseded by this document.
 
 ## Before it goes live (Gur's checklist)
+**Changed on 2026-10-01 (choice 1):** the conversation uses `/api/speak`'s project and key, so items 1 and 2 become one check: is data sharing on for that project? If it is, the conversation's tokens are free (and the spoken text is shared, which Gur accepted on 2026-09-30). If it isn't, the conversation is billed at list price, up to that project's spend limit (item 3). Item 6 needs no new key: the probe and the route use `OPENAI_API_KEY` or `CHATGPT_KEY`. Item 7 needs no `OSMO_CHAT_OPENAI_KEY` on Vercel, where `OPENAI_API_KEY` already is. The original items follow.
+
 1. **A new OpenAI project for the conversation.** Only an org Owner can do this:
    - switch data sharing on for this project only, not for the whole organization;
    - create its key.

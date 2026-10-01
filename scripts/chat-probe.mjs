@@ -9,18 +9,19 @@
 // else at runtime. It may warn that package.json has no "type"; that's harmless.
 
 import { createHash } from "node:crypto";
-import { DEFAULT_MODEL, MAX_OUTPUT_TOKENS, modelEntry } from "../lib/chat/allowance.ts";
+import { chatKey, DEFAULT_MODEL, MAX_OUTPUT_TOKENS, modelEntry } from "../lib/chat/allowance.ts";
 import { callModel } from "../lib/chat/openai.ts";
 
 try {
 	process.loadEnvFile(".env.local");
 } catch {
-	console.log("There's no .env.local here. Run this from my-app/, once OSMO_CHAT_OPENAI_KEY is in .env.local.");
+	console.log("There's no .env.local here. Run this from my-app/, where the OpenAI key is.");
 	process.exit(1);
 }
-const key = process.env.OSMO_CHAT_OPENAI_KEY;
+// The key the route would use: OSMO_CHAT_OPENAI_KEY, else the natural voice's OPENAI_API_KEY or CHATGPT_KEY.
+const key = chatKey(process.env);
 if (!key) {
-	console.log("OSMO_CHAT_OPENAI_KEY isn't in .env.local yet, so there's nothing to try.");
+	console.log("There's no OpenAI key in .env.local (OSMO_CHAT_OPENAI_KEY, OPENAI_API_KEY or CHATGPT_KEY), so there's nothing to try.");
 	process.exit(1);
 }
 const entry = modelEntry(process.env.OSMO_CHAT_MODEL?.trim() || DEFAULT_MODEL);

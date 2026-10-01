@@ -59,11 +59,22 @@ export function usableBudget(cap: number, reserve: number): number {
 	return Math.min(cap, Math.max(0, usable));
 }
 
+// The OpenAI key the conversation uses: its own when one is set, otherwise the natural voice's
+// (Gur's call on 2026-10-01: one project for both), read in /api/speak's order. Blank means none.
+export function chatKey(env: Env): string | null {
+	for (const name of ["OSMO_CHAT_OPENAI_KEY", "OPENAI_API_KEY", "CHATGPT_KEY"]) {
+		const key = env[name]?.trim();
+		if (key) return key;
+	}
+	return null;
+}
+
 // The conversation's settings, or null when it's off. Every part must be there and valid: there
-// are no defaults for the switch, the key or the cap, so a push of main never turns it on.
+// are no defaults for the switch, the key or the cap, so a push of main never turns it on. The
+// voice's key alone never does either: OSMO_CHAT=on and the cap are still needed.
 export function readConfig(env: Env): ChatConfig | null {
 	if (env.OSMO_CHAT !== "on") return null;
-	const key = env.OSMO_CHAT_OPENAI_KEY?.trim();
+	const key = chatKey(env);
 	if (!key) return null;
 	const entry = modelEntry(env.OSMO_CHAT_MODEL?.trim() || DEFAULT_MODEL);
 	if (entry === null) return null;
