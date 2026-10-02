@@ -122,3 +122,6 @@ Gur: "yes run probe". Two real calls (`node scripts/chat-probe.mjs`), strict JSO
 - `gpt-5.4-mini-2026-03-17`: 182 in, 69 out, 0 reasoning, 3338 ms; options echoed (`effort: none`, `verbosity: low`, format present).
 - `gpt-4.1-mini-2025-04-14`: 184 in, 77 out, 0 reasoning, 1753 ms; format present.
 Both get `strict: true` (`d3afca7`). Output stays under the plan's 120-token limit. The plan's "2 s slower than the plain probe" check has no baseline (the 2026-10-01 probe wasn't timed); 3.3 s is inside the route's 10 s limit and was reported to Gur.
+
+## 2026-10-02: the repo is public
+Gur made mistif/osmo public for job applications after main scanned every branch's history (no keys, env values, database refs or emails; his surname replaced in two test fixtures). From now on nothing private goes in the code, the docs or this brain: keys and personal data stay in `.env.local`, Vercel and Supabase.
