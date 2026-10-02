@@ -160,6 +160,7 @@ It checks `Authorization: Bearer <Supabase access token>` and returns the user, 
     - `facts` strings: up to 200.
 
     Anything outside them is a 400, and so is a genome that `sanitizeGenome` would repair. The browser's `chatBody` trims to the limits first.
+  - **Emotions phase 1 (2026-10-02):** the model answers in a strict JSON shape (`lib/chat/turn-schema.ts`, `osmo_turn`: reply, crisis, tone, intensity, about, wants, note) on models whose `strict` flag is true (both today), or plain text with a last `FEELING:` line otherwise (`parseModelOutput`). The model answer carries `detection: Detection | null` (validated by `validateDetection`); the body's `facts.gur` carries Gur's last tone (`GurRead | null`, null from a stale tab). The room keeps it in `Session.gur` through `applyTurn` (`rememberGur`).
   - **The `POST` answer** is `ChatAnswer`: `{ source: "model", reply, usage }` or `{ source: "fallback", reason: "off" | "allowance" | "error" | "empty" | "crisis", usage }`. `usage` is `{ usedToday, usable }` for the pool, including this call, or null when today's rows weren't read.
   - **What the route writes.** It reads and writes only `ai_calls`, as Gur through row-level security, with no service-role key. The browser keeps saving `messages`, `agent_state`, `mood_days`, facts and vocabulary itself. There's no streaming.
   - **The browser's side** is `lib/chat/ask.ts`: `askStatus`, `askForReply` (a 15-second limit; it never throws) and `nextUsage`.
