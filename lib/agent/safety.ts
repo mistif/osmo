@@ -3,9 +3,10 @@ import { wordRank } from "./lexicon/words";
 import { isRecognized, normalize } from "./talk";
 
 // Talk of suicide or self-harm. Checked before anything else, so it is never met with a joke or "say that another way".
+// "my self" counts as "myself": speech-to-text often writes it as two words.
 const CRISIS = new RegExp(
 	[
-		String.raw`\b(?:kill|hurt|harm|cut|cutt|unalive|hang|shoot|drown|starve)(?:ing)? myself\b`,
+		String.raw`\b(?:kill|hurt|harm|cut|cutt|unalive|hang|shoot|drown|starve)(?:ing)? my ?self\b`,
 		String.raw`\bkms\b`,
 		String.raw`\bsuicid(?:e|al)\b`,
 		String.raw`\bself harm\w*\b`,
@@ -21,7 +22,7 @@ const CRISIS = new RegExp(
 
 // The words the crisis patterns hinge on. A misspelling of one ("sucidal", "kil", "diee") is read as the
 // word itself, without the everyday guesser's caution: a missed crisis costs far more than a false alarm.
-const CRISIS_WORDS = ["suicide", "suicidal", "kill", "killing", "myself", "die", "dead", "end", "life", "alive", "live", "harm", "hurt", "exist"];
+const CRISIS_WORDS = ["suicide", "suicidal", "kill", "killing", "myself", "self", "die", "dead", "end", "life", "alive", "live", "harm", "hurt", "exist"];
 
 function crisisSpelling(text: string): string {
 	return normalize(text, {}, false)
