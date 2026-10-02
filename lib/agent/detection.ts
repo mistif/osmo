@@ -41,8 +41,10 @@ export function validateDetection(raw: unknown, source: Detection["source"] = "m
 	const about = ABOUTS.find((a) => a === r.about) ?? "gur";
 	const wants = WANTS.find((w) => w === r.wants) ?? "nothing";
 	const rawNote = typeof r.note === "string" ? r.note : "";
-	if (intensity === 1 || tones.every((t) => LIGHT.includes(t)) || isCrisis(rawNote) || rawNote.includes(CRISIS_CAUSE)) return { tones, intensity, about, wants, note: "", source };
 	const note = cleanNote(rawNote);
+	// The crisis check runs on the raw and the cleaned note: "kill_myself" passes raw and cleans to "kill myself".
+	const crisis = isCrisis(rawNote) || isCrisis(note) || rawNote.includes(CRISIS_CAUSE);
+	if (intensity === 1 || tones.every((t) => LIGHT.includes(t)) || crisis) return { tones, intensity, about, wants, note: "", source };
 	return { tones, intensity, about, wants, note, source };
 }
 

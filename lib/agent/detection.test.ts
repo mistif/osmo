@@ -27,7 +27,7 @@ describe("validateDetection", () => {
 		expect([cleanNote("x".repeat(90)).length, cleanNote(42)]).toEqual([60, ""]);
 	});
 	it("empties the note for crisis text, the crisis cause, light tones and intensity 1", () => {
-		for (const note of ["he wants to kill himself, i want to die", `because ${CRISIS_CAUSE}`]) expect(validateDetection({ ...ok, note })?.note).toBe("");
+		for (const note of ["he wants to kill himself, i want to die", "kill_myself tonight", `because ${CRISIS_CAUSE}`]) expect(validateDetection({ ...ok, note })?.note).toBe("");
 		for (const o of [{ intensity: 1 }, { tone: ["playful"] }, { tone: ["happy", "neutral"] }]) expect(validateDetection({ ...ok, ...o })?.note).toBe("");
 	});
 });
