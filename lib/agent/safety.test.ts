@@ -20,8 +20,22 @@ describe("isCrisis", () => {
 		}
 	});
 
+	it("reads 'my self' as 'myself', as speech-to-text often writes it", () => {
+		for (const text of [
+			"i want to kill my self",
+			"I'm going to kill my self",
+			"i keep hurting my self",
+			"i want to hurt my self",
+			"i cut my self again",
+			"i want to unalive my self",
+			"im gonna kill my selfe",
+		]) {
+			expect(isCrisis(text), text).toBe(true);
+		}
+	});
+
 	it("does not fire on ordinary sentences", () => {
-		for (const text of ["this homework is killing me", "i could kill for a pizza", "i am dying to see it", "hi", "kill the lights"]) {
+		for (const text of ["this homework is killing me", "i could kill for a pizza", "i am dying to see it", "hi", "kill the lights", "i hurt my selfie stick", "i made it my self"]) {
 			expect(isCrisis(text), text).toBe(false);
 		}
 	});
