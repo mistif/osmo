@@ -1,0 +1,157 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`moodTheme > is unchanged without a slow mood: anger 1`] = `
+{
+  "arousal": 0.2742857142857143,
+  "base": "hsl(5 30% 11%)",
+  "colorA": "hsl(5 80% 54%)",
+  "colorB": "hsl(45 80% 54%)",
+  "pulseSeconds": 2.9417142857142857,
+  "strength": 1,
+  "tone": "anger",
+  "valence": 0.012857142857142899,
+}
+`;
+
+exports[`moodTheme > is unchanged without a slow mood: boredom 1`] = `
+{
+  "arousal": -0.004285714285714353,
+  "base": "hsl(60 30% 11%)",
+  "colorA": "hsl(60 8% 48%)",
+  "colorB": "hsl(100 8% 48%)",
+  "pulseSeconds": 3.6102857142857143,
+  "strength": 1,
+  "tone": "boredom",
+  "valence": 0.0685714285714286,
+}
+`;
+
+exports[`moodTheme > is unchanged without a slow mood: disgust 1`] = `
+{
+  "arousal": 0.2,
+  "base": "hsl(92 30% 11%)",
+  "colorA": "hsl(92 40% 44%)",
+  "colorB": "hsl(132 40% 44%)",
+  "pulseSeconds": 3.12,
+  "strength": 1,
+  "tone": "disgust",
+  "valence": 0.012857142857142883,
+}
+`;
+
+exports[`moodTheme > is unchanged without a slow mood: fear 1`] = `
+{
+  "arousal": 0.27428571428571424,
+  "base": "hsl(268 30% 11%)",
+  "colorA": "hsl(268 60% 60%)",
+  "colorB": "hsl(308 60% 60%)",
+  "pulseSeconds": 2.9417142857142857,
+  "strength": 1,
+  "tone": "fear",
+  "valence": -0.0057142857142856674,
+}
+`;
+
+exports[`moodTheme > is unchanged without a slow mood: guilt 1`] = `
+{
+  "arousal": 0.1628571428571428,
+  "base": "hsl(300 30% 11%)",
+  "colorA": "hsl(300 25% 50%)",
+  "colorB": "hsl(340 25% 50%)",
+  "pulseSeconds": 3.2091428571428575,
+  "strength": 1,
+  "tone": "guilt",
+  "valence": 0.012857142857142873,
+}
+`;
+
+exports[`moodTheme > is unchanged without a slow mood: hope 1`] = `
+{
+  "arousal": 0.190625,
+  "base": "hsl(22 30% 12%)",
+  "colorA": "hsl(22 85% 65%)",
+  "colorB": "hsl(62 85% 65%)",
+  "pulseSeconds": 3.1425,
+  "strength": 0.77,
+  "tone": "hope",
+  "valence": 0.19062500000000004,
+}
+`;
+
+exports[`moodTheme > is unchanged without a slow mood: joy 1`] = `
+{
+  "arousal": 0.20322580645161292,
+  "base": "hsl(42 30% 12%)",
+  "colorA": "hsl(42 95% 59%)",
+  "colorB": "hsl(82 95% 59%)",
+  "pulseSeconds": 3.1122580645161295,
+  "strength": 0.6499999999999999,
+  "tone": "joy",
+  "valence": 0.20483870967741946,
+}
+`;
+
+exports[`moodTheme > is unchanged without a slow mood: loneliness 1`] = `
+{
+  "arousal": 0.08857142857142856,
+  "base": "hsl(235 30% 11%)",
+  "colorA": "hsl(235 40% 45%)",
+  "colorB": "hsl(275 40% 45%)",
+  "pulseSeconds": 3.3874285714285715,
+  "strength": 1,
+  "tone": "loneliness",
+  "valence": 0.012857142857142883,
+}
+`;
+
+exports[`moodTheme > is unchanged without a slow mood: love 1`] = `
+{
+  "arousal": 0.1814285714285714,
+  "base": "hsl(335 30% 12%)",
+  "colorA": "hsl(335 70% 64%)",
+  "colorB": "hsl(15 70% 64%)",
+  "pulseSeconds": 3.1645714285714286,
+  "strength": 1,
+  "tone": "love",
+  "valence": 0.27285714285714285,
+}
+`;
+
+exports[`moodTheme > is unchanged without a slow mood: sadness 1`] = `
+{
+  "arousal": 0.06999999999999999,
+  "base": "hsl(220 30% 11%)",
+  "colorA": "hsl(220 45% 46%)",
+  "colorB": "hsl(260 45% 46%)",
+  "pulseSeconds": 3.432,
+  "strength": 1,
+  "tone": "sadness",
+  "valence": -0.005714285714285685,
+}
+`;
+
+exports[`moodTheme > is unchanged without a slow mood: surprise 1`] = `
+{
+  "arousal": 0.2928571428571428,
+  "base": "hsl(55 30% 12%)",
+  "colorA": "hsl(55 95% 59%)",
+  "colorB": "hsl(95 95% 59%)",
+  "pulseSeconds": 2.8971428571428577,
+  "strength": 1,
+  "tone": "surprise",
+  "valence": 0.14285714285714285,
+}
+`;
+
+exports[`moodTheme > is unchanged without a slow mood: trust 1`] = `
+{
+  "arousal": 0.14126984126984127,
+  "base": "hsl(175 30% 12%)",
+  "colorA": "hsl(175 45% 49%)",
+  "colorB": "hsl(215 45% 49%)",
+  "pulseSeconds": 3.2609523809523813,
+  "strength": 0.71,
+  "tone": "trust",
+  "valence": 0.18571428571428575,
+}
+`;

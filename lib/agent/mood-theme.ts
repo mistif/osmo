@@ -1,5 +1,6 @@
 import { dominantEmotions, moodPosition } from "./heart";
-import { BASELINE, type Activations, type Emotion } from "./state";
+import { slowEmotion } from "./slow-mood";
+import { BASELINE, type Activations, type Emotion, type Vec3 } from "./state";
 
 // [hue, saturation %, lightness %]. Each emotion gets a color a person would guess.
 type Hsl = [number, number, number];
@@ -37,14 +38,16 @@ export type MoodTheme = {
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 const hsl = ([h, s, l]: Hsl, lift = 0) => `hsl(${Math.round(h)} ${s}% ${Math.round(clamp(l + lift, 25, 78))}%)`;
 
-export function moodTheme(a: Activations, baseline: Activations = BASELINE): MoodTheme {
+// `slow` is the slow mood (spec 5.5): when it has drifted from rest, colour B follows the drift instead of the second feeling.
+export function moodTheme(a: Activations, baseline: Activations = BASELINE, slow?: { pad: Vec3 } | null): MoodTheme {
 	const [first, second] = dominantEmotions(a, 2, baseline);
 	const [valence, arousal] = moodPosition(a);
 	const lift = valence * 6;
 
 	const main = first ? HUES[first] : CALM;
 	// With only one strong feeling, the second color is a neighbouring hue so the aura still has depth.
-	const other: Hsl = second ? HUES[second] : [(main[0] + 40) % 360, main[1], main[2]];
+	const drift = slow ? slowEmotion(slow, baseline, first ? [first] : []) : null;
+	const other: Hsl = drift ? HUES[drift] : second ? HUES[second] : [(main[0] + 40) % 360, main[1], main[2]];
 	const excess = first ? a[first] - baseline[first] : 0;
 
 	return {

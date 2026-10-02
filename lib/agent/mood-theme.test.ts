@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { BASELINE, EMOTIONS, type Activations } from "./state";
+import { BASELINE, EMOTIONS, type Activations, type Emotion, type Vec3 } from "./state";
+import { moodPosition } from "./heart";
 import { moodTheme } from "./mood-theme";
+import { slowEmotion } from "./slow-mood";
 
 const base = (): Activations => ({ ...BASELINE });
 const zero = (): Activations => Object.fromEntries(EMOTIONS.map((e) => [e, 0])) as Activations;
@@ -56,5 +58,46 @@ describe("moodTheme", () => {
 		expect(Number.isFinite(t.pulseSeconds)).toBe(true);
 		expect(Number.isFinite(t.strength)).toBe(true);
 		for (const c of [t.colorA, t.colorB, t.base]) expect(c).not.toMatch(/NaN/);
+	});
+
+	it.each(EMOTIONS)("is unchanged without a slow mood: %s", (e) => {
+		expect(moodTheme({ ...base(), [e]: 0.8 })).toMatchSnapshot();
+		expect(moodTheme({ ...base(), [e]: 0.8 }, BASELINE, null)).toEqual(moodTheme({ ...base(), [e]: 0.8 }));
+	});
+
+	describe("with a slow mood", () => {
+		const T = moodPosition(BASELINE);
+		const rest = { pad: [...T] as Vec3 };
+		const drift = { pad: [T[0] + 0.1, T[1] + 0.05, T[2] + 0.05] as Vec3 };
+		// Hue and saturation only: the lightness also follows the mood, which differs between the two themes.
+		const hueOf = (e: Emotion) => moodTheme({ ...base(), [e]: 0.8 }).colorA.replace(/ \d+%\)$/, "");
+
+		it("leaves colour B as it is when the slow mood is at rest", () => {
+			const a = { ...base(), sadness: 0.7, loneliness: 0.5 };
+			expect(moodTheme(a, BASELINE, rest)).toEqual(moodTheme(a));
+			expect(moodTheme(base(), BASELINE, rest)).toEqual(moodTheme(base()));
+		});
+
+		it("colours B by the emotion the drift points to", () => {
+			expect(slowEmotion(drift, BASELINE)).toBe("joy");
+			const t = moodTheme({ ...base(), sadness: 0.7 }, BASELINE, drift);
+			expect(t.tone).toBe("sadness");
+			expect(t.colorB.startsWith(hueOf("joy"))).toBe(true);
+		});
+
+		it("picks the next best emotion when the drift names the strongest one", () => {
+			const t = moodTheme({ ...base(), joy: 0.8 }, BASELINE, drift);
+			expect(t.tone).toBe("joy");
+			expect(t.colorB.startsWith(hueOf("joy"))).toBe(false);
+			expect(t.colorB.startsWith(hueOf(slowEmotion(drift, BASELINE, ["joy"])!))).toBe(true);
+		});
+
+		it("changes only colour B", () => {
+			for (const e of EMOTIONS) {
+				const a = { ...base(), [e]: 0.8 };
+				const sameB = { ...moodTheme(a, BASELINE, drift), colorB: "" };
+				expect(sameB).toEqual({ ...moodTheme(a), colorB: "" });
+			}
+		});
 	});
 });

@@ -95,7 +95,7 @@ export default function AgentChat() {
 	const canSaveRef = useRef(false);
 	const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
 	const baseline = CHARACTER.baseline;
-	const theme = moodTheme(agent.activations, baseline);
+	const theme = moodTheme(agent.activations, baseline, agent.mood);
 
 	// Osmo "speaks" each reply: it types out, and his heart and rings follow the rhythm.
 	const stageRef = useRef<HTMLDivElement>(null);
