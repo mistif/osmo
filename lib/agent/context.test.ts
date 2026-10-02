@@ -123,7 +123,7 @@ describe("justLearnedName", () => {
 			"Here's what I remember. Your name is Gur. Your sister is Maya.",
 			"Noted. Your name is gur.",
 			"Your name is Gur, and your sister is Maya.",
-			"Your name is Gur Ratzin The Very Tall.",
+			"Your name is Gur Arlen The Very Tall.",
 			"Hey! What's up?",
 		]) {
 			expect(justLearnedName(text), text).toBeNull();

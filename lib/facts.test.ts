@@ -38,7 +38,7 @@ describe("learnFact", () => {
 			["no, my name is Gur?!", "Gur"],
 			["call me Gur.", "Gur"],
 			["call me Gur !", "Gur"],
-			["you can call me Gur Ratzin, ", "Gur Ratzin"],
+			["you can call me Gur Arlen, ", "Gur Arlen"],
 			["actually call me Sam...", "Sam"],
 		];
 		for (const [text, name] of cases) {
