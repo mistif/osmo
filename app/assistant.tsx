@@ -17,7 +17,7 @@ import { getCachedLookup, putCachedLookup } from "@/lib/agent/dictionary-store";
 import { learnFromMessage } from "@/lib/agent/lexicon/vocabulary";
 import { loadVocabulary, saveVocabulary } from "@/lib/agent/vocabulary-store";
 import { newSession, prepareTurn, type Session, type TurnContext, type TurnResult } from "@/lib/agent/mind";
-import { rememberGur, validateDetection } from "@/lib/agent/detection";
+import { feelTurn } from "@/lib/agent/feelings";
 import {
 	answersPendingLearning,
 	taughtMeanings,
@@ -463,9 +463,10 @@ export default function AgentChat() {
 		};
 
 		// A guest's turn is for its reply only: his mood, bond and session stay exactly as they were.
-		const applyTurn = (kept: TurnResult | null, felt: { detection?: unknown } = {}) => {
+		const applyTurn = (kept: TurnResult | null, felt: { detection?: unknown; crisis?: boolean } = {}) => {
 			if (!kept || guest) return;
-			const next = { ...kept, session: rememberGur(kept.session, validateDetection(felt.detection, "model"), now) };
+			// His feelings step once per kept turn, from the model's reading of Gur or the rules' (feelTurn also records Gur's last tone).
+			const next = feelTurn(kept, text, felt.detection ?? null, { now, lastAt: ctx.lastAt, guest, crisis: crisis || felt.crisis === true });
 			setAgent(next.state);
 			setSession(next.session);
 			if (canSaveRef.current) {
@@ -565,12 +566,12 @@ export default function AgentChat() {
 				}
 				if (wait.quiet) {
 					// Aborted by a crisis message: processTurn's step of his state, no pendingTopic, no lookup, no reply.
-					applyTurn(keptTurn<TurnResult>("code", prepared, turn));
+					applyTurn(keptTurn<TurnResult>("code", prepared, turn), { crisis: true });
 					endQuietly(quietEffects("model"), null);
 					return;
 				}
 				// His state is applied only now that it's known whose reply is used.
-				applyTurn(keptTurn<TurnResult>(answer?.kind === "model" ? "model" : "code", prepared, turn), { detection: detectionOf(answer) });
+				applyTurn(keptTurn<TurnResult>(answer?.kind === "model" ? "model" : "code", prepared, turn), { detection: detectionOf(answer), crisis: answer?.kind === "crisis" });
 				if (answer?.kind === "model") {
 					deliver(answer.reply);
 				} else if (answer?.kind === "crisis") {
