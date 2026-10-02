@@ -445,7 +445,7 @@ export function parse(original: string, taught: Record<string, string> = {}, spe
 	}
 	if (/^what are you (doing|up to)( now| right now)?$/.test(words)) return done({ type: "askActivity" });
 	if (
-		/\b(your (?:story|backstory|origin)|where (?:do|did) you come from|where are you from|(?:tell me )?about yourself|how were you (?:made|born|built)|who (?:made|built|created) you|are you (?:a |an )?(?:bot|robot|ai|human|real|person))\b/.test(words) ||
+		/\b(your (?:story|backstory|origin)|where (?:do|did) you come from|where are you from|(?:tell me )?about yourself|how were you (?:made|born|built)|who (?:made|built|created) you|are you (?:a |an )?(?:bot|robot|ai|human|real|person)|what are you made of|who are you really|what is your personality|tell me about your personality|what makes you you)\b/.test(words) ||
 		/^what are you$/.test(words)
 	) {
 		return done({ type: "askOrigin" });
@@ -592,7 +592,7 @@ export function respond(parsed: Parsed, ctx: TalkContext): string | null {
 		case "askName":
 			return userName ? `I'm Osmo. And you're ${shownName}, I remember.` : "I'm Osmo. What should I call you?";
 		case "askAbilities":
-			return "I can hold a conversation, remember what you tell me, define words, do quick math, work through moral dilemmas and tell stories. You can also ask what I'm made of. Where would you like to start?";
+			return "I can hold a conversation, remember what you tell me, define words, do quick math, work through moral dilemmas and tell stories. You can also ask me about myself. Where would you like to start?";
 		case "thanks":
 			return pick(["You're welcome.", "Happy to help.", "Anytime."], turn);
 		case "apology":
@@ -618,7 +618,7 @@ export function respond(parsed: Parsed, ctx: TalkContext): string | null {
 		case "sexual":
 			return "I won't engage with that. I'm happy to help with almost anything else.";
 		case "slashCommand":
-			return "There are no slash commands here. Just talk to me normally. I can chat, remember things, define words, do quick math, tell a story, pose a moral dilemma, or explain what I'm made of. For a new personality, say roll a new osmo.";
+			return "There are no slash commands here. Just talk to me normally. I can chat, remember things, define words, do quick math, tell a story, pose a moral dilemma, or tell you about myself.";
 		case "laughter":
 			return pick(["Glad that amused you.", "I'll take that as a compliment."], turn);
 		case "affection":
@@ -632,7 +632,7 @@ export function respond(parsed: Parsed, ctx: TalkContext): string | null {
 		case "incomplete":
 			return "Go on, I'm listening.";
 		case "askOrigin":
-			return "I'm Osmo, a conversational assistant built by a group of students. I began as a blank slate, and everything I feel and remember comes from conversations like this one.";
+			return "I am Osmo, one character, written by a group of students. Everything I feel and remember comes from conversations like this one.";
 		case "misunderstood":
 			return pick(
 				[

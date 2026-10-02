@@ -32,7 +32,7 @@ describe("Osmo understands thesaurus feelings", () => {
 	});
 
 	it("replies with the user's word", () => {
-		expect(processTurn(defaultState(), newSession(), "im gloomy", ctx()).reply).toMatch(/sorry you're feeling gloomy/i);
+		expect(processTurn(defaultState(), newSession(), "im gloomy", ctx()).reply).toMatch(/sorry you(?:'re| are) feeling gloomy/i);
 	});
 
 	it("moves his mood like the base feeling would", () => {

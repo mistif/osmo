@@ -101,6 +101,15 @@ describe("parse", () => {
 		expect(parse("what are you doing").intent.type).toBe("askActivity");
 	});
 
+	it("treats 'what are you made of' and its siblings as questions about who he is, with no donor in the answer", () => {
+		for (const text of ["what are you made of", "who are you really", "what is your personality", "tell me about your personality", "what makes you you"]) {
+			expect(parse(text).intent.type, text).toBe("askOrigin");
+			const reply = respond(parse(text), { state: defaultState(), cause: null, turn: 0 });
+			expect(reply, text).toMatch(/one character/);
+			expect(reply, text).not.toMatch(/donor|roll|personality|assistant|blank slate/i);
+		}
+	});
+
 	it("notices when the user is frustrated that Osmo did not understand", () => {
 		for (const text of [
 			"what part of that didnt u understand",

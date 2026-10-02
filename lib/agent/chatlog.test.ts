@@ -6,10 +6,10 @@ import { defaultState, type AgentState } from "./state";
 import { fallbackReply } from "./talk";
 
 // Replays the real conversation saved in Supabase on 2026-09-24, one test per thing that went wrong.
-const ctx = () => ({ now: 1_000_000, lastAt: null, uuid: () => "id", seed: 5 });
+const ctx = () => ({ now: 1_000_000, lastAt: null, uuid: () => "id" });
 const say = (text: string, state: AgentState = defaultState(), session: Session = newSession()) =>
 	processTurn(state, session, text, ctx());
-const PET_NAMES = /\b(squirt|kiddo|little one|sweetheart|darling|dear)\b/i;
+const PET_NAMES = /\b(squirt|kiddo|little one|sweetheart|darling|dear|sir|madam|boss|buddy|mate|dude|champ)\b/i;
 const JUST_MET_GU = "Nice to meet you, Gu! I'll remember that.";
 
 describe("the Supabase chat log, replayed", () => {
@@ -54,15 +54,15 @@ describe("the Supabase chat log, replayed", () => {
 	it("sets a boundary on sexual messages instead of asking to rephrase", () => {
 		for (const text of ["im going to fuck you raw", "send nudes", "i want to have sex with you"]) {
 			const r = say(text).reply;
-			expect(r, text).toMatch(/won't engage/i);
+			expect(r, text).toMatch(/(?:won't|will not) engage/i);
 			expect(r, text).not.toMatch(/another way|rephrase/i);
 		}
-		expect(say("fuck you").reply).not.toMatch(/won't engage/i);
+		expect(say("fuck you").reply).not.toMatch(/(?:won't|will not) engage/i);
 	});
 
 	it("explains there are no slash commands and says what he can do", () => {
 		expect(say("/restart").reply).toMatch(/slash commands/i);
-		expect(say("/help").reply).toMatch(/roll a new osmo/i);
+		expect(say("/help").reply).not.toMatch(/roll|donor|personality/i);
 	});
 
 	it("nudges a bare 'yes' after the re-roll offer and keeps the offer open", () => {
