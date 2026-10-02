@@ -63,13 +63,15 @@ export type FeelCtx = { now: number; lastAt: number | null; guest?: boolean; cri
 // Once per kept turn, after the reply is chosen. stepHeart already ran this turn (in startTurn); this adds the push.
 export function feelTurn(kept: TurnResult, text: string, modelDetection: unknown, ctx: FeelCtx): TurnResult {
 	if (ctx.guest || ctx.crisis || isCrisis(text) || kept.session.cause === CRISIS_CAUSE) return kept;
-	const d = validateDetection(modelDetection, "model") ?? detectFromText(text);
-	if (d === null) return kept;
 	const base = CHARACTER.baseline;
-	const resting = bondBaseline(base, closeness(kept.state.bond));
 	const newDay = ctx.lastAt !== null && ctx.lastAt < ctx.now && localDay(ctx.lastAt) !== localDay(ctx.now); // a lastAt in the future is skew, not a new day
+	// The new day forgives whether or not this message has a reading.
+	const forgiven = newDay ? forgiveGrudges(kept.state.activations, base) : kept.state.activations;
+	const d = validateDetection(modelDetection, "model") ?? detectFromText(text);
+	if (d === null) return newDay ? { ...kept, state: { ...kept.state, activations: forgiven } } : kept;
+	const resting = bondBaseline(base, closeness(kept.state.bond));
 	const pushes = pushesFor(d, CHARACTER.reactivity);
-	const a = applyCeilings(applyShifts(newDay ? forgiveGrudges(kept.state.activations, base) : kept.state.activations, pushes));
+	const a = applyCeilings(applyShifts(forgiven, pushes));
 	const mood = nudgeMood(relaxMood(kept.state.mood, ctx.now, base), a);
 	const because = (d.note || kept.session.cause || "").slice(0, 120);
 	if (because !== "") {

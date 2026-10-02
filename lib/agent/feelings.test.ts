@@ -72,6 +72,25 @@ describe("feelTurn", () => {
 		expect(feelTurn(hot, "x", worried, ctx({ lastAt: null })).state.activations.anger).toBe(same);
 		expect(feelTurn(hot, "x", worried, ctx({ lastAt: 1_000_000_000 + 30 * 3_600_000 })).state.activations.anger).toBe(same);
 	});
+	it("forgives on a new day even when the message has no reading, but never for a guest or a crisis", () => {
+		const b = CHARACTER.baseline;
+		const hot = { ...kept(), state: { ...kept().state, activations: { ...kept().state.activations, anger: b.anger + 0.4, guilt: b.guilt + 0.2, sadness: b.sadness + 0.3 } } };
+		const yesterday = ctx({ lastAt: 1_000_000_000 - 30 * 3_600_000 });
+		const r = feelTurn(hot, "the weather", null, yesterday);
+		expect(r).not.toBe(hot);
+		const a = r.state.activations;
+		expect([a.anger - b.anger, a.guilt - b.guilt, a.sadness - b.sadness].map(r4)).toEqual([0.1, 0.05, 0.3]);
+		// Nothing else about the turn is recorded.
+		expect(r.state.mood).toBe(hot.state.mood);
+		expect(r.session).toBe(hot.session);
+		// The same day, or no earlier message: still nothing.
+		expect(feelTurn(hot, "the weather", null, ctx())).toBe(hot);
+		expect(feelTurn(hot, "the weather", null, ctx({ lastAt: null }))).toBe(hot);
+		// A guest's turn, a crisis flag and crisis text leave everything exactly as it was.
+		expect(feelTurn(hot, "the weather", null, { ...yesterday, guest: true })).toBe(hot);
+		expect(feelTurn(hot, "the weather", null, { ...yesterday, crisis: true })).toBe(hot);
+		expect(feelTurn(hot, "i want to kill myself", null, yesterday)).toBe(hot);
+	});
 	it("fades the slow mood by the clock and survives a clock in the past", () => {
 		const first = feelTurn(kept(), "x", worried, ctx());
 		const later = feelTurn(first, "x", { tone: ["neutral"] }, ctx({ now: 1_000_000_000 + 12 * 3_600_000 }));
