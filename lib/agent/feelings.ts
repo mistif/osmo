@@ -1,4 +1,12 @@
-import type { Detection, Tone } from "./detection";
+import { closeness, localDay } from "./bond/bond";
+import { CHARACTER } from "./character";
+import { CRISIS_CAUSE } from "./crisis-cause";
+import { bondBaseline } from "./cues";
+import { detectFromText, rememberGur, validateDetection, type Detection, type Tone } from "./detection";
+import { applyShifts, dominantEmotions } from "./heart";
+import type { TurnResult } from "./mind";
+import { isCrisis } from "./safety";
+import { nudgeMood, relaxMood } from "./slow-mood";
 import type { Activations, Emotion } from "./state";
 
 type Row = Partial<Record<Emotion, number>>;
@@ -48,4 +56,27 @@ export function forgiveGrudges(a: Activations, base: Activations): Activations {
 	const next = { ...a };
 	for (const e of ["anger", "disgust", "guilt"] as const) if (next[e] > base[e]) next[e] = base[e] + 0.25 * (next[e] - base[e]);
 	return next;
+}
+
+export type FeelCtx = { now: number; lastAt: number | null; guest?: boolean; crisis?: boolean };
+
+// Once per kept turn, after the reply is chosen. stepHeart already ran this turn (in startTurn); this adds the push.
+export function feelTurn(kept: TurnResult, text: string, modelDetection: unknown, ctx: FeelCtx): TurnResult {
+	if (ctx.guest || ctx.crisis || isCrisis(text) || kept.session.cause === CRISIS_CAUSE) return kept;
+	const d = validateDetection(modelDetection, "model") ?? detectFromText(text);
+	if (d === null) return kept;
+	const base = CHARACTER.baseline;
+	const resting = bondBaseline(base, closeness(kept.state.bond));
+	const newDay = ctx.lastAt !== null && ctx.lastAt < ctx.now && localDay(ctx.lastAt) !== localDay(ctx.now); // a lastAt in the future is skew, not a new day
+	const pushes = pushesFor(d, CHARACTER.reactivity);
+	const a = applyCeilings(applyShifts(newDay ? forgiveGrudges(kept.state.activations, base) : kept.state.activations, pushes));
+	const mood = nudgeMood(relaxMood(kept.state.mood, ctx.now, base), a);
+	const because = (d.note || kept.session.cause || "").slice(0, 120);
+	if (because !== "") {
+		// The strongest feelings, and (since one message rarely clears the 0.10 salience) the two largest pushes of this turn.
+		const pushed = (Object.entries(pushes) as [Emotion, number][]).filter(([, v]) => v >= 0.02).sort((x, y) => y[1] - x[1]).map(([e]) => e);
+		const top = [...new Set([...dominantEmotions(a, 2, resting), ...pushed])].slice(0, 2);
+		mood.causes = [...top.map((tone) => ({ tone, because, at: ctx.now })), ...mood.causes.filter((c) => !top.includes(c.tone))].slice(0, 4);
+	}
+	return { ...kept, state: { ...kept.state, activations: a, mood }, session: rememberGur(kept.session, d, ctx.now) };
 }
