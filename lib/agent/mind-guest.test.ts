@@ -22,6 +22,7 @@ describe("processTurn for someone who isn't Gur", () => {
 		expect(r.reply).toBe(NEW_OSMO_REPLY);
 		expect(r.effects).toEqual([]);
 		expect(r.state.weights).toEqual(defaultState().weights);
+		expect(r.state.bond).toEqual(defaultState().bond);
 	});
 
 	it("doesn't answer Gur's pending dilemma with a yes", () => {

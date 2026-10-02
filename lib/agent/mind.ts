@@ -81,7 +81,7 @@ const DEMO = process.env.NEXT_PUBLIC_OSMO_DEMO === "1";
 function acknowledge(event: StoryEvent): string {
 	return event.valence === "happy"
 		? "That is wonderful news. I am genuinely glad for you."
-		: "I am so sorry. That is a heavy thing to carry, and I will remember it.";
+		: "I am so sorry. That is a heavy thing to carry, and I am here.";
 }
 
 // A guest's news is acknowledged, but Osmo doesn't promise to remember it.
@@ -168,7 +168,7 @@ function startTurn(state: AgentState, session: Session, text: string, ctx: TurnC
 				session: { ...sess, last: null },
 				reply: verdict.agreed
 					? "Understood. I will trust that reasoning a little more."
-					: "Noted. I will give the other side more weight next time.",
+					: "Understood. I will give the other side more weight next time.",
 				effects,
 			},
 		};

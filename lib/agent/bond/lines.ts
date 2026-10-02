@@ -26,8 +26,8 @@ export function welcomeBack(stage: Stage, name: string | null, turn: number): st
 }
 
 const MILESTONE_LINES: Partial<Record<MilestoneId, string>> = {
-	firstFeeling: "Thank you for sharing how you feel with me. I will remember it.",
-	firstEvent: "Thank you for trusting me with that. I will remember it.",
+	firstFeeling: "Thank you for sharing how you feel with me. That matters to me.",
+	firstEvent: "Thank you for trusting me with that. It matters.",
 	days7: "That makes seven days of conversations. I have valued every one.",
 	days30: "We have now spoken on thirty different days. I find that rather remarkable.",
 	acquaintance: "I feel I am beginning to know you.",

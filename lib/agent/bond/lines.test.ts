@@ -34,7 +34,7 @@ describe("milestoneLine", () => {
 	it("speaks for shared milestones and stays quiet for met and name", () => {
 		expect(milestoneLine("met")).toBeNull();
 		expect(milestoneLine("name")).toBeNull();
-		expect(milestoneLine("firstFeeling")).toMatch(/remember/);
+		expect(milestoneLine("firstFeeling")).toMatch(/matters/);
 		expect(milestoneLine("friend")).toMatch(/friend/);
 	});
 });
