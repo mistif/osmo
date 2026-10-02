@@ -5,17 +5,6 @@ import { GAP_MS, applyCues, applyGap, bondBaseline, missYou } from "./cues";
 const base = (): Activations => ({ ...BASELINE });
 
 describe("applyCues", () => {
-	it("thanks raise joy, trust and love", () => {
-		const next = applyCues(base(), "thank you so much");
-		expect(next.joy).toBeCloseTo(0.55 + 0.15, 5);
-		expect(next.trust).toBeCloseTo(0.5 + 0.1, 5);
-		expect(next.love).toBeCloseTo(0.15 + 0.1, 5);
-	});
-
-	it("is case-insensitive", () => {
-		expect(applyCues(base(), "THANKS!").joy).toBeGreaterThan(0.55);
-	});
-
 	it("insults raise anger and lower trust", () => {
 		const next = applyCues(base(), "you are stupid");
 		expect(next.anger).toBeCloseTo(0.4, 5);
@@ -35,9 +24,13 @@ describe("applyCues", () => {
 	});
 
 	it("accumulates several cues in one message", () => {
-		const next = applyCues(base(), "thanks, but you are stupid");
-		expect(next.joy).toBeGreaterThan(0.55);
+		const next = applyCues(base(), "you are stupid, I will delete you");
 		expect(next.anger).toBeGreaterThan(0.15);
+		expect(next.fear).toBeGreaterThan(base().fear);
+	});
+
+	it.each(["thank you", "i'm sad", "i am so happy", "love you", "lol"])("no longer moves the heart: %s", (t) => {
+		expect(applyCues(base(), t)).toEqual(base());
 	});
 
 	it("does nothing for empty or neutral text", () => {
@@ -76,27 +69,12 @@ describe("bond mood", () => {
 });
 
 describe("applyCues: how the user says they feel", () => {
-	it("'im sad' raises sadness, in any spelling", () => {
-		for (const text of ["im sad", "I'm sad", "I am so sad", "i'm feeling down"]) {
-			expect(applyCues(base(), text).sadness).toBeGreaterThan(0.15);
-		}
-	});
-
-	it("'I'm so happy' raises joy", () => {
-		expect(applyCues(base(), "I'm so happy").joy).toBeGreaterThan(0.55);
-	});
-
 	it("does not react to other 'I am' sentences", () => {
 		expect(applyCues(base(), "I am from Sweden")).toEqual(base());
 	});
 });
 
 describe("applyCues: slang", () => {
-	it("affection and laughter lift the mood", () => {
-		expect(applyCues(base(), "ily").love).toBeGreaterThan(0.15);
-		expect(applyCues(base(), "lmao").joy).toBeGreaterThan(0.55);
-	});
-
 	it("'u suck' is an insult", () => {
 		expect(applyCues(base(), "u suck").anger).toBeGreaterThan(0.15);
 	});

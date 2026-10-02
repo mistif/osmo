@@ -19,9 +19,11 @@ describe("processTurn: heart", () => {
 		expect(r.effects).toEqual([]);
 	});
 
-	it("thanks raise joy", () => {
-		const r = processTurn(defaultState(), newSession(), "thank you!", ctx());
-		expect(r.state.activations.joy).toBeGreaterThan(0.6);
+	it("thanks no longer raise joy here (feelTurn does that)", () => {
+		const thanks = processTurn(defaultState(), newSession(), "thank you!", ctx());
+		const plain = processTurn(defaultState(), newSession(), "the weather is fine", ctx());
+		expect(thanks.state.activations.joy).toBeCloseTo(plain.state.activations.joy, 5);
+		expect(thanks.state.activations.joy).toBeLessThan(0.6);
 	});
 
 	it("a long silence raises loneliness", () => {
@@ -170,7 +172,9 @@ describe("processTurn: conversation (talk layer)", () => {
 		expect(first.reply).toMatch(/sorry/i);
 		expect(first.effects).toEqual([]);
 		expect(first.session.cause).toBe("you told me you were sad");
-		const second = processTurn(first.state, first.session, "why are u feeling sad", ctx());
+		// The room's feelTurn makes him sad in the app; here the state is set by hand.
+		const sad = { ...first.state, activations: { ...first.state.activations, sadness: 0.8 } };
+		const second = processTurn(sad, first.session, "why are u feeling sad", ctx());
 		expect(second.reply).toContain("because you told me you were sad");
 	});
 

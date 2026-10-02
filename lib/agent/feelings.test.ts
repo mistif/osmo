@@ -51,6 +51,13 @@ describe("feelTurn", () => {
 		// no valid model record: the rules mapper reads the text
 		expect(feelTurn(kept(), "i'm so sad", { tone: ["bogus"] }, ctx()).session.gur?.read).toMatchObject({ tones: ["sad"], intensity: 3 });
 	});
+	it("thanks raise joy, trust and love above their baseline (the old thanks cue moved here)", () => {
+		const b = kept().state.activations;
+		const a = feelTurn(kept(), "thank you!", null, ctx()).state.activations;
+		expect(a.joy).toBeGreaterThan(b.joy);
+		expect(a.trust).toBeGreaterThan(b.trust);
+		expect(a.love).toBeGreaterThan(b.love);
+	});
 	it("changes nothing for a guest, a crisis flag (even beside a happy tone), crisis text, the crisis cause, or no detection", () => {
 		const k = kept();
 		for (const [text, det, o] of [["i'm sad", null, { guest: true }], ["hello", { tone: ["happy"], intensity: 3 }, { crisis: true }], ["i'm sad and i want to die", null, {}], ["the weather", null, {}]] as const)

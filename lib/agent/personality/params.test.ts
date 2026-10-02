@@ -40,7 +40,7 @@ describe("a different baseline", () => {
 describe("reactivity scale", () => {
 	it("scales shifts, cues and event effects", () => {
 		expect(applyShifts(base(), { joy: 0.2 }, 0.5).joy).toBeCloseTo(0.55 + 0.1, 5);
-		expect(applyCues(base(), "thanks", 2).joy).toBeCloseTo(0.55 + 0.3, 5);
+		expect(applyCues(base(), "you are stupid", 2).anger).toBeCloseTo(0.15 + 0.5, 5);
 		const event: StoryEvent = { id: "x", kind: "k", valence: "tragic", text: "t", shifts: { sadness: 0.2 } };
 		expect(applyEvent(defaultState(), event, 0.5).activations.sadness).toBeCloseTo(0.15 + 0.1, 5);
 		expect(applyEvent(defaultState(), event).activations.sadness).toBeCloseTo(0.35, 5);

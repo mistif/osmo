@@ -10,12 +10,8 @@ type Cue = { pattern: RegExp; shifts: Partial<Record<Emotion, number>> };
 export const INSULT = /\b(stupid|idiot|useless|dumb|hate you|shut up|stfu|moron|retard(?:ed)?|loser|fuck (?:you|off))\b/i;
 export const YOU_SUCK = /\b(?:you|u) suck\b/i;
 
+// Gur's own feelings and thanks live in detection.ts and feelings.ts.
 const CUES: Cue[] = [
-	{
-		pattern:
-			/\b(thanks|thank you|appreciate (?:it|you)|good job|well done|you(?:'|’)?re (?:great|smart|awesome|amazing)|you are (?:great|smart|awesome|amazing))\b/i,
-		shifts: { joy: 0.15, trust: 0.1, love: 0.1 },
-	},
 	{
 		pattern: INSULT,
 		shifts: { anger: 0.25, trust: -0.2, sadness: 0.1 },
@@ -31,24 +27,6 @@ const CUES: Cue[] = [
 	{
 		pattern: /\b(that was wrong|you(?:'|’)?re wrong|you are wrong|your mistake)\b/i,
 		shifts: { guilt: 0.2 },
-	},
-	{
-		pattern:
-			/\b(?:i['’]?m|im|i am)\s+(?:feeling\s+)?(?:so\s+|really\s+|very\s+)?(?:sad|down|depressed|lonely|upset|miserable)\b/i,
-		shifts: { sadness: 0.25, loneliness: 0.05 },
-	},
-	{
-		pattern:
-			/\b(?:i['’]?m|im|i am)\s+(?:feeling\s+)?(?:so\s+|really\s+|very\s+)?(?:happy|great|excited|glad|thrilled)\b/i,
-		shifts: { joy: 0.25, hope: 0.05 },
-	},
-	{
-		pattern: /\b(?:ily|love you)\b/i,
-		shifts: { love: 0.2, joy: 0.1 },
-	},
-	{
-		pattern: /\b(?:lol|lmao|lmfao|haha+|hehe+|rofl)\b/i,
-		shifts: { joy: 0.1 },
 	},
 	{
 		pattern: YOU_SUCK,
