@@ -17,6 +17,7 @@ import { getCachedLookup, putCachedLookup } from "@/lib/agent/dictionary-store";
 import { learnFromMessage } from "@/lib/agent/lexicon/vocabulary";
 import { loadVocabulary, saveVocabulary } from "@/lib/agent/vocabulary-store";
 import { newSession, prepareTurn, type Session, type TurnContext, type TurnResult } from "@/lib/agent/mind";
+import { rememberGur, validateDetection } from "@/lib/agent/detection";
 import {
 	answersPendingLearning,
 	taughtMeanings,
@@ -35,7 +36,7 @@ import { learnFact, learnSlang, type MemoryFact } from "@/lib/facts";
 import { answerFromMemory, calculateMath, findUnknownTopic, isBuiltInTopic } from "@/lib/chat/answers";
 import { ASK_TIMEOUT_MS, askForReply, askStatus, nextUsage } from "@/lib/chat/ask";
 import { chatBody } from "@/lib/chat/body";
-import { keptTurn, pickBranch, quietEffects, whileWaiting, writerFor, type QuietPlan } from "@/lib/chat/branch";
+import { detectionOf, keptTurn, pickBranch, quietEffects, whileWaiting, writerFor, type QuietPlan } from "@/lib/chat/branch";
 import type { ChatStatus } from "@/lib/chat/types";
 import { newId } from "@/lib/uuid";
 import { Panel, PanelLinks, usePanels } from "@/components/osmo/panel";
@@ -462,14 +463,15 @@ export default function AgentChat() {
 		};
 
 		// A guest's turn is for its reply only: his mood, bond and session stay exactly as they were.
-		const applyTurn = (kept: TurnResult | null) => {
+		const applyTurn = (kept: TurnResult | null, felt: { detection?: unknown } = {}) => {
 			if (!kept || guest) return;
-			setAgent(kept.state);
-			setSession(kept.session);
+			const next = { ...kept, session: rememberGur(kept.session, validateDetection(felt.detection, "model"), now) };
+			setAgent(next.state);
+			setSession(next.session);
 			if (canSaveRef.current) {
 				// Serialize saves so a verdict never runs before its dilemma row exists.
 				persistQueueRef.current = persistQueueRef.current.then(() =>
-					persistTurn(kept.state, kept.effects),
+					persistTurn(next.state, next.effects),
 				);
 			}
 		};
@@ -568,7 +570,7 @@ export default function AgentChat() {
 					return;
 				}
 				// His state is applied only now that it's known whose reply is used.
-				applyTurn(keptTurn<TurnResult>(answer?.kind === "model" ? "model" : "code", prepared, turn));
+				applyTurn(keptTurn<TurnResult>(answer?.kind === "model" ? "model" : "code", prepared, turn), { detection: detectionOf(answer) });
 				if (answer?.kind === "model") {
 					deliver(answer.reply);
 				} else if (answer?.kind === "crisis") {
