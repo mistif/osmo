@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { Bricolage_Grotesque } from "next/font/google";
 import { useRouter } from "next/navigation";
@@ -628,8 +628,8 @@ export default function AgentChat() {
 	const spokenText = speaking ? messages[speaking.index]?.text.slice(0, speaking.chars) : [...messages].reverse().find((m) => m.role === "agent")?.text;
 	// A browser that can't listen has no way in but typing, so it shows the conversation whatever the setting.
 	const voiceOnly = !voice.showChat && voice.listenSupported;
-	// Voice only: while he thinks, "One momentâ€¦" sits under him, and what he heard you say sits above him.
-	const said = thinking && voiceOnly ? "One momentâ€¦" : spokenText ? currentSentence(spokenText) : null;
+	// Voice only: while he thinks, "One moment…" sits under him, and what he heard you say sits above him.
+	const said = thinking && voiceOnly ? "One moment…" : spokenText ? currentSentence(spokenText) : null;
 	const lastHeard = [...messages].reverse().find((m) => m.role === "user")?.text ?? null;
 	const heard = voiceOnly ? (voice.liveText ?? (thinking ? lastHeard : null)) : null;
 
@@ -692,7 +692,7 @@ export default function AgentChat() {
 					})}
 					{thinking && (
 					<li className={`${styles.item} ${styles.agent}`} aria-live="polite">
-						<p className={styles.bubble}>One momentâ€¦</p>
+						<p className={styles.bubble}>One moment…</p>
 					</li>
 				)}
 				<li ref={latestMessageRef} className={styles.end} aria-hidden="true" />
@@ -704,7 +704,7 @@ export default function AgentChat() {
 						className={styles.field}
 						value={voice.liveText ?? input}
 						onChange={(event) => setInput(event.target.value)}
-						placeholder={ready ? "Tell Osmo how you're doing" : "Osmo is waking upâ€¦"}
+						placeholder={ready ? "Tell Osmo how you're doing" : "Osmo is waking up…"}
 						aria-label="Message"
 						disabled={!ready || thinking}
 						readOnly={voice.liveText !== null}
@@ -726,7 +726,7 @@ export default function AgentChat() {
 				</form>
 				{voice.micOpen && (
 					<p className={styles.voiceLine} role="status">
-						{voice.mode === "sleeping" ? 'Listening for "Osmo"' : "Listeningâ€¦"}
+						{voice.mode === "sleeping" ? 'Listening for "Osmo"' : "Listening…"}
 					</p>
 				)}
 				{voice.error && (
@@ -746,5 +746,3 @@ export default function AgentChat() {
 		</div>
 	);
 }
-
-
