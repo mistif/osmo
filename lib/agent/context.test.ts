@@ -111,7 +111,7 @@ describe("justLearnedName", () => {
 		// The real thing: "what's your name" after 21 hours away, from an Osmo who has met Gur before.
 		const now = 1_000_000_000_000;
 		const state = { ...defaultState(), bond: { ...defaultState().bond, messages: 5, days: 1, lastDay: "2001-09-08", metAt: "2001-09-08T00:00:00.000Z" } };
-		const reply = processTurn(state, newSession(), "what's your name", { now, lastAt: now - 21 * 3600_000, uuid: () => "id", seed: 5, userName: "Gur" }).reply!;
+		const reply = processTurn(state, newSession(), "what's your name", { now, lastAt: now - 21 * 3600_000, uuid: () => "id", userName: "Gur" }).reply!;
 		expect(reply).toMatch(/^(?:Welcome back|Good to see you again|Good to have you back|There you are), Gur\./);
 		expect(justLearnedName(reply)).toBe("Gur");
 	});
@@ -153,7 +153,7 @@ describe("names read from what Osmo said", () => {
 
 	it("says a saved three-word name, or 'my name is Gur.', back in words it reads again", () => {
 		const ask = (userName: string) =>
-			processTurn(defaultState(), newSession(), "what's your name", { now: 1_000_000, lastAt: null, uuid: () => "id", seed: 5, userName }).reply!;
+			processTurn(defaultState(), newSession(), "what's your name", { now: 1_000_000, lastAt: null, uuid: () => "id", userName }).reply!;
 		expect(justLearnedName(ask("anna maria lopez"))).toBe("Anna maria lopez");
 		const saved = learnFact("my name is Gur.");
 		expect(saved).toEqual({ key: "name", value: "Gur" });

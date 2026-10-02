@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { CRISIS_CAUSE, newSession, prepareTurn, type TurnFacts } from "../agent/mind";
-import { adoptGenome, assemble } from "../agent/personality/assemble";
 import { CRISIS_REPLY } from "../agent/safety";
 import { defaultState } from "../agent/state";
 import type { MemoryFact } from "../facts";
@@ -14,16 +13,15 @@ const guest = (line: RoomLine): RoomLine => ({ ...line, speaker: "guest" });
 const GREETING = agent("Hello, I'm Osmo. How can I help?");
 const fact = (key: string, value = `value of ${key}`): MemoryFact => ({ key, value });
 
-// A real personality and this turn's real facts, as the room has them.
-const osmo = () => adoptGenome(defaultState(), assemble(42), { resetWeights: false });
+// This turn's real facts, as the room has them.
 const turnFacts = (): TurnFacts =>
-	prepareTurn(osmo(), newSession(), "the weather is fine", { now: 1_000_000, lastAt: null, uuid: () => "id-1", userName: "Gur" }).facts;
+	prepareTurn(defaultState(), newSession(), "the weather is fine", { now: 1_000_000, lastAt: null, uuid: () => "id-1", userName: "Gur" }).facts;
 const input = (over: Partial<Parameters<typeof chatBody>[0]> = {}): Parameters<typeof chatBody>[0] => ({
 	text: "what should I cook tonight",
 	messages: [GREETING, user("hi"), agent("Good evening.")],
 	memory: [fact("name", "Gur")],
 	facts: turnFacts(),
-	state: osmo(),
+	state: defaultState(),
 	math: null,
 	...over,
 });
@@ -180,8 +178,8 @@ describe("fitMemory", () => {
 });
 
 describe("chatBody", () => {
-	it("is null without a personality, so code answers", () => {
-		expect(chatBody(input({ state: defaultState() }))).toBeNull();
+	it("builds a body for any state, with no personality roll needed", () => {
+		expect(chatBody(input({ state: defaultState() }))).not.toBeNull();
 	});
 
 	it("is null for a message over 2000 characters, counted after trimming", () => {
@@ -190,7 +188,7 @@ describe("chatBody", () => {
 	});
 
 	it("sends the trimmed message, the filtered history, the fitted memory and his persona", () => {
-		const state = osmo();
+		const state = defaultState();
 		const messages = [GREETING, user("hi"), agent("Good evening."), guest(user("psst")), guest(agent("Hello."))];
 		const memory = [fact("name", "Gur"), fact("sister", "Maya")];
 		const body = chatBody(input({ text: "  what should I cook tonight ", messages, memory, state }));
@@ -198,7 +196,7 @@ describe("chatBody", () => {
 		expect(body?.text).toBe("what should I cook tonight");
 		expect(body?.history).toEqual(modelHistory(messages));
 		expect(body?.memory).toEqual(fitMemory(memory));
-		expect(body?.persona).toEqual({ genome: state.genome, weights: state.weights, outlook: state.outlook });
+		expect(body?.persona).toEqual({ weights: state.weights, outlook: state.outlook });
 	});
 
 	it("cuts the facts' strings to 200 characters and keeps the rest as they are", () => {

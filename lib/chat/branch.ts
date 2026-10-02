@@ -52,7 +52,6 @@ export type WriterCheck = {
 	preparedReply: string | null;
 	ruleReply: string | null;
 	textLength: number;
-	hasGenome: boolean;
 };
 export type Writer = "code" | "model";
 
@@ -80,7 +79,7 @@ export function pickBranch(v: ChainValues): Picked {
 	return { branch, pendingTopic: branch === "unknownTopic" && !v.guest ? v.unknownTopic : null };
 }
 
-// The model writes an everyday reply only for Gur, with the AI on and a personality to speak for, when code hasn't
+// The model writes an everyday reply only for Gur, with the AI on, when code hasn't
 // decided the turn, the message fits the route, and today's reply doesn't ask his name or say his saved name back:
 // his answer is saved, and a misheard name corrected, only after code's own wording.
 export function writerFor(c: WriterCheck): Writer {
@@ -91,7 +90,6 @@ export function writerFor(c: WriterCheck): Writer {
 		!c.guest &&
 		c.preparedReply === null &&
 		c.textLength <= LIMITS.text &&
-		c.hasGenome &&
 		!aboutName;
 	return model ? "model" : "code";
 }

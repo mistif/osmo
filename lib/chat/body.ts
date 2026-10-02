@@ -68,8 +68,8 @@ export function fitMemory(memory: readonly MemoryFact[]): MemoryFact[] {
 	return name ? [name, ...newest.slice(1)] : newest;
 }
 
-// The request for one everyday reply, or null when there's nothing the route would take (no personality yet, or a
-// message over the limit), so the room answers with code.
+// The request for one everyday reply, or null when there's nothing the route would take (a message over the limit),
+// so the room answers with code. Any state will do: Osmo's character is the route's own, not part of the body.
 export function chatBody(input: {
 	text: string;
 	messages: readonly RoomLine[];
@@ -80,7 +80,7 @@ export function chatBody(input: {
 }): ChatBody | null {
 	const { facts, state } = input;
 	const text = input.text.trim();
-	if (state.genome === null || text.length > LIMITS.text) return null;
+	if (text.length > LIMITS.text) return null;
 	return {
 		text,
 		history: modelHistory(input.messages),
@@ -98,7 +98,7 @@ export function chatBody(input: {
 			userName: facts.userName === null ? null : clip(facts.userName, LIMITS.factField),
 			turn: facts.turn,
 		},
-		persona: { genome: state.genome, weights: state.weights, outlook: state.outlook },
+		persona: { weights: state.weights, outlook: state.outlook },
 		...(input.math !== null ? { hint: { math: input.math } } : {}),
 	};
 }

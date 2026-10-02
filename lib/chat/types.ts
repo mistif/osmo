@@ -3,14 +3,14 @@
 // server's code.
 
 import type { TurnFacts } from "../agent/mind";
-import type { Genome, Weights } from "../agent/state";
+import type { Weights } from "../agent/state";
 import type { MemoryFact } from "../facts";
 
 // One line of the recent conversation, as sent to the route.
 export type HistoryLine = { role: "user" | "agent"; text: string };
 // One item of the model's input.
 export type InputItem = { role: "user" | "assistant"; content: string };
-export type Persona = { genome: Genome; weights: Weights; outlook: number };
+export type Persona = { weights: Weights; outlook: number };
 export type ChatBody = {
 	text: string;
 	history: HistoryLine[];

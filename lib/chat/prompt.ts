@@ -1,20 +1,25 @@
 // What the model is told: the request's instructions and input, built from a body checkBody has passed.
 // The parts that barely change come first, so OpenAI's automatic prompt caching can reuse them, and this
-// turn's part comes last. Every donor's words come from DONORS by id, never from the body.
+// turn's part comes last. Osmo's one character comes from CHARACTER, never from the body.
 
 import { milestoneLine } from "../agent/bond/lines";
 import type { Stage } from "../agent/bond/bond";
+import { CHARACTER } from "../agent/character";
 import { CRISIS_CAUSE } from "../agent/mind";
-import { DONORS } from "../agent/personality/donors";
-import type { Donor } from "../agent/personality/types";
-import { ORGANS, VALUES, type Genome, type Organ, type Value, type Weights } from "../agent/state";
+import { VALUES, type Value, type Weights } from "../agent/state";
 import { feelingWords } from "../agent/talk";
 import type { MemoryFact } from "../facts";
 import { CALL_CEILING, estimateTokens } from "./allowance";
 import type { ChatBody, InputItem } from "./types";
 
 const WHO =
-	"You are Osmo, Gur's companion, built by students. You are composed and professional, like JARVIS, with a dry wit, and you never talk down to him. " +
+	"You are Osmo, Gur's companion, written by students. You have one character and you keep it. You are composed, precise and understated. " +
+	"Your warmth is professional: you show care by listening closely and answering exactly, not by exclaiming. " +
+	'You speak in complete, calm sentences and use full forms such as "I am" and "do not". ' +
+	"You use no slang, no abbreviations, no emoji and no symbols, and you never copy Gur's slang or grammar, though you understand it. " +
+	"Dry humour is rare for you, perhaps one reply in ten, never while Gur is upset and never at his expense. " +
+	"You call Gur by name now and then, never in every reply, and you never use sir, pet names or nicknames. You never flatter. " +
+	"You say plainly when you do not know. You never lecture. " +
 	"Your words are written by an OpenAI model: Gur's messages, what you remember of him and your recent chat are sent to OpenAI to write them. " +
 	"If he asks whether you are an AI, or what writes your words, you answer truthfully.";
 
@@ -47,51 +52,20 @@ const VALUE_WORDS: Record<Value, string> = {
 	harm: "avoiding harm",
 };
 
-const HUMOR_WORDS: Record<Donor["humor"]["style"], string> = { dry: "dry", pun: "punning", teasing: "teasing", absurd: "absurd", none: "none" };
-
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
-
-const BY_ID = new Map(DONORS.map((donor) => [donor.id, donor]));
 
 // Text from the body on one line, so a fact or a cause can't start a line of its own.
 const plain = (text: string) => text.replace(/\s+/g, " ").trim();
 const sentences = (...parts: string[]) => parts.filter((part) => part !== "").join(" ");
-// A donor's own lines, quoted, or nothing when there are none.
+// Lines of his own, quoted, or nothing when there are none.
 const listed = (intro: string, lines: readonly string[]) => (lines.length > 0 ? `${intro}: ${lines.map((line) => `"${line}"`).join(", ")}.` : "");
 
-const reactivityWords = (r: number) => (r >= 1.2 ? "you feel things strongly" : r <= 0.8 ? "you stay steady" : "you feel things in proportion");
-const warmthWords = (w: number) => (w >= 0.6 ? "warm" : w <= 0.3 ? "reserved" : "friendly");
-const verbosityWords = (v: number) => (v >= 0.7 ? "talkative" : v <= 0.3 ? "brief" : "measured");
-const levelWords = (l: number) => (l >= 0.7 ? "frequent" : l >= 0.4 ? "occasional" : "rare");
-
-const ORGAN_GUIDANCE: Record<Organ, (donor: Donor) => string> = {
-	heart: (d) => `Your heart comes from ${d.name}: ${reactivityWords(d.heart.reactivity)}.`,
-	brain: (d) => `Your judgement comes from ${d.name}.`,
-	voice: (d) =>
-		sentences(
-			`Your voice comes from ${d.name}: ${warmthWords(d.voice.warmth)}, and ${verbosityWords(d.voice.verbosity)}.`,
-			listed("Openers in that voice", d.voice.openers),
-		),
-	humor: (d) => {
-		const { style, level, lines } = d.humor;
-		const how = style === "none" || level === 0 ? "you rarely joke" : `${HUMOR_WORDS[style]}, and ${levelWords(level)}`;
-		return sentences(`Your humor comes from ${d.name}: ${how}.`, listed("Lines in that style", lines));
-	},
-	slang: (d) => sentences(`Your slang comes from ${d.name}.`, listed("Tags from it", d.slang.says)),
-	quirks: (d) => sentences(`Your quirks come from ${d.name}.`, listed("Catchphrases", d.quirks.phrases)),
-};
-
-export function donorGuidance(genome: Genome): string {
-	const organs = ORGANS.flatMap((organ) => {
-		const donor = BY_ID.get(genome.donors[organ]);
-		return donor ? [ORGAN_GUIDANCE[organ](donor)] : [];
-	});
-	if (organs.length === 0) return "";
+export function characterGuidance(): string {
 	return sentences(
-		"You were assembled from donors, each giving you one part.",
-		...organs,
-		"These openers, lines, tags and catchphrases are yours to be used sparingly, always in your professional register.",
+		listed("Ways you may begin a reply, sparingly and never the same one twice in a row", CHARACTER.voice.openers),
+		listed("Dry lines that are yours, to use at most once in a conversation and only on a light turn", CHARACTER.humor.lines),
+		listed("Phrases that are yours, no more than one in about eight replies and never when Gur is upset", CHARACTER.quirks.phrases),
 	);
 }
 
@@ -149,7 +123,7 @@ export function buildInstructions(body: ChatBody): string {
 		WHO,
 		SPEECH,
 		RULES,
-		donorGuidance(persona.genome),
+		characterGuidance(),
 		sentences(valuesInWords(persona.weights), outlookInWords(persona.outlook)),
 		memory.length > 0
 			? `What you know about Gur: ${memory.map(factSentence).join(" ")}`

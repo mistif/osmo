@@ -353,7 +353,6 @@ export default function AgentChat() {
 			now,
 			lastAt: lastAtRef.current,
 			uuid: newId,
-			seed: newSeed(),
 			userName: view.userName,
 			slang: view.slang,
 			recent: view.recent,
@@ -424,7 +423,6 @@ export default function AgentChat() {
 			preparedReply: prepared?.reply ?? null,
 			ruleReply,
 			textLength: text.length,
-			hasGenome: agent.genome !== null,
 		});
 
 		// Today's reply for the branch, with what it saves or asks. Used when code writes the reply, and when the model can't.

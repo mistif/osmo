@@ -12,7 +12,6 @@ import {
 } from "../agent/context";
 import { formatDefinition, parseLookup } from "../agent/dictionary";
 import { newSession, prepareTurn, processTurn, type Session, type TurnContext } from "../agent/mind";
-import { adoptGenome, assemble } from "../agent/personality/assemble";
 import { REROLL_PROMPT } from "../agent/personality/readout";
 import { CRISIS_REPLY, isCrisis } from "../agent/safety";
 import { defaultState, type AgentState } from "../agent/state";
@@ -32,8 +31,6 @@ import {
 	type WriterCheck,
 } from "./branch";
 
-// A real personality, so hasGenome holds and the other rules decide.
-const osmo = (): AgentState => adoptGenome(defaultState(), assemble(42), { resetWeights: false });
 // A bond with the seven-days milestone due, as in mind-prepare.test.ts.
 const knownBond = {
 	...emptyBond(),
@@ -63,7 +60,7 @@ type Room = {
 // explanation is answered), the rule reply each model branch would give, then writerFor. It skips only what saves or
 // shows something. Keep it in step with sendText: it's how these tests exercise the real chain order.
 function send(raw: string, options: SendOptions = GUR, room: Room = {}) {
-	const { messages = [GREETING], memory = [], pendingLearning = null, state = osmo(), session = newSession(), aiOn = true } = room;
+	const { messages = [GREETING], memory = [], pendingLearning = null, state = defaultState(), session = newSession(), aiOn = true } = room;
 	const text = raw.trim();
 	const guest = options.speaker === "guest";
 	const view = turnView(messages, memory, {}, guest);
@@ -80,7 +77,6 @@ function send(raw: string, options: SendOptions = GUR, room: Room = {}) {
 		now: 1_000_000,
 		lastAt: null,
 		uuid: () => "id-1",
-		seed: 7,
 		userName: view.userName,
 		slang: view.slang,
 		recent: view.recent,
@@ -134,7 +130,6 @@ function send(raw: string, options: SendOptions = GUR, room: Room = {}) {
 		preparedReply: prepared?.reply ?? null,
 		ruleReply: rule,
 		textLength: text.length,
-		hasGenome: state.genome !== null,
 	});
 	return { values, picked, rule, writer, processed, prepared };
 }
@@ -200,7 +195,6 @@ describe("writerFor", () => {
 		preparedReply: null,
 		ruleReply: "I'm not sure I follow. Could you rephrase that?",
 		textLength: 19,
-		hasGenome: true,
 	};
 
 	it("gives an everyday reply to the model", () => {
@@ -215,7 +209,6 @@ describe("writerFor", () => {
 			["a guest", { guest: true }],
 			["prepareTurn decided the reply", { preparedReply: "Please say \"yes, roll\" to confirm." }],
 			["a message over 2000 characters", { textLength: 2001 }],
-			["no personality yet", { hasGenome: false }],
 		];
 		for (const [label, over] of cases) {
 			expect(writerFor({ ...everyday, ...over }), label).toBe("code");
@@ -304,7 +297,7 @@ describe("who writes the reply, through the real chain", () => {
 
 	it("keeps code for name questions while no name is known", () => {
 		const yours = send("what's your name");
-		expect(yours).toMatchObject({ picked: { branch: "turn" }, rule: "I'm Osmo. What should I call you?", writer: "code" });
+		expect(yours).toMatchObject({ picked: { branch: "turn" }, rule: expect.stringMatching(/^I(?:'m| am) Osmo\. What should I call you\?$/), writer: "code" });
 		const mine = send("what's my name");
 		expect(mine).toMatchObject({ picked: { branch: "memory" }, rule: "I don't know your name yet. What should I call you?", writer: "code" });
 		expect(send("can't you see my name")).toMatchObject({ picked: { branch: "lookedBack" }, writer: "code" });
@@ -312,7 +305,7 @@ describe("who writes the reply, through the real chain", () => {
 
 	it("keeps code for name questions once his name is known, because they say it back", () => {
 		const room = { memory: NAMED };
-		expect(send("what's your name", GUR, room)).toMatchObject({ rule: "I'm Osmo. And you're Gur, I remember.", writer: "code" });
+		expect(send("what's your name", GUR, room)).toMatchObject({ rule: expect.stringMatching(/^I(?:'m| am) Osmo\. And you(?:'re| are) Gur, I remember\.$/), writer: "code" });
 		expect(send("what's my name", GUR, room)).toMatchObject({ rule: "Your name is Gur.", writer: "code" });
 		expect(send("can't you see my name", GUR, room)).toMatchObject({ rule: "Your name is Gur.", writer: "code" });
 	});
@@ -330,9 +323,8 @@ describe("who writes the reply, through the real chain", () => {
 		expect(send("the weather is fine")).toMatchObject({ picked: { branch: "memory" }, writer: "model" });
 	});
 
-	it("never gives the model a guest, a message over 2000 characters, an Osmo without a personality, or an AI that's off", () => {
+	it("never gives the model a guest, a message over 2000 characters, or an AI that's off", () => {
 		expect(send("i love you", { via: "voice", speaker: "guest" }).writer).toBe("code");
-		expect(send("i love you", GUR, { state: defaultState() }).writer).toBe("code");
 		expect(send("i love you", GUR, { aiOn: false }).writer).toBe("code");
 		// 1999 and 2008 characters, both answered from memory today.
 		const fits = send(`the weather is fine${" and warm".repeat(220)}`);
@@ -367,7 +359,7 @@ describe("keptTurn", () => {
 	});
 
 	it("steps his inner life once, with the milestone marked said only when the model says it", () => {
-		const room = { state: { ...osmo(), bond: knownBond } };
+		const room = { state: { ...defaultState(), bond: knownBond } };
 		const model = send("the weather is fine", GUR, room);
 		expect(model.writer).toBe("model");
 		expect(model.prepared?.facts.milestone).toBe("days7");

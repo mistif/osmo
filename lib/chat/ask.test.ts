@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
-import { assemble } from "../agent/personality/assemble";
 import { DEFAULT_WEIGHTS } from "../agent/state";
 import { ASK_TIMEOUT_MS, askForReply, askStatus, nextUsage, type AskResult } from "./ask";
 import type { ChatBody, ChatStatus } from "./types";
@@ -13,7 +12,7 @@ const BODY: ChatBody = {
 	],
 	memory: [{ key: "name", value: "Gur" }],
 	facts: { feeling: "calm", tone: "calm", cause: null, stage: "friend", milestone: null, heavy: false, awayMs: 0, userName: "Gur", turn: 2 },
-	persona: { genome: assemble(7), weights: DEFAULT_WEIGHTS, outlook: 0.2 },
+	persona: { weights: DEFAULT_WEIGHTS, outlook: 0.2 },
 };
 const USAGE = { usedToday: 41_200, usable: 630_000 };
 

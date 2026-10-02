@@ -4,9 +4,8 @@
 
 import { MILESTONES, type Stage } from "../agent/bond/bond";
 import { CRISIS_CAUSE, type TurnFacts } from "../agent/mind";
-import { sanitizeGenome } from "../agent/personality/assemble";
 import { isCrisis } from "../agent/safety";
-import { EMOTIONS, ORGANS, VALUES, type Genome, type Weights } from "../agent/state";
+import { EMOTIONS, VALUES, type Weights } from "../agent/state";
 import type { MemoryFact } from "../facts";
 import { LIMITS, type ChatBody, type HistoryLine, type Persona } from "./types";
 
@@ -64,16 +63,6 @@ function checkFacts(raw: unknown): TurnFacts | null {
 	return { feeling, tone, cause, stage, milestone, heavy, awayMs, userName, turn };
 }
 
-// The genome must come through sanitizeGenome unchanged. One it would repair (a donor that is unknown or not
-// allowed for its organ, or a seed that isn't a whole 32-bit number) is refused, because the donors the prompt
-// names must be exactly the ones the room has.
-function checkGenome(raw: unknown): Genome | null {
-	const clean = sanitizeGenome(raw);
-	if (clean === null || !isFields(raw) || clean.seed !== raw.seed) return null;
-	const sent = isFields(raw.donors) ? raw.donors : {};
-	return ORGANS.every((organ) => clean.donors[organ] === sent[organ]) ? clean : null;
-}
-
 // Exactly the five values, each a finite number.
 function checkWeights(raw: unknown): Weights | null {
 	if (!isFields(raw) || Object.keys(raw).length !== VALUES.length) return null;
@@ -88,11 +77,10 @@ function checkWeights(raw: unknown): Weights | null {
 
 function checkPersona(raw: unknown): Persona | null {
 	if (!isFields(raw)) return null;
-	const genome = checkGenome(raw.genome);
 	const weights = checkWeights(raw.weights);
 	const { outlook } = raw;
-	if (genome === null || weights === null || !isNumber(outlook) || outlook < -1 || outlook > 1) return null;
-	return { genome, weights, outlook };
+	if (weights === null || !isNumber(outlook) || outlook < -1 || outlook > 1) return null;
+	return { weights, outlook };
 }
 
 // No hint is fine; a hint that is there must be { math: a finite number }.
