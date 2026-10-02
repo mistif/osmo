@@ -178,6 +178,10 @@ export function calculateMath(text: string): number | null {
 
 	const tokens = expression.match(/\d*\.?\d+|[()+\-*/^%]/g) ?? [];
 	if (tokens.join("") !== expression.replace(/\s/g, "")) return null;
+	// A bare number ("22", "2024", "-5") is not a sum: it needs an operator, and a minus only counts after a number or ")".
+	const hasOperator = tokens.some((token, index) =>
+		/^[+*/^%]$/.test(token) || (token === "-" && index > 0 && /^[\d.)]/.test(tokens[index - 1])));
+	if (!hasOperator) return null;
 
 	let position = 0;
 	const parseExpression = (): number => {

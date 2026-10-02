@@ -321,6 +321,7 @@ describe("who writes the reply, through the real chain", () => {
 		const said = [GREETING, { role: "user" as const, text: "hi" }, { role: "agent" as const, text: "Good evening." }];
 		expect(send("what did i just say", GUR, { messages: said })).toMatchObject({ picked: { branch: "recall" }, writer: "model" });
 		expect(send("what is 12*37")).toMatchObject({ picked: { branch: "math" }, rule: "That comes to 444.", writer: "model" });
+		expect(send("22").picked.branch).not.toBe("math");
 		expect(send("what does valo mean")).toMatchObject({ picked: { branch: "lookup" }, rule: null, writer: "model" });
 		expect(send("the weather is fine")).toMatchObject({ picked: { branch: "memory" }, writer: "model" });
 	});
