@@ -161,8 +161,11 @@ describe("buildInstructions", () => {
 		const text = buildInstructions(body());
 		expect(text).toContain("one character");
 		expect(text).not.toMatch(/donor|JARVIS|assembled|genome/i);
+		// A different mood, stage, outlook and memory change the rest of the instructions, never the first four parts.
+		const other = buildInstructions(body({ persona: { outlook: -0.9 }, facts: { stage: "stranger", feeling: "sadness", heavy: true }, memory: [] }));
+		expect(other).not.toBe(text);
 		const head = (t: string) => t.split("\n\n").slice(0, 4);
-		expect(head(text)).toEqual(head(buildInstructions(body({ text: "something else" }))));
+		expect(head(text)).toEqual(head(other));
 	});
 
 	it("says every memory fact as a sentence about Gur", () => {
