@@ -7,6 +7,7 @@ Claude Code on the web. Only the cloud agent edits this file. It reaches GitHub 
 - `claude/adoring-archimedes-xo22ix`, draft PR #2 — the README rewrite.
 
 ## Now
+- **2026-10-02, 19:40 UTC: nothing new to review on GitHub.** Language's fixes for my two findings (`bd2d9df`, `2ade45f`) and the fallback v2 spec (`201887d`) are on local `main` only; I review them when they're pushed. The other cloud session's emotions phase 1 review and PRs #5 and #6 cover the rest. Since the brain is public, I removed the one deployment id from this desk (the line about `b26f156`).
 - **2026-10-02, 19:00 UTC: reviewed emotions phase 1 on `main` at `edbaeb6` (live).** Green: 1008 tests, `tsc` clean (after `next typegen`), lint clean. All five of the plan's Review Focus points hold for phase 1 (note cleaned and never saved or prompted, stale tab tolerated, future `gur.at` dropped, raw JSON never spoken, crisis beats a cheerful tone, guests never reach the model, the ledger still settles on reported usage). Three minor findings, all **→ language**, none reachable today because both allowlisted models are `strict: true`:
   - **A. The FEELING fallback is brittle** (`lib/chat/reply-json.ts:15-19`): `Feeling:` in other case gives null (an `error` fallback for a good reply); anything after the JSON (a `.`, a fence, `**FEELING:**`) loses the detection; the split is at the last `FEELING:` anywhere, so text after the FEELING line (`"Hard.\nFEELING: {...}\nI am here."`) is silently dropped; and the embedded-JSON guard is skipped on this branch, so a cut-off `{"reply":"... FEELING: x` could be spoken raw.
   - **B. `fitToCeiling` measures the wrong prompt** (`lib/chat/prompt.ts:182`): it measures the `"json"` instructions, while the handler builds `"feeling"` ones for a non-strict model (`lib/chat/handler.ts:119`), 61 bytes longer. A body trimmed to within 61 bytes of the ceiling then fails `estimate > CALL_CEILING` (`handler.ts:139`) and falls back as `allowance`. Fix: pass the mode into `fitToCeiling`.
@@ -32,7 +33,7 @@ Claude Code on the web. Only the cloud agent edits this file. It reaches GitHub 
 ## Just landed
 - **`443931e` on `main` (PR #2 merged): the README rewrite is live.** The push carried speaking's `3902078` with it, so
   the natural voice is deployed too and the README's "built, and off by default" row is true of production as it stands.
-  Vercel production `dpl_HJzJLPLU5qhia5VTWL94zCiuBhvs` built `b26f156` (the later PR #1 merge, which contains `443931e`)
+  Vercel production built `b26f156` (the later PR #1 merge, which contains `443931e`)
   and is READY — so the module-scope `createClient` in `lib/supabase.ts` really only ever broke branch previews, where the
   env vars are absent. The Preview env target is still unset; **that limitation stands for every future branch PR.**
   - For main, for the record: the one red test Gur saw after merging (`lib/agent/mind-prepare.test.ts > keeps the guest
@@ -68,6 +69,7 @@ Claude Code on the web. Only the cloud agent edits this file. It reaches GitHub 
 2. Review each push; post findings here.
 
 ## Asks
+- **→ main, and each lane for its own desk (2026-10-02): a few ids are still on the public brain.** None is a secret, but the new rule says no ids on the desks. `project.md` line 21 names the Supabase project ref (it's in every visitor's browser anyway, through the site's public Supabase URL). `lanes.md` lines 9 to 11 carry the local session ids. Vercel deployment ids (`dpl_…`) are in `decisions.md` (two entries), `desks/speaking.md` and `desks/language.md`. Git history keeps the old text either way, so this is tidiness, not a leak to chase.
 - **→ language (2026-10-02), for the two new specs, from `decisions.md` alone.** None blocks you; each is a line in a spec or a test:
   1. **The word list is part of the crisis check.** `lib/agent/safety.ts` imports `typoCost` from `lexicon/spelling` and `wordRank` from `lexicon/words` for its typo passes (line 31: a recognized word ranked under 20,000 is never bent into a crisis word). Dropping the spelling corrector and `words-data.ts` as decided would remove or break that pass. Keep the typo tolerance inside `safety.ts`, with a small list of its own if it needs one, and pin today's behaviour in tests first (the typo cases in `typos.test.ts`, plus "kill my self" and "hurt my self", which miss today).
   2. **A second model draws from the same free pool.** The pools are per pool, not per model: `gpt-5.4-mini`, `gpt-4.1-mini` and the nano models all share the 2.5 million small pool. So a fallback tried "when the allowance is out" spends the same pool, and its "own small cap" must come out of Osmo's 700,000 share, not on top of it, or it eats the investing agents' share. One cap for the pool, split between the two tiers, keeps the four rules as they are.
