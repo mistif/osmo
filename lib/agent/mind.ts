@@ -3,7 +3,7 @@ import { closenessReply, isAskCloseness, isAskMet, metReply, milestoneLine } fro
 import { applyFeedback, decide, explain, parseVerdict, type Decision } from "./brain";
 import { applyCues, applyGap, bondBaseline, missYou } from "./cues";
 import { CRISIS_CAUSE } from "./crisis-cause";
-import { NEGATIVE_TONES, type GurRead } from "./detection";
+import { detectFromText, NEGATIVE_TONES, type GurRead } from "./detection";
 import { DILEMMAS, findDilemma, nextDilemma } from "./dilemmas";
 import {
 	applyEvent,
@@ -16,7 +16,7 @@ import {
 	pickEvent,
 	type StoryEvent,
 } from "./events";
-import { moodLabel, stepHeart } from "./heart";
+import { dominantEmotions, moodLabel, stepHeart } from "./heart";
 import { withBaseFeelings } from "./lexicon/feelings";
 import { moodTheme, type MoodTheme } from "./mood-theme";
 import { CHARACTER, isAskNewOsmo, NEW_OSMO_REPLY, type Character } from "./character";
@@ -24,7 +24,8 @@ import { flavorTurn, heavyTurn, milestoneDue } from "./personality/flavor";
 import type { AgentState } from "./state";
 import { CRISIS_REPLY, isCrisis } from "./safety";
 import { vary } from "./lexicon/variety";
-import { causeOf, combineReplies, normalize, respond, understand } from "./talk";
+import { causeFor, moodWords, relaxMood } from "./slow-mood";
+import { causeOf, combineReplies, feelingWords, normalize, respond, understand } from "./talk";
 import { GUEST_DILEMMA, GUEST_PRIVATE } from "../voice/guest";
 
 type Pending = { logId: string; dilemmaId: string; decision: Decision };
@@ -37,6 +38,8 @@ export type Session = {
 	turns: number;
 	// Gur's last message read, if under 30 minutes old.
 	gur: { read: GurRead; at: number } | null;
+	// The `turns` value of the last reply that mentioned his own mood (spec 7), so he does it once every 8 replies at most.
+	lastOwnMention: number | null;
 };
 
 export type Effect =
@@ -73,6 +76,7 @@ export const newSession = (): Session => ({
 	cause: null,
 	turns: 0,
 	gur: null,
+	lastOwnMention: null,
 });
 
 const STORY_TRIGGER = /\b(tell me a story|give me an experience|feed me an event|experience something)\b/i;
@@ -378,6 +382,11 @@ export type TurnFacts = {
 	turn: number;
 	// Gur's last message, if under 30 minutes old.
 	gur?: GurRead | null;
+	// His top feeling in words, only when he may mention it this turn (spec 7). Absent means null: prepareTurn leaves it out
+	// when there is none, and it is optional like `gur` so a stale tab's facts still type-check.
+	own?: string | null;
+	// How the last day has felt, in words ("a little low"); absent means "" (at rest, and for a guest).
+	mood?: string;
 };
 export type PreparedTurn = TurnResult & {
 	facts: TurnFacts;
@@ -442,19 +451,33 @@ export function prepareTurn(state: AgentState, session: Session, text: string, c
 	const age = ctx.now - (result.session.gur?.at ?? Number.NEGATIVE_INFINITY);
 	const gur = !guest && result.session.gur !== null && age >= 0 && age < GUR_FRESH_MS ? result.session.gur.read : null;
 	const upset = gur !== null && gur.intensity === 3 && gur.tones.some((t) => NEGATIVE_TONES.includes(t));
+	const heavy = (open ? open.heavy : heavyTurn(tone, false)) || upset;
+	// His own mood (spec 7): only on an open, model-written turn, and only when it is clearly there, not mentioned lately,
+	// and Gur is not himself down right now.
+	const relaxed = guest ? null : relaxMood(result.state.mood, ctx.now);
+	const top = dominantEmotions(result.state.activations, 1, baseline)[0];
+	const read = detectFromText(text) ?? gur;
+	const gurDown = read !== null && read.intensity >= 2 && read.tones.some((t) => NEGATIVE_TONES.includes(t));
+	const last = result.session.lastOwnMention;
+	const due = last === null || result.session.turns - last >= 8;
+	const own = open && top && !heavy && due && !gurDown && result.state.activations[top] - baseline[top] >= 0.15 ? feelingWords(top) : null;
+	const words = relaxed ? moodWords(relaxed) : "";
 	const facts: TurnFacts = {
 		feeling: moodLabel(result.state.activations, baseline),
 		tone,
 		// What a crisis left behind stays between him and Gur.
-		cause: guest || result.session.cause === CRISIS_CAUSE ? null : result.session.cause,
+		cause: guest || result.session.cause === CRISIS_CAUSE ? null : ((top ? causeFor(result.state.mood, top, ctx.now) : null) ?? result.session.cause),
 		stage: guest ? "stranger" : stageOf(result.state.bond),
 		milestone: open?.milestone ?? null,
-		heavy: (open ? open.heavy : heavyTurn(tone, false)) || upset,
+		heavy,
 		awayMs: guest || ctx.lastAt === null ? 0 : ctx.now - ctx.lastAt,
 		userName: guest ? null : (ctx.userName ?? null),
 		turn: guest ? 0 : session.turns,
 		gur,
+		// Left out when there is nothing to say, so a facts object reads the same as before these fields to code that does not know them yet.
+		...(own !== null ? { own } : {}),
+		...(words !== "" ? { mood: words } : {}),
 	};
 	if (guest) return { state, session, reply: result.reply, effects: [], facts, processed };
-	return { ...result, facts, processed };
+	return { ...result, session: own ? { ...result.session, lastOwnMention: result.session.turns } : result.session, facts, processed };
 }

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { defaultState, type AgentState } from "./state";
+import { defaultState, type Emotion, type AgentState, type Mood } from "./state";
 import { CRISIS_CAUSE, newSession, prepareTurn, processTurn, type Session } from "./mind";
 import { emptyBond, stageOf } from "./bond/bond";
-import { moodLabel } from "./heart";
+import { detectFromText } from "./detection";
+import { dominantEmotions, moodLabel, moodPosition } from "./heart";
+import { moodWords, relaxMood } from "./slow-mood";
+import { feelingWords } from "./talk";
 import { moodTheme } from "./mood-theme";
 import { CHARACTER, NEW_OSMO_REPLY } from "./character";
 import { CRISIS_REPLY } from "./safety";
@@ -190,6 +193,113 @@ describe("prepareTurn: the facts a prompt may use", () => {
 		const r = prepareTurn(withBond(), session, "i want to kill myself", ctx({ guest: true }));
 		expect(r.reply).toBe(CRISIS_REPLY);
 		expect(r.facts.cause).toBeNull();
+	});
+});
+
+describe("prepareTurn: his own mood and the slow mood", () => {
+	const baseline = CHARACTER.baseline;
+	const OPEN = "the weather is fine";
+	const feeling = (e: Emotion, v: number): AgentState => {
+		const s = withBond();
+		return { ...s, activations: { ...s.activations, [e]: v } };
+	};
+	const joyful = () => feeling("joy", 0.9);
+	const excessOf = (r: ReturnType<typeof prepareTurn>) => {
+		const top = dominantEmotions(r.state.activations, 1, baseline)[0];
+		return top ? r.state.activations[top] - baseline[top] : 0;
+	};
+	const T = moodPosition(baseline);
+	const drifted = (at: number, causes: Mood["causes"] = []): Mood => ({ pad: [T[0] + 0.1, T[1] + 0.05, T[2] + 0.05], at, causes });
+
+	it("gives his top feeling in words when it is well above rest", () => {
+		const r = prepareTurn(joyful(), newSession(), OPEN, ctx());
+		expect(excessOf(r)).toBeGreaterThanOrEqual(0.15);
+		expect(r.facts.own ?? null).toBe(feelingWords(dominantEmotions(r.state.activations, 1, baseline)[0]));
+		expect(r.facts.own).toBeDefined();
+	});
+
+	it("gives nothing at rest, or when the feeling is under 0.15 above it", () => {
+		expect(prepareTurn(withBond(), newSession(), OPEN, ctx()).facts.own ?? null).toBeNull();
+		const mild = prepareTurn(feeling("joy", baseline.joy + 0.15), newSession(), OPEN, ctx());
+		expect(excessOf(mild)).toBeGreaterThanOrEqual(0.1);
+		expect(excessOf(mild)).toBeLessThan(0.15);
+		expect(mild.facts.own ?? null).toBeNull();
+	});
+
+	it("gives nothing on a heavy turn", () => {
+		const r = prepareTurn(joyful(), newSession(), "you are useless", ctx());
+		expect(r.facts.heavy).toBe(true);
+		expect(r.facts.own ?? null).toBeNull();
+	});
+
+	it("gives nothing when Gur's own tone this turn is negative at intensity 2 or more", () => {
+		expect(detectFromText("i am tired today")?.intensity).toBeGreaterThanOrEqual(2);
+		expect(prepareTurn(joyful(), newSession(), "i am tired today", ctx()).facts.own ?? null).toBeNull();
+		// A cheerful tone does not stop it.
+		expect(prepareTurn(joyful(), newSession(), "i am really happy today", ctx()).facts.own ?? null).not.toBeNull();
+	});
+
+	it("falls back to Gur's fresh last read when this message has no reading", () => {
+		const down: Session = { ...newSession(), gur: { read: { tones: ["sad"], intensity: 2, about: "gur", wants: "listen" }, at: 1_000_000 - 60_000 } };
+		expect(prepareTurn(joyful(), down, OPEN, ctx()).facts.own ?? null).toBeNull();
+		const light: Session = { ...newSession(), gur: { read: { tones: ["sad"], intensity: 1, about: "gur", wants: "listen" }, at: 1_000_000 - 60_000 } };
+		expect(prepareTurn(joyful(), light, OPEN, ctx()).facts.own ?? null).not.toBeNull();
+	});
+
+	it("gives nothing to a guest, or on a turn code decides", () => {
+		expect(prepareTurn(joyful(), newSession(), OPEN, ctx({ guest: true })).facts.own ?? null).toBeNull();
+		expect(prepareTurn(joyful(), newSession(), "how close are we", ctx()).facts.own ?? null).toBeNull();
+		expect(prepareTurn(joyful(), newSession(), "give me a dilemma", ctx()).facts.own ?? null).toBeNull();
+		expect(prepareTurn(joyful(), newSession(), "i want to kill myself", ctx()).facts.own ?? null).toBeNull();
+	});
+
+	it("marks the turn it was offered on, and offers again only on the 8th turn after", () => {
+		const first = prepareTurn(joyful(), newSession(), OPEN, ctx());
+		expect(first.facts.own ?? null).not.toBeNull();
+		expect(first.session.lastOwnMention).toBe(first.session.turns);
+		expect(first.processed.session.lastOwnMention).toBeNull();
+		// The next turn, straight away: not again.
+		expect(prepareTurn(joyful(), first.session, OPEN, ctx()).facts.own ?? null).toBeNull();
+		// Offered at turn 4: the turns 5 to 11 stay quiet (7 turns), turn 12 may speak again.
+		const at = (turns: number): Session => ({ ...newSession(), turns, lastOwnMention: 4 });
+		expect(prepareTurn(joyful(), at(10), OPEN, ctx()).facts.own ?? null).toBeNull();
+		expect(prepareTurn(joyful(), at(11), OPEN, ctx()).facts.own ?? null).not.toBeNull();
+	});
+
+	it("leaves the session as it is when nothing is offered", () => {
+		const r = prepareTurn(withBond(), newSession(), OPEN, ctx());
+		expect(r.session.lastOwnMention).toBeNull();
+		const g = prepareTurn(joyful(), newSession(), OPEN, ctx({ guest: true }));
+		expect(g.session.lastOwnMention).toBeNull();
+	});
+
+	it("leaves both fields out when there is nothing to say", () => {
+		const r = prepareTurn(withBond(), newSession(), OPEN, ctx());
+		expect("own" in r.facts).toBe(false);
+		expect("mood" in r.facts).toBe(false);
+	});
+
+	it("gives the slow mood in words: empty at rest and for a guest", () => {
+		const rest = prepareTurn(withBond(), newSession(), OPEN, ctx());
+		expect(rest.facts.mood ?? "").toBe("");
+		const s: AgentState = { ...withBond(), mood: drifted(1_000_000) };
+		const r = prepareTurn(s, newSession(), OPEN, ctx());
+		expect(r.facts.mood ?? "").toBe(moodWords(relaxMood(s.mood, 1_000_000)));
+		expect(r.facts.mood ?? "").not.toBe("");
+		expect(prepareTurn(s, newSession(), OPEN, ctx({ guest: true })).facts.mood ?? "").toBe("");
+	});
+
+	it("lets a day go by: the slow mood fades before it is worded", () => {
+		const s: AgentState = { ...withBond(), mood: drifted(1_000_000 - 20 * 24 * 3_600_000) };
+		expect(prepareTurn(s, newSession(), OPEN, ctx()).facts.mood ?? "").toBe("");
+	});
+
+	it("prefers the cause the slow mood holds for his top feeling over the session's", () => {
+		const s: AgentState = { ...joyful(), mood: drifted(1_000_000, [{ tone: "joy", because: "of the good news", at: 1_000_000 }]) };
+		const session: Session = { ...newSession(), cause: "of what you shared with me" };
+		expect(prepareTurn(s, session, OPEN, ctx()).facts.cause).toBe("of the good news");
+		expect(prepareTurn(joyful(), session, OPEN, ctx()).facts.cause).toBe("of what you shared with me");
+		expect(prepareTurn(s, session, OPEN, ctx({ guest: true })).facts.cause).toBeNull();
 	});
 });
 
