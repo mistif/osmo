@@ -202,7 +202,13 @@ describe("chatBody", () => {
 	it("cuts the facts' strings to 200 characters and keeps the rest as they are", () => {
 		const facts = { ...turnFacts(), feeling: "f".repeat(250), cause: "c".repeat(250), userName: "n".repeat(250) };
 		const body = chatBody(input({ facts }));
-		expect(body?.facts).toEqual({ ...facts, feeling: "f".repeat(200), cause: "c".repeat(200), userName: "n".repeat(200) });
+		expect(body?.facts).toEqual({ ...facts, gur: null, feeling: "f".repeat(200), cause: "c".repeat(200), userName: "n".repeat(200) });
+	});
+
+	it("passes Gur's last tone on, and a null one stays null", () => {
+		const gur = { tones: ["worried" as const], intensity: 2 as const, about: "someone_close" as const, wants: "listen" as const };
+		expect(chatBody(input({ facts: { ...turnFacts(), gur } }))?.facts.gur).toEqual(gur);
+		expect(chatBody(input({ facts: { ...turnFacts(), gur: null } }))?.facts.gur).toBeNull();
 	});
 
 	it("never sends the crisis cause", () => {

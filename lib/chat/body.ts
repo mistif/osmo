@@ -97,6 +97,8 @@ export function chatBody(input: {
 			awayMs: Math.max(0, facts.awayMs),
 			userName: facts.userName === null ? null : clip(facts.userName, LIMITS.factField),
 			turn: facts.turn,
+			// Gur's last tone, as the model read it earlier in this chat; null when there is none.
+			gur: facts.gur ?? null,
 		},
 		persona: { weights: state.weights, outlook: state.outlook },
 		...(input.math !== null ? { hint: { math: input.math } } : {}),

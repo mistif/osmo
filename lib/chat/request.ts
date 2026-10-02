@@ -3,6 +3,7 @@
 // fresh object, so no key the route doesn't know about reaches the prompt. Then the crisis defence runs.
 
 import { MILESTONES, type Stage } from "../agent/bond/bond";
+import { readOf, validateDetection } from "../agent/detection";
 import { CRISIS_CAUSE, type TurnFacts } from "../agent/mind";
 import { isCrisis } from "../agent/safety";
 import { EMOTIONS, VALUES, type Weights } from "../agent/state";
@@ -43,7 +44,7 @@ function checkMemory(raw: unknown): MemoryFact[] | null {
 
 function checkFacts(raw: unknown): TurnFacts | null {
 	if (!isFields(raw)) return null;
-	const { feeling, tone, cause, stage, milestone, heavy, awayMs, userName, turn } = raw;
+	const { feeling, tone, cause, stage, milestone, heavy, awayMs, userName, turn, gur } = raw;
 	if (
 		!isText(feeling, LIMITS.factField) ||
 		!(tone === "calm" || isOneOf(EMOTIONS, tone)) ||
@@ -60,7 +61,10 @@ function checkFacts(raw: unknown): TurnFacts | null {
 	) {
 		return null;
 	}
-	return { feeling, tone, cause, stage, milestone, heavy, awayMs, userName, turn };
+	// Gur's last tone, as the room remembers it. A stale tab sends none, which reads as null; one that isn't a valid read is refused.
+	const read = gur === undefined || gur === null ? null : validateDetection(gur);
+	if (gur !== undefined && gur !== null && read === null) return null;
+	return { feeling, tone, cause, stage, milestone, heavy, awayMs, userName, turn, gur: read === null ? null : readOf(read) };
 }
 
 // Exactly the five values, each a finite number.
