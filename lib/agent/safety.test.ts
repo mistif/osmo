@@ -15,13 +15,18 @@ describe("isCrisis", () => {
 			"i keep hurting myself",
 			"everyone would be better off without me",
 			"i want to unalive myself",
+			// Speech-to-text often writes it as two words.
+			"i want to kill my self",
+			"I'm going to hurt my self",
+			"i keep cutting my self",
+			"i want to kill my-self",
 		]) {
 			expect(isCrisis(text), text).toBe(true);
 		}
 	});
 
 	it("does not fire on ordinary sentences", () => {
-		for (const text of ["this homework is killing me", "i could kill for a pizza", "i am dying to see it", "hi", "kill the lights"]) {
+		for (const text of ["this homework is killing me", "i could kill for a pizza", "i am dying to see it", "hi", "kill the lights", "you hurt my self esteem", "that hurt my self-esteem", "it hurt my self confidence"]) {
 			expect(isCrisis(text), text).toBe(false);
 		}
 	});

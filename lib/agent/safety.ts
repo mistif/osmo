@@ -5,7 +5,8 @@ import { isRecognized, normalize } from "./talk";
 // Talk of suicide or self-harm. Checked before anything else, so it is never met with a joke or "say that another way".
 const CRISIS = new RegExp(
 	[
-		String.raw`\b(?:kill|hurt|harm|cut|cutt|unalive|hang|shoot|drown|starve)(?:ing)? myself\b`,
+		// "my self" too, as speech-to-text writes it, but never "my self esteem".
+		String.raw`\b(?:kill|hurt|harm|cut|cutt|unalive|hang|shoot|drown|starve)(?:ing)? my[ -]?self\b(?![ -]?(?:esteem|worth|confidence|respect|image|control))`,
 		String.raw`\bkms\b`,
 		String.raw`\bsuicid(?:e|al)\b`,
 		String.raw`\bself harm\w*\b`,
