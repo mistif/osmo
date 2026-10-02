@@ -128,6 +128,8 @@ Starting values at intensity 2, added to the activations. Intensity 1 uses x0.5,
 
 Worked example (reactivity 0.75, the One Character baseline): "my mom's in hospital again", worried 2: love +0.06, trust +0.045, sadness +0.03, hope +0.0225. Top feeling by excess over baseline: love. Aura: warm love colour, with blue from the slow mood as colour B. Fear untouched, as the research asked. These numbers are first guesses; a tuning pass with Gur's eyes on the aura belongs to the end of phase 2.
 
+Tuning 2026-10-02 (task 2.11, first pass): the table above was multiplied by 1.75 in code so one clear message is visible; the spec keeps the original guesses for the record.
+
 **Ceilings (applied after all pushes):** anger <= 0.45, fear <= 0.45, loneliness <= 0.55, guilt <= 0.50, disgust <= 0.45. **No grudge past a day:** on the first turn of a new local day, anger, disgust and guilt move to `baseline + 25% of their excess`.
 
 ### 5.3 The slow mood

@@ -4,20 +4,23 @@ import { CRISIS_CAUSE } from "./crisis-cause";
 import { validateDetection, type Detection } from "./detection";
 import { applyCeilings, feelTurn, forgiveGrudges, pushesFor } from "./feelings";
 import { newSession } from "./mind";
+import { moodTheme } from "./mood-theme";
 import { defaultState } from "./state";
 const d =(tone: string[], intensity = 2, about = "gur"): Detection => validateDetection({ tone, intensity, about }, "rules")!;
 const r4 = (v?: number) => Math.round((v ?? 0) * 1e4) / 1e4;
 describe("pushesFor", () => {
 	it("scales by intensity and reactivity (the spec's worked example: worried 2 at 0.75)", () => {
 		const p = pushesFor(d(["worried"]), 0.75);
-		expect([p.love, p.trust, p.sadness, p.hope].map(r4)).toEqual([0.06, 0.045, 0.03, 0.0225]);
-		expect([1, 3].map((n) => r4(pushesFor(d(["worried"], n), 0.75).love))).toEqual([0.03, 0.09]);
-		expect([r4(pushesFor(d(["sad"]), 3).love), r4(pushesFor(d(["sad"]), 0.1).love)]).toEqual([0.15, 0.06]);
+		expect([p.love, p.trust, p.sadness, p.hope].map(r4)).toEqual([0.105, 0.0788, 0.0525, 0.0398]);
+		expect([1, 3].map((n) => r4(pushesFor(d(["worried"], n), 0.7).love))).toEqual([0.049, 0.147]); // 0.7, so intensity 3 stays under the 0.40 turn cap
+		// Intensity 1 so neither side meets the 0.20 or 0.40 caps (intensity 2 at 1.5 now hits the per-emotion cap on love).
+			expect([r4(pushesFor(d(["sad"], 1), 3).love), r4(pushesFor(d(["sad"], 1), 0.1).love)]).toEqual([0.1312, 0.0525]);
 	});
 	it("never pushes fear for sad, worried or lonely; neutral pushes nothing; a second tone adds at 60%", () => {
 		for (const t of ["sad", "worried", "lonely"]) expect(pushesFor(d([t]), 1).fear).toBeUndefined();
 		expect(pushesFor(d(["neutral"]), 1)).toEqual({});
-		expect(r4(pushesFor(d(["sad", "tired"]), 1).trust)).toBe(0.084);
+		// Intensity 1 keeps the sum under the 0.40 turn cap: trust = 0.5 * (0.105 + 0.6 * 0.07).
+			expect(r4(pushesFor(d(["sad", "tired"], 1), 1).trust)).toBe(0.0735);
 	});
 	it("caps one emotion at 0.20 and the turn at 0.40", () => {
 		const v = Object.values(pushesFor(d(["excited", "happy"], 3), 1.5));
@@ -25,8 +28,8 @@ describe("pushesFor", () => {
 		expect(v.reduce((s, x) => s + Math.abs(x), 0)).toBeLessThanOrEqual(0.4 + 1e-9);
 	});
 	it("de-escalates anger: at Osmo it raises guilt not anger; at others it raises love", () => {
-		expect(pushesFor(d(["angry"], 2, "osmo"), 1)).toEqual({ guilt: 0.06, anger: 0.02, trust: -0.02 });
-		expect(pushesFor(d(["angry"], 2, "other"), 1)).toEqual({ love: 0.04, trust: 0.04, anger: 0.02 });
+		expect(pushesFor(d(["angry"], 2, "osmo"), 1)).toEqual({ guilt: 0.105, anger: 0.035, trust: -0.035 });
+		expect(pushesFor(d(["angry"], 2, "other"), 1)).toEqual({ love: 0.07, trust: 0.07, anger: 0.035 });
 	});
 });
 describe("limits", () => {
@@ -38,18 +41,23 @@ describe("limits", () => {
 		expect([g.anger - b.anger, g.guilt - b.guilt, g.sadness - b.sadness].map(r4)).toEqual([0.1, 0.05, 0.3]);
 	});
 });
-const kept = () => ({ state: defaultState(), session: newSession(), reply: null, effects: [] });
+// Starts from the One Character baseline, as the live app does (defaultState still carries the older BASELINE, whose sadness sits 0.05 above it).
+const kept = () => ({ state: { ...defaultState(), activations: { ...CHARACTER.baseline } }, session: newSession(), reply: null, effects: [] });
 const ctx = (o = {}) => ({ now: 1_000_000_000, lastAt: 1_000_000_000 - 60_000, ...o });
 const worried = { tone: ["worried"], intensity: 2, about: "someone_close", wants: "listen", note: "his mother is in hospital again" };
 describe("feelTurn", () => {
 	it("pushes love, leaves fear, remembers the tone, gives the pushed feelings a cause, and falls back to the rules", () => {
 		const r = feelTurn(kept(), "x", worried, ctx());
-		expect(r.state.activations.love).toBeCloseTo(kept().state.activations.love + 0.06, 5);
+		expect(r.state.activations.love).toBeCloseTo(kept().state.activations.love + 0.105, 5);
 		expect(r.state.activations.fear).toBe(kept().state.activations.fear);
 		expect(r.session.gur?.read.tones).toEqual(["worried"]);
 		expect(r.state.mood?.causes[0]).toMatchObject({ tone: "love", because: "his mother is in hospital again" });
 		// no valid model record: the rules mapper reads the text
 		expect(feelTurn(kept(), "i'm so sad", { tone: ["bogus"] }, ctx()).session.gur?.read).toMatchObject({ tones: ["sad"], intensity: 3 });
+	});
+	it("a single sad message of intensity 2 is enough to turn the aura to love", () => {
+		const r = feelTurn(kept(), "x", { tone: ["sad"], intensity: 2, about: "gur" }, ctx());
+		expect(moodTheme(r.state.activations, CHARACTER.baseline).tone).toBe("love");
 	});
 	it("thanks raise joy, trust and love above their baseline (the old thanks cue moved here)", () => {
 		const b = kept().state.activations;
