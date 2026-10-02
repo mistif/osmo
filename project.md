@@ -6,7 +6,7 @@ The facts every lane needs. The main agent keeps this file; each lane keeps its 
 
 Osmo is a chat companion for one person, Gur. Today he is rule-based: every reply comes from code in `lib/agent/`, with no language model. From 2026-09-29, the language lane is adding an AI conversation through OpenAI's free daily allowance, with the rule-based chain as the fallback. Osmo has:
 - a mood (the "heart");
-- a personality stitched together from 100 donor characters (the "Frankenstein" genome);
+- one hand-written character — composed, precise and a little dry;
 - a bond with Gur that grows over time;
 - a memory of facts Gur tells him;
 - a dictionary;
@@ -138,7 +138,7 @@ It checks `Authorization: Bearer <Supabase access token>` and returns the user, 
   - the last 20 lines of Gur's own conversation, with crisis lines and guest lines left out;
   - his memory facts;
   - Osmo's feeling and its cause, the bond stage, a due milestone and the time away;
-  - Osmo's donors and values.
+  - Osmo's values.
 
   Never the crisis cause, his vocabulary, or anything from other tables.
 - **The budget:**
@@ -166,7 +166,7 @@ It checks `Authorization: Bearer <Supabase access token>` and returns the user, 
 
 ## Docs
 
-- **Specs and plans:** `docs/superpowers/specs/` and `docs/superpowers/plans/` hold heart and brain, Frankenstein personality, bond, dictionary, shell and voice. The cloud lane's language-model design is on its branch.
+- **Specs and plans:** `docs/superpowers/specs/` and `docs/superpowers/plans/` hold heart and brain, character, bond, dictionary, shell and voice. The cloud lane's language-model design is on its branch.
 - **Deploying and Gur's hand checks:** `docs/osmo-deploy.md`.
 - **Voice:** `docs/osmo-voice-models.md` (the models) and `docs/osmo-wake-word.md` (wake word training).
 - **Demo mode:** `docs/osmo-demo-mode.md`.
