@@ -3,7 +3,7 @@
 Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk.
 
 ## Now
-**Emotions phase 1, language part: done** (local main, not pushed). Waiting for main to ask Gur for the phase 1 push, then Gur tries "my mom's in hospital again" himself. Not holding any shared file.
+**Emotions phases 1 and 2, language part: done** (local main, not pushed): phase 2 is 2.6 `fc2d11c` (the room calls feelTurn) and 2.9 `0918c58` (own and mood in the facts, their prompt lines, the how-are-you clause). Next: 2.11 tuning with Gur and phase 3, main first. Waiting for main to ask Gur for the phase 1 push, then Gur tries "my mom's in hospital again" himself. Not holding any shared file.
 - Also open, with Gur: the wake word doesn't fire for him (laptop Chrome, switch on). Every model file is served live; the gate (0.7 on 2 frames) has thin margins (the male test voice gets exactly 2 frames). Waiting on a recording of his "Osmo" to measure. Your lane; I'll bring you numbers, not a change.
 
 ## Just landed
