@@ -84,6 +84,12 @@ Gur's decisions and the cross-lane rulings, oldest first. Append only. Each entr
   - Vercel production `dpl_HwJuJxURbyuUtKbvdiN8JYTmAjHL` is READY on osmo-xyz.vercel.app. `/` and `/lock` answer 200, `/api/chat` and `/api/speak` answer 401 without a sign-in, and `/models/wake/osmo.onnx` is served.
   - The AI conversation is live but **switched off**: Vercel has no `OSMO_CHAT`, `OSMO_OWNER_ID` or cap, so every reply is still the rule-based chain.
 
+## 2026-10-02 (language): the strict-JSON probe, with Gur's yes in chat
+Gur: "yes run probe". Two real calls (`node scripts/chat-probe.mjs`), strict JSON schema `osmo_turn`, input "my mom's in hospital again". Both answered with valid JSON carrying all seven keys, status completed, the served model as asked:
+- `gpt-5.4-mini-2026-03-17`: 182 in, 69 out, 0 reasoning, 3338 ms; options echoed (`effort: none`, `verbosity: low`, format present).
+- `gpt-4.1-mini-2025-04-14`: 184 in, 77 out, 0 reasoning, 1753 ms; format present.
+Both get `strict: true` (`d3afca7`). Output stays under the plan's 120-token limit. The plan's "2 s slower than the plain probe" check has no baseline (the 2026-10-01 probe wasn't timed); 3.3 s is inside the route's 10 s limit and was reported to Gur.
+
 ## Waiting on Gur
 
 - Turn off Supabase sign-ups: Authentication → Sign In / Providers → "Allow new users to sign up".
