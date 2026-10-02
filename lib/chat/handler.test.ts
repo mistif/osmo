@@ -815,6 +815,10 @@ describe("handleChat POST: the detection", () => {
 		const sent = sentTo(fetcher);
 		expect((sent.text as { format: { name: string }; verbosity: string }).format.name).toBe("osmo_turn");
 		expect((sent.text as { verbosity: string }).verbosity).toBe("low");
+		// The instructions ask for the JSON shape and flag a crisis with the field, not the bare word.
+		expect(sent.instructions).toContain("Return your answer in the JSON shape you are given.");
+		expect(sent.instructions).toContain("set crisis to true");
+		expect(sent.instructions).not.toContain("FEELING:");
 	});
 
 	it("sends no format to a model that is not strict, and a plain-text answer gives no detection", async () => {
@@ -824,6 +828,11 @@ describe("handleChat POST: the detection", () => {
 			const plain = rig({ env: { ...ENV, OSMO_CHAT_MODEL: entry.model }, fetcher: openai({ text: "Pasta is quick." }) });
 			expect(await read(await handleChat(post(body()), plain.deps))).toEqual({ source: "model", reply: "Pasta is quick.", usage: { usedToday: SPENT, usable: USABLE }, detection: null });
 			expect(sentTo(plain.fetcher).text).toBeUndefined();
+			// A model with no schema is asked for plain sentences and a FEELING line, and the bare word for a crisis.
+			const asked = sentTo(plain.fetcher).instructions;
+			expect(asked).toContain("FEELING:");
+			expect(asked).toContain("reply with exactly CRISIS");
+			expect(asked).not.toContain("set crisis to true");
 			// The old FEELING line still carries a detection.
 			const line = `I am sorry to hear that.\nFEELING: ${turn({ reply: undefined })}`;
 			const feeling = rig({ env: { ...ENV, OSMO_CHAT_MODEL: entry.model }, fetcher: openai({ text: line }) });
