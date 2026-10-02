@@ -84,3 +84,31 @@ describe("state: bond", () => {
 		expect(sanitizeState({}).bond).toEqual(emptyBond());
 	});
 });
+
+describe("state: slow mood", () => {
+	it("a default state rests: mood is null", () => {
+		expect(defaultState().mood).toBeNull();
+	});
+
+	it("keeps a saved mood", () => {
+		const mood = { pad: [0.1, 0.2, 0.3], at: 5, causes: [{ tone: "love", because: "his mother is ill", at: 4 }] };
+		expect(sanitizeState({ mood }).mood).toEqual(mood);
+	});
+
+	it("gives null for a bad pad or a bad clock", () => {
+		for (const pad of [[0.1, 0.2], [0.1, 0.2, Number.NaN], [0.1, "x", 0.3], "nope"]) expect(sanitizeState({ mood: { pad, at: 5, causes: [] } }).mood).toBeNull();
+		expect(sanitizeState({ mood: { pad: [0, 0, 0], at: Number.NaN, causes: [] } }).mood).toBeNull();
+		expect(sanitizeState({ mood: "nonsense" }).mood).toBeNull();
+		expect(sanitizeState({}).mood).toBeNull();
+	});
+
+	it("drops a bad cause, keeps the first 4, cuts a long because, clamps the pad", () => {
+		const good = (n: number) => ({ tone: "trust", because: `reason ${n}`, at: n });
+		const bad = [{ tone: "bogus", because: "x", at: 1 }, { tone: "love", because: 7, at: 1 }, { tone: "love", because: "x", at: Number.NaN }];
+		const s = sanitizeState({ mood: { pad: [5, -5, 0.5], at: 1, causes: [...bad, good(1), good(2), good(3), good(4), good(5)] } });
+		expect(s.mood?.causes.map((c) => c.because)).toEqual(["reason 1", "reason 2", "reason 3", "reason 4"]);
+		expect(s.mood?.pad).toEqual([1, -1, 0.5]);
+		const long = sanitizeState({ mood: { pad: [0, 0, 0], at: 1, causes: [{ tone: "love", because: "y".repeat(200), at: 1 }] } });
+		expect(long.mood?.causes[0].because).toHaveLength(120);
+	});
+});

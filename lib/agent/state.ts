@@ -27,6 +27,10 @@ export type Valence = "happy" | "tragic";
 type Association = { count: number; tendencies: Partial<Record<Emotion, number>> };
 export type EventRecord = { id: string; valence: Valence };
 
+export type Cause = { tone: Emotion; because: string; at: number };
+// The slow mood (emotions spec 5): a point in mood space that fades by the clock. null means resting at the temperament point.
+export type Mood = { pad: Vec3; at: number; causes: Cause[] };
+
 export type AgentState = {
 	activations: Activations;
 	coupling: Coupling;
@@ -35,6 +39,7 @@ export type AgentState = {
 	associations: Record<string, Association>;
 	history: EventRecord[];
 	bond: Bond;
+	mood: Mood | null;
 };
 
 export const BASELINE: Activations = {
@@ -94,6 +99,7 @@ export function defaultState(): AgentState {
 		associations: {},
 		history: [],
 		bond: emptyBond(),
+		mood: null,
 	};
 }
 
@@ -102,6 +108,17 @@ const isObject = (v: unknown): v is Record<string, unknown> =>
 const isEmotion = (v: string): v is Emotion => (EMOTIONS as readonly string[]).includes(v);
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const clampTo = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+function sanitizeMood(raw: unknown): Mood | null {
+	if (!isObject(raw) || !Array.isArray(raw.pad) || raw.pad.length !== 3 || !raw.pad.every(finite) || !finite(raw.at)) return null;
+	const causes = Array.isArray(raw.causes)
+		? raw.causes
+				.filter((c): c is Cause => isObject(c) && typeof c.tone === "string" && isEmotion(c.tone) && typeof c.because === "string" && finite(c.at))
+				.map((c) => ({ tone: c.tone, because: c.because.slice(0, 120), at: c.at }))
+				.slice(0, 4)
+		: [];
+	return { pad: raw.pad.map((v: number) => clampTo(v, -1, 1)) as Vec3, at: raw.at, causes };
+}
 
 export function sanitizeState(raw: unknown): AgentState {
 	const state = defaultState();
@@ -157,6 +174,7 @@ export function sanitizeState(raw: unknown): AgentState {
 	}
 
 	state.bond = sanitizeBond(raw.bond);
+	state.mood = sanitizeMood(raw.mood);
 
 	return state;
 }
