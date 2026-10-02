@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { mergedLexicon } from "../personality/assemble";
 import { normalize, SLANG } from "../talk";
 import { PURE_SLANG, PURE_SLANG_IN_WORD_LIST, WORD_SLANG } from "./slang";
 import { isKnownWord } from "./words";
@@ -13,10 +12,8 @@ describe("the slang lists", () => {
 	});
 
 	it("never repeats slang Osmo already had", () => {
-		const donor = mergedLexicon();
 		for (const word of Object.keys(PURE_SLANG)) {
 			expect(Object.hasOwn(SLANG, word), word).toBe(false);
-			expect(Object.hasOwn(donor, word), word).toBe(false);
 			expect(Object.hasOwn(WORD_SLANG, word), word).toBe(false);
 		}
 	});

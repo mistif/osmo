@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BASELINE, defaultState, type Activations } from "./state";
-import { causeOf, fallbackReply, feelingPhrase, feelingWords, normalize, parse, respond, SLANG } from "./talk";
+import { causeOf, fallbackReply, feelingPhrase, feelingWords, normalize, parse, respond } from "./talk";
 import { moodLabel } from "./heart";
-import { mergedLexicon } from "./personality/assemble";
 
 const base = (): Activations => ({ ...BASELINE });
 const stateWith = (over: Partial<Activations>) => ({ ...defaultState(), activations: { ...base(), ...over } });
@@ -326,14 +325,10 @@ describe("insults", () => {
 	});
 });
 
-describe("donor slang is understood", () => {
-	it("reads a donor word as its plain meaning, but built-in and taught words still win", () => {
-		const entry = Object.entries(mergedLexicon()).find(([w]) => !(w in SLANG));
-		expect(entry).toBeDefined();
-		const [word, meaning] = entry!;
-		expect(normalize(word)).toBe(meaning);
-		expect(normalize(word, { [word]: "taught" })).toBe("taught");
+describe("slang is understood", () => {
+	it("reads built-in slang as its plain meaning, and a taught meaning wins", () => {
 		expect(normalize("hru")).toBe("how are you");
+		expect(normalize("hru", { hru: "taught" })).toBe("taught");
 	});
 
 	it("does not rewrite ordinary sentences", () => {

@@ -1,7 +1,6 @@
 import { BANNED_WORDS } from "./lexicon/banned";
 import { PURE_SLANG, WORD_SLANG } from "./lexicon/slang";
 import { isKnownWord } from "./lexicon/words";
-import { mergedLexicon } from "./personality/assemble";
 import { SLANG } from "./talk";
 
 // Word questions: "what does ephemeral mean", "define petrichor", "what's a platypus".
@@ -23,7 +22,6 @@ export type LookupDeps = {
 };
 
 const LOOKUP_MS = 4000;
-const DONOR_SLANG = mergedLexicon();
 // Openers people say before the question, typed or spoken.
 const FILLER = /^(?:(?:um+|uh+|so|hey|ok|okay|osmo|hey osmo|yo)[,\s]+)+/;
 // Words that make "what is X" small talk or a pronoun, not a word question ("what's up", "what is it").
@@ -159,7 +157,7 @@ export async function lookupWord(term: string, deps: LookupDeps): Promise<Lookup
 	if (taught) return found(key, key, { text: taught, pos: null, slang: false }, "taught");
 	// SLANG is a shorthand table for reading messages ("its" -> "it is", "bruh" -> ""), not a dictionary:
 	// it only answers for words that aren't ordinary English, and never with an empty meaning.
-	const builtIn = [WORD_SLANG, PURE_SLANG, SLANG, DONOR_SLANG].find(
+	const builtIn = [WORD_SLANG, PURE_SLANG, SLANG].find(
 		(table) => Object.hasOwn(table, key) && table[key].trim() !== "" && !(table === SLANG && isKnownWord(key)),
 	);
 	if (builtIn) return found(key, key, { text: builtIn[key], pos: null, slang: true }, "slang");

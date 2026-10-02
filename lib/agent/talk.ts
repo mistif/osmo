@@ -6,7 +6,6 @@ import { PHRASES } from "./lexicon/phrases";
 import { PURE_SLANG, WORD_SLANG } from "./lexicon/slang";
 import { createCorrector, type SpellContext } from "./lexicon/spelling";
 import { isKnownWord, WORD_LIST, wordRank } from "./lexicon/words";
-import { mergedLexicon } from "./personality/assemble";
 
 // ---- 1. Clean up the text -------------------------------------------------
 
@@ -196,8 +195,6 @@ export const SLANG: Record<string, string> = {
 	highkey: "really",
 };
 
-const DONOR_SLANG = mergedLexicon();
-
 export function normalize(text: string, taught: Record<string, string> = {}, spell: SpellContext | false = {}): string {
 	let t = text.toLowerCase().replace(/[’‘]/g, "'");
 	t = t
@@ -211,7 +208,7 @@ export function normalize(text: string, taught: Record<string, string> = {}, spe
 		.replace(/'ve\b/g, " have")
 		.replace(/'ll\b/g, " will")
 		.replace(/'d\b/g, " would");
-	const lookUp = (w: string) => own(taught, w) ?? own(SLANG, w) ?? own(DONOR_SLANG, w) ?? own(PURE_SLANG, w) ?? w;
+	const lookUp = (w: string) => own(taught, w) ?? own(SLANG, w) ?? own(PURE_SLANG, w) ?? w;
 	const mapped = t
 		.replace(/[^\w\s]/g, " ")
 		.split(/\s+/)
@@ -318,7 +315,6 @@ export const isRecognized = (w: string): boolean =>
 	FEELING_WORDS.has(w) ||
 	PHRASE_WORDS.has(w) ||
 	own(SLANG, w) !== undefined ||
-	own(DONOR_SLANG, w) !== undefined ||
 	own(PURE_SLANG, w) !== undefined ||
 	own(WORD_SLANG, w) !== undefined;
 
