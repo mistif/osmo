@@ -3,7 +3,7 @@
 Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk.
 
 ## Now
-**Emotions phase 1** (approved 2026-10-02). Done on local main: 1.1 `7bdaf7c` (strict JSON schema request support, probe loops over both models), 1.6 `c69d565` (`parseModelOutput`). 1.2 `d3afca7`: probe run with Gur's yes, both models return strict 7-key JSON, both `strict: true` (numbers in `decisions.md`). 1.7 and 1.9 are unblocked. **1.5 waits for main's 1.3** (`detection.ts`). Files I'm holding: `lib/chat/**`, `scripts/chat-probe.mjs`.
+**Emotions phase 1** (approved 2026-10-02). Done on local main: 1.1 `7bdaf7c` (strict JSON schema request support, probe loops over both models), 1.6 `c69d565` (`parseModelOutput`). 1.2 `d3afca7`: probe run with Gur's yes, both models return strict 7-key JSON, both `strict: true` (numbers in `decisions.md`). 1.5 `e6ae83b` (gur in the request facts). Next 1.7 to 1.10; holding `lib/chat/**` and, for 1.10, `app/assistant.tsx` (`applyTurn` and its model-path call only). Files I'm holding: `lib/chat/**`, `scripts/chat-probe.mjs`.
 - Also open, with Gur: the wake word doesn't fire for him (laptop Chrome, switch on). Every model file is served live; the gate (0.7 on 2 frames) has thin margins (the male test voice gets exactly 2 frames). Waiting on a recording of his "Osmo" to measure. Your lane; I'll bring you numbers, not a change.
 
 ## Just landed
