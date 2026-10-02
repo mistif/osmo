@@ -56,7 +56,26 @@ describe("askForReply", () => {
 		const { fetchFn } = answering(() =>
 			json({ source: "model", reply: "Jazz rewards patience. I rather like it.", usage: { ...USAGE, pool: "mini" }, debug: "x" }),
 		);
-		expect(await askForReply(fetchFn, "t", BODY)).toEqual({ kind: "model", reply: "Jazz rewards patience. I rather like it.", usage: USAGE });
+		expect(await askForReply(fetchFn, "t", BODY)).toEqual({ kind: "model", reply: "Jazz rewards patience. I rather like it.", usage: USAGE, detection: null });
+	});
+
+	it("hands back the detection the route sent, unchecked: the room validates it", async () => {
+		const { fetchFn } = answering(() => json({ source: "model", reply: "Hi.", usage: USAGE, detection: { tones: ["sad"] } }));
+		expect(await askForReply(fetchFn, "t", BODY)).toEqual({ kind: "model", reply: "Hi.", usage: USAGE, detection: { tones: ["sad"] } });
+	});
+
+	it("reads a missing, null or non-object detection as null, never a bad answer, so an older server still works", async () => {
+		const sent: [string, Record<string, unknown>][] = [
+			["missing", {}],
+			["null", { detection: null }],
+			["a string", { detection: "sad" }],
+			["a number", { detection: 3 }],
+			["true", { detection: true }],
+		];
+		for (const [label, extra] of sent) {
+			const { fetchFn } = answering(() => json({ source: "model", reply: "Hi.", usage: USAGE, ...extra }));
+			expect(await askForReply(fetchFn, "t", BODY), label).toEqual({ kind: "model", reply: "Hi.", usage: USAGE, detection: null });
+		}
 	});
 
 	it("turns each fallback reason into a fallback, and stops asking only on off", async () => {
@@ -311,7 +330,7 @@ describe("nextUsage", () => {
 
 	it("shows today's numbers from any other answer that carries them", () => {
 		const carrying: AskResult[] = [
-			{ kind: "model", reply: "Hello.", usage: USAGE },
+			{ kind: "model", reply: "Hello.", usage: USAGE, detection: null },
 			{ kind: "crisis", usage: USAGE },
 			{ kind: "fallback", why: "allowance", usage: USAGE, stop: false },
 			{ kind: "fallback", why: "error", usage: USAGE, stop: false },

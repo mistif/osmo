@@ -17,9 +17,11 @@ import { CRISIS_REPLY, isCrisis } from "../agent/safety";
 import { defaultState, type AgentState } from "../agent/state";
 import { learnFact, learnSlang, type MemoryFact } from "../facts";
 import type { SendOptions } from "../voice/guest";
+import type { AskResult } from "./ask";
 import { answerFromMemory, calculateMath, findUnknownTopic, isBuiltInTopic } from "./answers";
 import type { RoomLine } from "./body";
 import {
+	detectionOf,
 	keptTurn,
 	MODEL_BRANCHES,
 	pickBranch,
@@ -395,5 +397,17 @@ describe("quietEffects", () => {
 	it("gives a lookup that misses the line that doesn't ask for an explanation", () => {
 		const plan = quietEffects("lookup");
 		expect(formatDefinition({ kind: "missing", term: "valo" }, plan.reply === "noExplain")).toBe(`I'm not familiar with "valo".`);
+	});
+});
+
+describe("detectionOf", () => {
+	const usage = { usedToday: 1, usable: 2 };
+
+	it("gives the model answer's detection and nothing for any other answer", () => {
+		const detection = { tones: ["sad"] };
+		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection })).toBe(detection);
+		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection: null })).toBeNull();
+		const others: (AskResult | null)[] = [{ kind: "crisis", usage }, { kind: "fallback", why: "error", usage, stop: false }, null];
+		for (const answer of others) expect(detectionOf(answer), JSON.stringify(answer)).toBeNull();
 	});
 });

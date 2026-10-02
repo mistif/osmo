@@ -10,7 +10,7 @@ export const ASK_TIMEOUT_MS = 15_000;
 const CHAT_URL = "/api/chat";
 
 export type AskResult =
-	| { kind: "model"; reply: string; usage: Usage }
+	| { kind: "model"; reply: string; usage: Usage; detection: unknown }
 	| { kind: "crisis"; usage: Usage | null }
 	| { kind: "fallback"; why: FallbackReason | "http" | "network" | "timeout" | "aborted" | "bad_answer"; usage: Usage | null; stop: boolean };
 
@@ -70,7 +70,8 @@ function answerOf(json: unknown): AskResult {
 	if (answer.source === "model") {
 		const reply = answer.reply;
 		if (typeof reply !== "string" || reply.trim() === "" || usage === null) return failed("bad_answer");
-		return { kind: "model", reply, usage };
+		// Passed on unchecked (this file imports nothing); the room validates it. A missing one is null, never a bad answer: an older server still works.
+		return { kind: "model", reply, usage, detection: typeof answer.detection === "object" && answer.detection !== null ? answer.detection : null };
 	}
 	const reason = answer.source === "fallback" ? REASONS.find((known) => known === answer.reason) : undefined;
 	if (reason === undefined) return failed("bad_answer");

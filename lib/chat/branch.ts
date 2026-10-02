@@ -3,6 +3,7 @@
 
 import { askedForName, justLearnedName } from "../agent/context";
 import { isCrisis } from "../agent/safety";
+import type { AskResult } from "./ask";
 import { LIMITS } from "./types";
 
 export type Branch =
@@ -93,6 +94,9 @@ export function writerFor(c: WriterCheck): Writer {
 		!aboutName;
 	return model ? "model" : "code";
 }
+
+// The detection a model answer carries, still to be validated by the room; null for any other answer.
+export const detectionOf = (answer: AskResult | null): unknown => (answer?.kind === "model" ? answer.detection : null);
 
 // His inner life steps once: prepareTurn's result goes with a model reply, processTurn's with anything else.
 export function keptTurn<T>(writer: Writer, prepared: T, processed: T): T {
