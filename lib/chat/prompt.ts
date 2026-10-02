@@ -157,7 +157,7 @@ export function buildInstructions(body: ChatBody, format: Format = "json"): stri
 	return [
 		WHO,
 		SPEECH,
-		sentences(RULES_BEFORE, CRISIS_RULE[format], RULES_AFTER, EMOTION_RULES, FORMAT_RULE[format]),
+		sentences(RULES_BEFORE, CRISIS_RULE[format], EMOTION_RULES, FORMAT_RULE[format], RULES_AFTER),
 		characterGuidance(),
 		sentences(valuesInWords(persona.weights), outlookInWords(persona.outlook)),
 		memory.length > 0

@@ -15,6 +15,25 @@ describe("parseModelOutput", () => {
 		expect(good?.detection).toMatchObject({ tone: ["sad"] });
 		expect(parseModelOutput("That sounds hard.\nFEELING: {oops")).toEqual({ reply: "That sounds hard.", crisis: false, detection: null });
 	});
+	it("finds the FEELING line anywhere, at its last occurrence, not only as the last line", () => {
+		const inline = parseModelOutput('That sounds hard. FEELING: {"tone":["sad"],"intensity":2}');
+		expect(inline).toMatchObject({ reply: "That sounds hard.", crisis: false });
+		expect(inline?.detection).toMatchObject({ tone: ["sad"], intensity: 2 });
+		const twice = parseModelOutput('The word FEELING: is odd. FEELING: {"tone":["sad"],"intensity":2}');
+		expect(twice).toMatchObject({ reply: "The word FEELING: is odd." });
+		expect(twice?.detection).toMatchObject({ tone: ["sad"] });
+	});
+	it("never speaks the FEELING JSON, even with text after it", () => {
+		for (const text of ['That sounds hard. FEELING: {"tone":["sad"],"intensity":2} I am here.', 'That sounds hard.\nFEELING: {"tone":["sad"],"intensity":2}\nTake your time.']) {
+			const r = parseModelOutput(text);
+			expect(r?.reply, text).toBe("That sounds hard.");
+			expect(r?.detection, text).toBeNull();
+		}
+	});
+	it("gives null for text that holds a JSON object after other words", () => {
+		expect(parseModelOutput('Here: {"reply":"Hi."}')).toBeNull();
+		expect(parseModelOutput('Sure.\n{ "tone": ["sad"] }')).toBeNull();
+	});
 	it.each([["broken JSON", '{"reply":"Hel'], ["a fenced block", "```json\n" + json({}) + "\n```"], ["an object with no reply", '{"tone":["sad"]}']])("gives null for %s", (_n, t) =>
 		expect(parseModelOutput(t)).toBeNull());
 	it("still speaks plain text, including text that is valid JSON by itself", () => {

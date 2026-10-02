@@ -10,4 +10,13 @@ describe("TURN_FORMAT", () => {
 		expect(schema.required).toHaveLength(7);
 		expect(JSON.stringify(schema)).not.toMatch(/maxItems|minimum|maximum|maxLength/); // code enforces the limits (3.1)
 	});
+
+	// Without a scale in JSON mode a model answering 1 to 5 is clamped to 3, and the next turn turns heavy.
+	it("describes the fields the model fills in, with the intensity scale of 1, 2 and 3", () => {
+		const { tone, intensity, about, wants, note } = schema.properties;
+		for (const field of [tone, intensity, about, wants, note]) expect(field.description).toMatch(/\S/);
+		expect(intensity.description).toMatch(/\b1\b.*\b2\b.*\b3\b/);
+		expect(intensity.description).not.toMatch(/[4-9]/);
+		expect(note.description).toMatch(/empty/);
+	});
 });

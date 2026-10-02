@@ -858,6 +858,15 @@ describe("handleChat POST: the detection", () => {
 		}
 	});
 
+	it("answers crisis for a crisis flag in JSON the output cap cut off, and error for a cut-off one without it", async () => {
+		for (const text of ['{"crisis":true,"reply":"I am here wi', '{"crisis": true, "reply":"I am here wi', '{"reply":"I am here with you.","crisis":true,"tone":["sa']) {
+			const { deps } = rig({ fetcher: openai({ status: "incomplete", incomplete: "max_output_tokens", text }) });
+			expect(await read(await handleChat(post(body()), deps)), text).toEqual({ source: "fallback", reason: "crisis", usage: { usedToday: SPENT, usable: USABLE } });
+		}
+		const { deps } = rig({ fetcher: openai({ status: "incomplete", incomplete: "max_output_tokens", text: '{"crisis":false,"reply":"I am here wi' }) });
+		expect(await read(await handleChat(post(body()), deps))).toEqual({ source: "fallback", reason: "error", usage: { usedToday: SPENT, usable: USABLE } });
+	});
+
 	it("answers empty for JSON whose reply is empty or not speakable", async () => {
 		for (const reply of ["", "   ", "**🙂**"]) {
 			const { deps } = rig({ fetcher: openai({ text: turn({ reply }) }) });

@@ -217,15 +217,18 @@ type Verdict =
 	| { reply: string; detection: Detection | null }
 	| { reason: "error" | "crisis" | "empty"; why: "model" | "refusal" | "content_filter" | "status" | "incomplete" | "format" | null };
 
-// Step 12, in this order: the crisis flag (the JSON field, the reply, or the old bare word anywhere in the raw
-// text; it stands whichever model wrote it), then the served model (a missing one counts as a mismatch), a
-// refusal or content filter, the status, text that is half a JSON or a fence, a reply cut off by the output cap
-// cut back to its last full sentence, and last whether anything speakable is left. The detection is checked
-// here, so the browser only ever gets a validated one.
+// The crisis field as it reads in the raw text, so a JSON the output cap cut off after it still counts.
+const CRISIS_FIELD = /"crisis"\s*:\s*true/;
+
+// Step 12, in this order: the crisis flag (the JSON field, also in a JSON that was cut off, the reply, or the old
+// bare word anywhere in the raw text; it stands whichever model wrote it), then the served model (a missing one
+// counts as a mismatch), a refusal or content filter, the status, text that is half a JSON or a fence, a reply cut
+// off by the output cap cut back to its last full sentence, and last whether anything speakable is left. The
+// detection is checked here, so the browser only ever gets a validated one.
 function verdict(parsed: Parsed, model: string): Verdict {
 	const out = parseModelOutput(parsed.text);
 	// A crisis flag stands whichever model wrote it; a mismatch is still logged, and its settling row still stops the day.
-	if (out?.crisis || isCrisisFlag(parsed.text)) return { reason: "crisis", why: parsed.model !== model ? "model" : null };
+	if (out?.crisis || isCrisisFlag(parsed.text) || CRISIS_FIELD.test(parsed.text)) return { reason: "crisis", why: parsed.model !== model ? "model" : null };
 	if (parsed.model !== model) return { reason: "error", why: "model" };
 	if (parsed.refused || (parsed.status === "incomplete" && parsed.incomplete === "content_filter")) {
 		return { reason: "error", why: parsed.refused ? "refusal" : "content_filter" };
