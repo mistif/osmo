@@ -222,7 +222,7 @@ describe("calculateMath", () => {
 			["what is 2+2?", 4],
 			["solve 3*(4+5)=", 27],
 			["What is 7 - 10", -3],
-			["5", 5],
+			["0.1 + 0.2", 0.3],
 		];
 		for (const [text, result] of cases) {
 			expect(calculateMath(text), text).toBe(result);
@@ -230,7 +230,8 @@ describe("calculateMath", () => {
 	});
 
 	it("gives null for anything that isn't a finite sum", () => {
-		for (const text of ["1/0", "(2+3", "2+", "2..3", "hello", "what is 2 apples", ""]) {
+		// A bare number is an answer ("how old are you" / "22"), not a sum.
+		for (const text of ["1/0", "(2+3", "2+", "2..3", "hello", "what is 2 apples", "", "5", "22", "2024", "-3", "(7)"]) {
 			expect(calculateMath(text), text).toBeNull();
 		}
 	});

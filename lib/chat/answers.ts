@@ -176,8 +176,11 @@ export function calculateMath(text: string): number | null {
 		.trim();
 	if (!/[0-9]/.test(expression) || !/^[0-9()+\-*/^%.\s]+$/.test(expression)) return null;
 
-	const tokens = expression.match(/\d*\.?\d+|[()+\-*/^%]/g) ?? [];
+	const tokens: string[] = expression.match(/\d*\.?\d+|[()+\-*/^%]/g) ?? [];
 	if (tokens.join("") !== expression.replace(/\s/g, "")) return null;
+	// A sum needs an operator between two values, or a percentage: a bare number ("22" after "how old are you",
+	// "2024") is an answer.
+	if (!tokens.includes("%") && !tokens.some((token, i) => i > 0 && "+-*/^".includes(token) && /^[\d.)%]/.test(tokens[i - 1]))) return null;
 
 	let position = 0;
 	const parseExpression = (): number => {
@@ -228,7 +231,8 @@ export function calculateMath(text: string): number | null {
 
 	try {
 		const result = parseExpression();
-		return position === tokens.length && Number.isFinite(result) ? result : null;
+		// Rounded to 12 significant digits, so 0.1 + 0.2 is said as 0.3.
+		return position === tokens.length && Number.isFinite(result) ? Number(result.toPrecision(12)) : null;
 	} catch {
 		return null;
 	}
