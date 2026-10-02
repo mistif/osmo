@@ -14,7 +14,6 @@ export type SendOptions = { via: Via; speaker: Speaker; greet?: boolean };
 export const GUEST_MEMORY: MemoryFact[] = [];
 
 export const GUEST_GREETING = "Hello. I don't believe we've met.";
-export const GUEST_NO_CHANGES = "I'm afraid only the person I belong to can change me.";
 export const GUEST_PRIVATE = "That's between me and the person I belong to.";
 export const GUEST_DILEMMA = "I keep my dilemmas for the person I belong to.";
 

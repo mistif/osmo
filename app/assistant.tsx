@@ -8,7 +8,7 @@ import styles from "./assistant.module.css";
 import { ensureSession, supabase } from "@/lib/supabase";
 import { loadState, persistTurn } from "@/lib/agent/agent-state";
 import { moodTheme } from "@/lib/agent/mood-theme";
-import { adoptGenome, assemble, newSeed, resolve } from "@/lib/agent/personality/assemble";
+import { CHARACTER } from "@/lib/agent/character";
 import { charDelay, speechBeat } from "@/lib/agent/speech";
 import { beatTargets, BETWEEN_WORDS, currentSentence, wordTargets } from "@/lib/room/heart-motion";
 import { feelingPhrase, GUEST_NO_NOTES } from "@/lib/agent/talk";
@@ -59,19 +59,6 @@ type Waiting = { id: number; on: "model" | "lookup"; controller: AbortController
 
 const font = Bricolage_Grotesque({ subsets: ["latin"], display: "swap" });
 
-// Without a saved genome (first visit, or saving is unavailable) the seed is remembered in this browser.
-function stableSeed(): number {
-	try {
-		const saved = Number(window.localStorage.getItem("osmo-seed"));
-		if (Number.isInteger(saved) && saved > 0) return saved;
-		const fresh = newSeed() || 1;
-		window.localStorage.setItem("osmo-seed", String(fresh));
-		return fresh;
-	} catch {
-		return newSeed() || 1;
-	}
-}
-
 export default function AgentChat() {
 	const [messages, setMessages] = useState<ChatMessage[]>([
 		{ role: "agent", text: "Hello, I'm Osmo. How can I help?" },
@@ -106,7 +93,7 @@ export default function AgentChat() {
 	// Only save agent state after a successful load, so a failed load can never overwrite real data.
 	const canSaveRef = useRef(false);
 	const persistQueueRef = useRef<Promise<void>>(Promise.resolve());
-	const baseline = resolve(agent.genome).baseline;
+	const baseline = CHARACTER.baseline;
 	const theme = moodTheme(agent.activations, baseline);
 
 	// Osmo "speaks" each reply: it types out, and his heart and rings follow the rhythm.
@@ -168,14 +155,13 @@ export default function AgentChat() {
 				]);
 				canSaveRef.current = loaded.ok;
 				lastAtRef.current = loaded.lastAt;
-				let state = loaded.state;
-				if (state.genome === null) {
-					// A new Osmo: assemble him now and save him straight away so he is the same next time.
-					state = adoptGenome(state, assemble(stableSeed()), { resetWeights: false });
-					const assembled = state;
-					if (loaded.ok) persistQueueRef.current = persistQueueRef.current.then(() => persistTurn(assembled, []));
+				// The old per-browser seed belonged to the personality roll, which is gone.
+				try {
+					window.localStorage.removeItem("osmo-seed");
+				} catch {
+					/* best-effort */
 				}
-				setAgent(state);
+				setAgent(loaded.state);
 				if (facts.data) setMemory(facts.data as MemoryFact[]);
 				if (history.data?.length) {
 					// A null speaker is Gur's line; only "guest" is kept as a marker.
@@ -478,13 +464,6 @@ export default function AgentChat() {
 		// A guest's turn is for its reply only: his mood, bond and session stay exactly as they were.
 		const applyTurn = (kept: TurnResult | null) => {
 			if (!kept || guest) return;
-			if (kept.state.genome && kept.state.genome !== agent.genome) {
-				try {
-					window.localStorage.setItem("osmo-seed", String(kept.state.genome.seed));
-				} catch {
-					/* remembering the seed is best-effort */
-				}
-			}
 			setAgent(kept.state);
 			setSession(kept.session);
 			if (canSaveRef.current) {

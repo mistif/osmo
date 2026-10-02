@@ -1,6 +1,6 @@
 import { DEFAULT_WEIGHTS, type Activations, type Weights } from "./state";
 
-// Osmo's one character (spec 2): composed, precise, understated, dry in rare light moments. Plain data, no donors.
+// Osmo's one character (spec 2): composed, precise, understated, dry in rare light moments. Plain data.
 export type Character = {
 	seed: number; // a constant, so the rolls in flavorTurn stay deterministic
 	baseline: Activations;

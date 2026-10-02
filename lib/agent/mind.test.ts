@@ -3,8 +3,9 @@ import { DEFAULT_WEIGHTS, defaultState } from "./state";
 import { newSession, processTurn } from "./mind";
 import { emptyBond } from "./bond/bond";
 import { milestoneLine } from "./bond/lines";
+import { CHARACTER, NEW_OSMO_REPLY } from "./character";
 
-const ctx = (o: Partial<{ now: number; lastAt: number | null; seed: number }> = {}) => ({
+const ctx = (o: Partial<{ now: number; lastAt: number | null }> = {}) => ({
 	now: 1_000_000,
 	lastAt: null,
 	uuid: () => "id-1",
@@ -41,7 +42,7 @@ describe("processTurn: safety", () => {
 describe("processTurn: several things in one message", () => {
 	it("answers each part instead of only one", () => {
 		const r = processTurn(defaultState(), newSession(), "im good u seem to be doing well and i made you", ctx());
-		expect(r.reply).toMatch(/glad you're feeling good|nice to hear/i);
+		expect(r.reply).toMatch(/glad you(?:'re| are) feeling good|nice to hear/i);
 		expect(r.reply).toMatch(/You made me/);
 		// Only the last part keeps its closing question, so Osmo doesn't ask two things at once.
 		expect(r.reply).not.toMatch(/good day\?|going well\?/);
@@ -203,115 +204,54 @@ describe("processTurn: taught slang", () => {
 	});
 });
 
-import { adoptGenome, assemble, resolve } from "./personality/assemble";
 import { DILEMMAS } from "./dilemmas";
-import type { AgentState } from "./state";
-
-const withGenome = (seed: number): AgentState => adoptGenome(defaultState(), assemble(seed), { resetWeights: false });
-
-describe("processTurn: personality readout", () => {
-	it("says what it is made of, naming the donors", () => {
-		const state = withGenome(5);
-		const r = processTurn(state, newSession(), "what are you made of?", ctx());
-		const p = resolve(state.genome);
-		expect(r.reply).toContain(p.names!.heart);
-		expect(r.reply).toContain(p.names!.quirks);
-	});
-
-	it("admits it has no personality when neutral", () => {
-		expect(processTurn(defaultState(), newSession(), "what are you made of", ctx()).reply).toMatch(/don't have a personality/);
-	});
-});
-
-describe("processTurn: re-rolling", () => {
-	const asked = (state: AgentState, text = "roll a new osmo") => processTurn(state, newSession(), text, ctx());
-
-	it("asks for confirmation and changes nothing yet", () => {
-		const state = withGenome(1);
-		const r = asked(state);
-		expect(r.reply).toContain('"yes, roll"');
-		expect(r.state.genome).toEqual(state.genome);
-		expect(r.session.awaitingReroll).not.toBeNull();
-	});
-
-	it("rolls only on 'yes, roll': new genome from the offered seed, weights reset, memories untouched", () => {
-		const state = { ...withGenome(1), weights: { honesty: 0.4, kindness: 0.2, fairness: 0.2, loyalty: 0.1, harm: 0.1 } };
-		const first = processTurn(state, newSession(), "roll a new osmo", { ...ctx(), seed: 777 });
-		const done = processTurn(first.state, first.session, "yes, roll", ctx());
-		expect(done.state.genome).toEqual(assemble(777));
-		expect(done.state.weights).toEqual(resolve(assemble(777)).weights);
-		expect(done.state.history).toEqual(state.history);
-		expect(done.reply).toMatch(/^Done\./);
-		expect(done.session.awaitingReroll).toBeNull();
-	});
-
-	it("honors an explicit seed", () => {
-		const first = asked(withGenome(1), "roll a new osmo with seed 42");
-		const done = processTurn(first.state, first.session, "yes, roll", ctx());
-		expect(done.state.genome).toEqual(assemble(42));
-	});
-
-	it("does not roll on a bare yes but keeps the offer open, and any other message cancels it", () => {
-		const first = asked(withGenome(1));
-		const yes = processTurn(first.state, first.session, "yes", ctx());
-		expect(yes.state.genome).toEqual(first.state.genome);
-		expect(yes.session.awaitingReroll).toEqual(first.session.awaitingReroll);
-		const other = processTurn(yes.state, yes.session, "hello", ctx());
-		expect(other.session.awaitingReroll).toBeNull();
-		const later = processTurn(other.state, other.session, "yes, roll", ctx());
-		expect(later.state.genome).toEqual(first.state.genome);
-	});
-
-	it("cannot roll without being offered", () => {
-		const state = withGenome(1);
-		expect(processTurn(state, newSession(), "yes, roll", ctx()).state.genome).toEqual(state.genome);
-	});
-});
 
 describe("processTurn: flavor stays in the conversation layer", () => {
-	it("never touches dilemma, story or fact text, for many different Osmos", () => {
-		for (let seed = 1; seed <= 40; seed++) {
-			const state = withGenome(seed);
-			const dilemma = processTurn(state, newSession(), "give me a dilemma", ctx());
-			expect(dilemma.reply!.startsWith(DILEMMAS[0].prompt)).toBe(true);
-			expect(dilemma.reply!.endsWith("Do you agree?")).toBe(true);
-			const story = processTurn(state, newSession(), "tell me a story", ctx());
-			expect(story.reply!.startsWith("Two old friends meet again")).toBe(true);
-		}
+	it("never touches dilemma, story or fact text", () => {
+		const state = defaultState();
+		const dilemma = processTurn(state, newSession(), "give me a dilemma", ctx());
+		expect(dilemma.reply!.startsWith(DILEMMAS[0].prompt)).toBe(true);
+		expect(dilemma.reply!.endsWith("Do you agree?")).toBe(true);
+		const story = processTurn(state, newSession(), "tell me a story", ctx());
+		expect(story.reply!.startsWith("Two old friends meet again")).toBe(true);
 	});
 
-	it("still answers small talk for every kind of Osmo", () => {
-		for (let seed = 1; seed <= 40; seed++) {
-			const r = processTurn(withGenome(seed), newSession(), "thanks", ctx());
-			expect(typeof r.reply).toBe("string");
-			expect(r.reply!.length).toBeGreaterThan(0);
-		}
+	it("still answers small talk", () => {
+		const r = processTurn(defaultState(), newSession(), "thanks", ctx());
+		expect(typeof r.reply).toBe("string");
+		expect(r.reply!.length).toBeGreaterThan(0);
 	});
 
-	it("keeps a sad conversation free of jokes for every Osmo", () => {
-		for (let seed = 1; seed <= 40; seed++) {
-			const r = processTurn(withGenome(seed), newSession(), "im so sad", ctx());
-			expect(r.reply).toMatch(/sorry|hard/i);
-		}
+	it("keeps a sad conversation free of jokes", () => {
+		const r = processTurn(defaultState(), newSession(), "im so sad", ctx());
+		expect(r.reply).toMatch(/sorry|hard/i);
 	});
 });
 
-describe("processTurn: personality changes the heart", () => {
-	it("moves emotions more for a more reactive Osmo", () => {
-		const low: number[] = [];
-		const high: number[] = [];
-		for (let seed = 1; seed <= 200; seed++) {
-			const state = withGenome(seed);
-			const p = resolve(state.genome);
-			const after = processTurn(state, newSession(), "you are stupid", ctx()).state;
-			const moved = after.activations.anger - p.baseline.anger;
-			if (p.reactivity < 0.85) low.push(moved);
-			if (p.reactivity > 1.25) high.push(moved);
+describe("processTurn: one character", () => {
+	it("answers the old roll commands with one line and keeps no offer open", () => {
+		for (const text of ["roll a new osmo", "re-roll", "make new osmo"]) {
+			const r = processTurn(defaultState(), newSession(), text, ctx());
+			expect(r.reply, text).toBe(NEW_OSMO_REPLY);
+			expect(r.session).not.toHaveProperty("awaitingReroll");
+			expect(r.state.weights).toEqual(defaultState().weights);
+			expect(r.effects).toEqual([]);
 		}
-		expect(low.length).toBeGreaterThan(0);
-		expect(high.length).toBeGreaterThan(0);
-		const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
-		expect(mean(high)).toBeGreaterThan(mean(low));
+	});
+	it("treats a following 'yes, roll' as ordinary conversation", () => {
+		const first = processTurn(defaultState(), newSession(), "roll a new osmo", ctx());
+		expect(processTurn(first.state, first.session, "yes, roll", ctx()).reply ?? "").not.toMatch(/Done|roll/i);
+	});
+	it("scales what he feels by the character's reactivity", () => {
+		const anger = () => processTurn(defaultState(), newSession(), "you are stupid", ctx()).state.activations.anger;
+		const steady = anger();
+		const saved = CHARACTER.reactivity;
+		try {
+			CHARACTER.reactivity = 1.5;
+			expect(anger()).toBeGreaterThan(steady);
+		} finally {
+			CHARACTER.reactivity = saved;
+		}
 	});
 });
 

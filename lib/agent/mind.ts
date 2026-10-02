@@ -17,14 +17,13 @@ import {
 import { moodLabel, stepHeart } from "./heart";
 import { withBaseFeelings } from "./lexicon/feelings";
 import { moodTheme, type MoodTheme } from "./mood-theme";
-import { adoptGenome, assemble, resolve } from "./personality/assemble";
+import { CHARACTER, isAskNewOsmo, NEW_OSMO_REPLY, type Character } from "./character";
 import { flavorTurn, heavyTurn, milestoneDue } from "./personality/flavor";
-import { afterReroll, describeMadeOf, isAskMadeOf, isConfirmRoll, parseReroll, REROLL_PROMPT } from "./personality/readout";
 import type { AgentState } from "./state";
 import { CRISIS_REPLY, isCrisis } from "./safety";
 import { vary } from "./lexicon/variety";
 import { causeOf, combineReplies, normalize, respond, understand } from "./talk";
-import { GUEST_DILEMMA, GUEST_NO_CHANGES, GUEST_PRIVATE } from "../voice/guest";
+import { GUEST_DILEMMA, GUEST_PRIVATE } from "../voice/guest";
 
 type Pending = { logId: string; dilemmaId: string; decision: Decision };
 export type Session = {
@@ -34,7 +33,6 @@ export type Session = {
 	// Why it feels the way it does, as a clause that follows "because".
 	cause: string | null;
 	turns: number;
-	awaitingReroll: { seed: number } | null;
 };
 
 export type Effect =
@@ -49,8 +47,6 @@ export type TurnContext = {
 	userName?: string | null;
 	// Words the user taught it, e.g. { fam: "friend" }.
 	slang?: Record<string, string>;
-	// A fresh random seed, used when the user asks for a re-roll.
-	seed?: number;
 	// Words from the last few messages, so a typo can be read in context ("piza" after talking about pizza).
 	recent?: string[];
 	// The user's own words and how often they've used them, so they are never taken for typos.
@@ -72,7 +68,6 @@ export const newSession = (): Session => ({
 	dilemmasSeen: [],
 	cause: null,
 	turns: 0,
-	awaitingReroll: null,
 });
 
 const STORY_TRIGGER = /\b(tell me a story|give me an experience|feed me an event|experience something)\b/i;
@@ -98,7 +93,7 @@ function acknowledgeGuest(event: StoryEvent): string {
 type OpenTurn = {
 	s: AgentState;
 	sess: Session;
-	p: ReturnType<typeof resolve>;
+	p: Character;
 	awayMs: number;
 	guest: boolean;
 	trimmed: string;
@@ -110,12 +105,12 @@ type OpenTurn = {
 };
 
 // Everything before everyday conversation, all decided by code: the heart step, the crisis check, the bond, verdicts,
-// re-rolls, what he's made of, how close you are, when you met (steps 0-1), then life events, arguments, stories and
+// how close you are, when you met (steps 0-1), then life events, arguments, stories and
 // dilemmas (steps 2-5). Returns the finished turn when one of those answers.
 function startTurn(state: AgentState, session: Session, text: string, ctx: TurnContext): { decided: TurnResult } | { open: OpenTurn } {
 	const trimmed = text.trim();
 	const effects: Effect[] = [];
-	const p = resolve(state.genome);
+	const p = CHARACTER;
 
 	// Heart: gap and cues first, then one coupling/decay step.
 	const close = closeness(state.bond);
@@ -125,7 +120,7 @@ function startTurn(state: AgentState, session: Session, text: string, ctx: TurnC
 	activations = applyCues(activations, withBaseFeelings(trimmed), p.reactivity);
 	let s: AgentState = { ...state, activations: stepHeart(activations, state.coupling, bondBaseline(p.baseline, close)) };
 	// Any message that is not a verdict clears the pending question.
-	const sess: Session = { ...session, pending: null, turns: session.turns + 1, awaitingReroll: null };
+	const sess: Session = { ...session, pending: null, turns: session.turns + 1 };
 
 	// 0. Talk of suicide or self-harm always comes first, whatever else is going on.
 	if (isCrisis(trimmed)) {
@@ -179,47 +174,11 @@ function startTurn(state: AgentState, session: Session, text: string, ctx: TurnC
 		};
 	}
 
-	// Guests can't change him, and the bond is private.
-	if (guest && (isConfirmRoll(trimmed) || parseReroll(trimmed))) {
-		return { decided: { state: s, session: sess, reply: GUEST_NO_CHANGES, effects } };
-	}
+	// The old "roll a new osmo" commands: one line for everybody, no state, no confirm step.
+	if (isAskNewOsmo(trimmed)) return { decided: { state: s, session: sess, reply: NEW_OSMO_REPLY, effects } };
+	// The bond is private to Gur.
 	if (guest && (isAskCloseness(trimmed) || isAskMet(trimmed))) {
 		return { decided: { state: s, session: sess, reply: GUEST_PRIVATE, effects } };
-	}
-	// Re-rolling the personality needs an explicit "yes, roll" straight after the offer.
-	if (session.awaitingReroll && isConfirmRoll(trimmed)) {
-		const genome = assemble(session.awaitingReroll.seed);
-		s = adoptGenome(s, genome, { resetWeights: true });
-		return { decided: { state: s, session: sess, reply: afterReroll(resolve(genome)), effects } };
-	}
-	// A plain "yes" is not enough to re-roll, but it shouldn't quietly cancel the offer either.
-	if (!guest && session.awaitingReroll && /^(?:yes|yeah|yep|yup|ya|sure|ok|okay|do it|go for it)\W*$/i.test(trimmed)) {
-		return {
-			decided: {
-				state: s,
-				session: { ...sess, awaitingReroll: session.awaitingReroll },
-				reply: `Please say "yes, roll" to confirm. Otherwise I will remain as I am.`,
-				effects,
-			},
-		};
-	}
-	if (isConfirmRoll(trimmed)) {
-		return {
-			decided: {
-				state: s,
-				session: sess,
-				reply: `There is nothing to confirm at the moment. Say "roll a new osmo" first if you would like a new version of me.`,
-				effects,
-			},
-		};
-	}
-	const reroll = parseReroll(trimmed);
-	if (reroll) {
-		const seed = reroll.seed ?? ctx.seed ?? 1;
-		return { decided: { state: s, session: { ...sess, awaitingReroll: { seed } }, reply: REROLL_PROMPT, effects } };
-	}
-	if (isAskMadeOf(trimmed)) {
-		return { decided: { state: s, session: sess, reply: describeMadeOf(p), effects } };
 	}
 	if (isAskCloseness(trimmed)) {
 		return { decided: { state: s, session: sess, reply: closenessReply(s.bond), effects } };
@@ -455,7 +414,7 @@ function leaveForModel(open: OpenTurn): { result: TurnResult; milestone: Milesto
 }
 
 // For a route where a language model writes the everyday conversation (step 6). Everything code decides runs first,
-// with the guest gates. When code answers (a crisis, a verdict, a re-roll, the bond, a life event, a story, a dilemma),
+// with the guest gates. When code answers (a crisis, a verdict, the bond, a life event, a story, a dilemma),
 // `reply` is set and the result is processTurn's. Otherwise `reply` is null, the state and session are already what
 // step 6 would leave, and the model answers from `facts` (saying `facts.milestone`'s line if there is one).
 // A guest's turn changes nothing of his: the state and session come back exactly as passed in, and effects are empty,
@@ -469,7 +428,7 @@ export function prepareTurn(state: AgentState, session: Session, text: string, c
 		"decided" in start
 			? start.decided
 			: (open?.result ?? { state: start.open.s, session: start.open.sess, reply: null, effects: [] });
-	const baseline = resolve(result.state.genome).baseline;
+	const baseline = CHARACTER.baseline;
 	const tone = moodTheme(result.state.activations, baseline).tone;
 	const facts: TurnFacts = {
 		feeling: moodLabel(result.state.activations, baseline),

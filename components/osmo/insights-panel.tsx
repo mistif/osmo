@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { localDay } from "@/lib/agent/bond/bond";
+import { characterLines } from "@/lib/agent/character";
 import { spokenDate } from "@/lib/agent/bond/lines";
 import { dayName, sanitizeMoodDay, strongestPhrase, weekSeries, type MoodDay } from "@/lib/agent/mood-days";
-import { resolve } from "@/lib/agent/personality/assemble";
 import type { AgentState } from "@/lib/agent/state";
-import { madeFromLines, storyLines } from "@/lib/shell/story";
+import { storyLines } from "@/lib/shell/story";
 import panel from "./panels.module.css";
 import styles from "./insights.module.css";
 
@@ -121,8 +121,8 @@ export function InsightsPanel({ agent }: { agent: AgentState }) {
 			</section>
 
 			<section className={panel.section}>
-				<h3 className={panel.sectionTitle}>What I&apos;m made from</h3>
-				{madeFromLines(resolve(agent.genome).names).map((text) => (
+				<h3 className={panel.sectionTitle}>Who I am</h3>
+				{characterLines().map((text) => (
 					<p key={text} className={panel.line}>{text}</p>
 				))}
 			</section>

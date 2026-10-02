@@ -3,7 +3,8 @@ import { defaultState } from "./state";
 import { newSession, processTurn } from "./mind";
 import { emptyBond } from "./bond/bond";
 import { DILEMMAS } from "./dilemmas";
-import { GUEST_DILEMMA, GUEST_NO_CHANGES, GUEST_PRIVATE } from "../voice/guest";
+import { GUEST_DILEMMA, GUEST_PRIVATE } from "../voice/guest";
+import { NEW_OSMO_REPLY } from "./character";
 
 type Ctx = { now: number; lastAt: number | null; guest: boolean; userName: string | null };
 const ctx = (o: Partial<Ctx> = {}) => ({ now: 1_000_000, lastAt: null, uuid: () => "id-1", guest: true, ...o });
@@ -16,13 +17,11 @@ describe("processTurn for someone who isn't Gur", () => {
 		expect(processTurn(withBond(), newSession(), "when did we meet", ctx()).reply).toBe(GUEST_PRIVATE);
 	});
 
-	it("can't re-roll him, even straight after Gur was offered one", () => {
-		const offer = processTurn(defaultState(), newSession(), "roll a new osmo", ctx());
-		expect(offer.reply).toBe(GUEST_NO_CHANGES);
-		expect(offer.session.awaitingReroll).toBeNull();
-		const waiting = { ...newSession(), awaitingReroll: { seed: 5 } };
-		expect(processTurn(defaultState(), waiting, "yes, roll", ctx()).reply).toBe(GUEST_NO_CHANGES);
-		expect(processTurn(defaultState(), waiting, "yes", ctx()).reply ?? "").not.toMatch(/yes, roll/);
+	it("gets the same one line for the old roll command, and nothing changes", () => {
+		const r = processTurn(defaultState(), newSession(), "roll a new osmo", ctx());
+		expect(r.reply).toBe(NEW_OSMO_REPLY);
+		expect(r.effects).toEqual([]);
+		expect(r.state.weights).toEqual(defaultState().weights);
 	});
 
 	it("doesn't answer Gur's pending dilemma with a yes", () => {

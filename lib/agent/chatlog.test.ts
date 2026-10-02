@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { askedForName, nameCorrection, nameFromHistory, wantsNameFromChat } from "./context";
+import { NEW_OSMO_REPLY } from "./character";
 import { newSession, processTurn, type Session } from "./mind";
-import { adoptGenome, assemble } from "./personality/assemble";
 import { defaultState, type AgentState } from "./state";
 import { fallbackReply } from "./talk";
 
@@ -13,14 +13,12 @@ const PET_NAMES = /\b(squirt|kiddo|little one|sweetheart|darling|dear|sir|madam|
 const JUST_MET_GU = "Nice to meet you, Gu! I'll remember that.";
 
 describe("the Supabase chat log, replayed", () => {
-	it("never talks down to the user, whichever Osmo he is", () => {
-		for (let seed = 1; seed <= 200; seed++) {
-			const state = adoptGenome(defaultState(), assemble(seed), { resetWeights: false });
-			for (const text of ["who are you", "bet", "hi", "thanks", "lol", "how are you"]) {
-				for (let turn = 0; turn < 6; turn++) {
-					const r = processTurn(state, { ...newSession(), turns: turn }, text, ctx());
-					expect(r.reply ?? "", `seed ${seed}: ${text}`).not.toMatch(PET_NAMES);
-				}
+	it("never talks down to the user", () => {
+		const state = defaultState();
+		for (const text of ["who are you", "bet", "hi", "thanks", "lol", "how are you"]) {
+			for (let turn = 0; turn < 6; turn++) {
+				const r = processTurn(state, { ...newSession(), turns: turn }, text, ctx());
+				expect(r.reply ?? "", text).not.toMatch(PET_NAMES);
 			}
 		}
 	});
@@ -65,19 +63,11 @@ describe("the Supabase chat log, replayed", () => {
 		expect(say("/help").reply).not.toMatch(/roll|donor|personality/i);
 	});
 
-	it("nudges a bare 'yes' after the re-roll offer and keeps the offer open", () => {
-		const offer = say("roll a new osmo");
-		const yes = processTurn(offer.state, offer.session, "yes", ctx());
-		expect(yes.reply).toContain('"yes, roll"');
-		expect(yes.state.genome).toBe(offer.state.genome);
-		expect(yes.session.awaitingReroll).toEqual(offer.session.awaitingReroll);
-		expect(processTurn(yes.state, yes.session, "yes, roll", ctx()).reply).toMatch(/^Done\./);
-	});
-
-	it("says there is nothing to confirm when 'yes, roll' comes out of nowhere", () => {
-		const r = say("yes, roll");
-		expect(r.reply).toMatch(/roll a new osmo/i);
-		expect(r.state.genome).toBeNull();
+	it("answers 'roll a new osmo' with one line and keeps no offer open", () => {
+		const r = say("roll a new osmo");
+		expect(r.reply).toBe(NEW_OSMO_REPLY);
+		expect(r.session).not.toHaveProperty("awaitingReroll");
+		expect(processTurn(r.state, r.session, "yes, roll", ctx()).reply ?? "").not.toMatch(/Done|roll/i);
 	});
 
 	it("still gives the crisis reply to 'i want to kill myself'", () => {

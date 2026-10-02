@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { DONORS } from "../personality/donors";
-import { MODERN_DONORS } from "../personality/modern";
 import { emptyBond, type Bond } from "./bond";
 import {
 	closenessReply,
@@ -9,7 +7,6 @@ import {
 	metReply,
 	milestoneLine,
 	sharedMemory,
-	slangJoke,
 	spokenDate,
 	welcomeBack,
 } from "./lines";
@@ -47,48 +44,6 @@ describe("sharedMemory", () => {
 		expect(sharedMemory(emptyBond(), 0)).toBeNull();
 		const b = bondWith({ milestones: [{ id: "name", at: "2026-09-24T10:00:00.000Z" }] });
 		expect(sharedMemory(b, 0)).toMatch(/your name/);
-	});
-});
-
-describe("slangJoke", () => {
-	// Every donor that can supply the slang organ (see assemble.ts poolFor).
-	const SLANG_POOL = DONORS.filter((d) => MODERN_DONORS.has(d.id)).map((d) => d.id);
-	const ABBREVIATION = /\b(?:ngl|gg|lol|fr|tbh|rn|imo|smh|idk|omg)\b/i;
-	// Three of a letter in a row, or a doubled letter ending a word ("slayy").
-	const STRETCHED = /([a-z])\1\1|([a-z])\2\b/i;
-
-	it("frames genuine slang as a knowing joke, written out as words", () => {
-		const line = slangJoke("the-gen-z-group-chat", 0);
-		expect(line).toMatch(/no cap|slay|hits different/);
-		expect(line).toMatch(/expression|told the phrase|would say/);
-	});
-
-	it("makes no joke for a donor whose phrases are not really slang, or an unknown donor", () => {
-		for (const id of ["the-pun-machine", "the-trivia-champion", "no-such-donor"]) expect(slangJoke(id, 0), id).toBeNull();
-	});
-
-	it("every possible joke, for every donor in the slang pool, is plain and speakable", () => {
-		expect(SLANG_POOL.length).toBe(MODERN_DONORS.size);
-		let jokes = 0;
-		for (const id of SLANG_POOL) {
-			// 3 phrases by 3 frames at most, so 30 turns reach every combination.
-			for (let t = 0; t < 30; t++) {
-				const line = slangJoke(id, t);
-				if (line === null) continue;
-				jokes++;
-				expect(line, id).not.toMatch(ABBREVIATION);
-				expect(line, id).not.toMatch(STRETCHED);
-				expect(line, id).toMatch(/^[A-Za-z ,.'!?-]+$/);
-			}
-		}
-		expect(jokes).toBeGreaterThan(0);
-	});
-
-	it("reaches every frame with every phrase", () => {
-		const lines = new Set(Array.from({ length: 30 }, (_, t) => slangJoke("the-gen-z-group-chat", t)));
-		for (const frame of [/as I believe the expression goes/, /I am told the phrase is/, /Some would say/]) {
-			for (const phrase of [/no cap\.$/, /slay\.$/]) expect([...lines].some((l) => frame.test(l!) && phrase.test(l!)), `${frame} ${phrase}`).toBe(true);
-		}
 	});
 });
 

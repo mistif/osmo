@@ -27,13 +27,7 @@ export type Valence = "happy" | "tragic";
 type Association = { count: number; tendencies: Partial<Record<Emotion, number>> };
 export type EventRecord = { id: string; valence: Valence };
 
-export const ORGANS = ["heart", "brain", "voice", "humor", "slang", "quirks"] as const;
-export type Organ = (typeof ORGANS)[number];
-// Which donor supplied each organ. Null on AgentState means the neutral Osmo.
-export type Genome = { seed: number; donors: Record<Organ, string> };
-
 export type AgentState = {
-	genome: Genome | null;
 	activations: Activations;
 	coupling: Coupling;
 	outlook: number;
@@ -93,7 +87,6 @@ export function defaultCoupling(): Coupling {
 
 export function defaultState(): AgentState {
 	return {
-		genome: null,
 		activations: { ...BASELINE },
 		coupling: defaultCoupling(),
 		outlook: 0,

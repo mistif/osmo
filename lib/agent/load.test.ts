@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { emptyBond } from "./bond/bond";
 import { defaultState } from "./state";
 import { stateFromRows } from "./load";
-import { assemble } from "./personality/assemble";
 
 const ok = <T,>(data: T) => ({ data, error: null });
 const fail = { data: null, error: { message: "boom" } };
@@ -35,24 +34,11 @@ describe("stateFromRows", () => {
 	});
 });
 
-describe("stateFromRows: genome", () => {
-	it("reads a saved genome", () => {
-		const genome = assemble(21);
-		const r = stateFromRows(ok({ genome }), ok([]), ok([]));
-		expect(r.state.genome).toEqual(genome);
-	});
-
-	it("is neutral (null) when nothing was saved", () => {
-		expect(stateFromRows(ok(null), ok([]), ok([])).state.genome).toBeNull();
-		expect(stateFromRows(ok({ outlook: 0.1 }), ok([]), ok([])).state.genome).toBeNull();
-	});
-
-	it("repairs unknown donors and drops garbage without failing the load", () => {
+describe("stateFromRows: a saved genome", () => {
+	it("loads normally and puts no genome on the state", () => {
 		const r = stateFromRows(ok({ genome: { seed: 5, donors: { heart: "ghost" } } }), ok([]), ok([]));
 		expect(r.ok).toBe(true);
-		expect(r.state.genome?.seed).toBe(5);
-		expect(r.state.genome?.donors.heart).not.toBe("ghost");
-		expect(stateFromRows(ok({ genome: "garbage" }), ok([]), ok([])).state.genome).toBeNull();
+		expect(r.state).not.toHaveProperty("genome");
 	});
 });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyBond, type Bond } from "../agent/bond/bond";
-import { madeFromLines, shortDate, storyLines } from "./story";
+import { shortDate, storyLines } from "./story";
 
 const now = new Date(2026, 8, 30, 12).getTime();
 
@@ -28,20 +28,5 @@ describe("storyLines", () => {
 			{ id: "friend", date: "29 Sep", text: "I came to think of you as a friend" },
 		]);
 		expect(storyLines(emptyBond(), now)).toEqual([]);
-	});
-});
-
-describe("madeFromLines", () => {
-	it("names each donor in a sentence, or says he isn't assembled yet", () => {
-		const names = { heart: "The Night-Shift Nurse", brain: "The Fair Judge", voice: "The Diplomat", humor: "The Tired Librarian", slang: "The Surfer", quirks: "The Astronomer" };
-		expect(madeFromLines(names)).toEqual([
-			"My heart comes from The Night-Shift Nurse.",
-			"My judgement comes from The Fair Judge.",
-			"My voice comes from The Diplomat.",
-			"My humor comes from The Tired Librarian.",
-			"My slang comes from The Surfer.",
-			"My quirks come from The Astronomer.",
-		]);
-		expect(madeFromLines(null)).toEqual(["I haven't been assembled yet."]);
 	});
 });

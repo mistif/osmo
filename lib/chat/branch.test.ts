@@ -12,7 +12,7 @@ import {
 } from "../agent/context";
 import { formatDefinition, parseLookup } from "../agent/dictionary";
 import { newSession, prepareTurn, processTurn, type Session, type TurnContext } from "../agent/mind";
-import { REROLL_PROMPT } from "../agent/personality/readout";
+import { NEW_OSMO_REPLY } from "../agent/character";
 import { CRISIS_REPLY, isCrisis } from "../agent/safety";
 import { defaultState, type AgentState } from "../agent/state";
 import { learnFact, learnSlang, type MemoryFact } from "../facts";
@@ -207,7 +207,7 @@ describe("writerFor", () => {
 		const cases: [string, Partial<WriterCheck>][] = [
 			["the AI is off", { aiOn: false }],
 			["a guest", { guest: true }],
-			["prepareTurn decided the reply", { preparedReply: "Please say \"yes, roll\" to confirm." }],
+			["prepareTurn decided the reply", { preparedReply: "Please say something else." }],
 			["a message over 2000 characters", { textLength: 2001 }],
 		];
 		for (const [label, over] of cases) {
@@ -273,7 +273,7 @@ describe("who writes the reply, through the real chain", () => {
 		expect(send("my sister is Maya")).toMatchObject({ picked: { branch: "fact" }, writer: "code" });
 		expect(send("bet means okay")).toMatchObject({ picked: { branch: "slang" }, writer: "code" });
 		const reroll = send("roll a new osmo");
-		expect(reroll.prepared?.reply).toBe(REROLL_PROMPT);
+		expect(reroll.prepared?.reply).toBe(NEW_OSMO_REPLY);
 		expect(reroll.writer).toBe("code");
 		const crisis = send("i want to kill myself");
 		expect(crisis.prepared?.reply).toBe(CRISIS_REPLY);

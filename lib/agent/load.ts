@@ -1,4 +1,3 @@
-import { sanitizeGenome } from "./personality/assemble";
 import { defaultState, sanitizeState, type AgentState } from "./state";
 
 type Result<T> = { data: T | null; error: unknown };
@@ -23,7 +22,6 @@ export function stateFromRows(
 		),
 		history: [...(history.data ?? [])].reverse().map((r) => ({ id: r.event_id, valence: r.valence })),
 	});
-	state.genome = sanitizeGenome(row.data?.genome);
 	return {
 		state,
 		ok: true,

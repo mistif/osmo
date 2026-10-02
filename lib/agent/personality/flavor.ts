@@ -1,11 +1,11 @@
-import type { Personality } from "./assemble";
+import type { Character } from "../character";
 import { roll } from "./rng";
 import { stageOf, type Bond, type MilestoneId, type Stage } from "../bond/bond";
-import { milestoneLine, sharedMemory, slangJoke, welcomeBack } from "../bond/lines";
+import { milestoneLine, sharedMemory, welcomeBack } from "../bond/lines";
 
 export type FlavorContext = {
 	intent: string; // the conversation intent that produced the reply
-	personality: Personality;
+	personality: Character;
 	turn: number;
 	tone: string; // Osmo's strongest emotion right now, or "calm"
 	sensitive: boolean; // an insult, a sad user, a question about his own feelings
@@ -93,11 +93,10 @@ export function milestoneDue(ctx: MilestoneContext): MilestoneId | null {
 
 // How often each extra may appear, by stage.
 const MEMORY_RATE: Record<Stage, number> = { stranger: 0, acquaintance: 0, friend: 0.08, oldFriend: 0.15 };
-const SLANG_RATE: Record<Stage, number> = { stranger: 0, acquaintance: 0.06, friend: 0.12, oldFriend: 0.12 };
 
 export function flavorTurn(reply: string, ctx: FlavorContext): { text: string; mentioned: MilestoneId | null } {
 	const { personality: p, intent } = ctx;
-	const seed = p.genome?.seed ?? 0;
+	const seed = p.seed;
 	const bond = ctx.bond;
 	const stage: Stage = bond ? stageOf(bond) : "stranger";
 	// The session's turn restarts at 0 on every page load, so rolls and picks follow the lifetime message count.
@@ -108,11 +107,9 @@ export function flavorTurn(reply: string, ctx: FlavorContext): { text: string; m
 	const light = LIGHT_INTENTS.has(intent) && calmEnough && !heavy;
 
 	let text = reply;
-	if (p.genome) {
-		// Professional at all times: formal donors expand contractions; nobody is made more casual.
-		if (p.voice.formality > 0.75) text = swap(swap(text, FORMAL_SWAPS), CONTRACTIONS);
-		if (p.voice.verbosity < 0.3 && !heavy) text = dropTrailingQuestion(text);
-	}
+	// Professional at all times: a formal character expands contractions; nobody is made more casual.
+	if (p.voice.formality > 0.75) text = swap(swap(text, FORMAL_SWAPS), CONTRACTIONS);
+	if (p.voice.verbosity < 0.3 && !heavy) text = dropTrailingQuestion(text);
 	if (welcomesBack(ctx)) {
 		return { text: welcomed(text, welcomeBack(stage, ctx.userName ?? null, turn), stage), mentioned: null };
 	}
@@ -128,12 +125,9 @@ export function flavorTurn(reply: string, ctx: FlavorContext): { text: string; m
 	const memory = sharedMemory(bond, turn);
 	if (memory && roll(seed, turn, "memory") < MEMORY_RATE[stage]) return { text: addExtra(text, memory), mentioned: null };
 
-	const joke = p.genome ? slangJoke(p.genome.donors.slang, turn) : null;
-	if (joke && roll(seed, turn, "slang") < SLANG_RATE[stage]) return { text: addExtra(text, joke), mentioned: null };
-
 	// Dry wit shows from friend on.
 	const close = stage === "friend" || stage === "oldFriend";
-	if (p.genome && close && p.humor.style === "dry" && p.humor.lines.length && roll(seed, turn, "humor") < p.humor.level * 0.5) {
+	if (close && p.humor.lines.length && roll(seed, turn, "humor") < p.humor.level * 0.5) {
 		return { text: addExtra(text, pickAt(p.humor.lines, turn)), mentioned: null };
 	}
 	return { text, mentioned: null };

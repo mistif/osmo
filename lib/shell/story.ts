@@ -1,6 +1,5 @@
-// Insights wording: the bond's milestones as a short story, and the donors he is made from.
+// Insights wording: the bond's milestones as a short story.
 import type { Bond, MilestoneId } from "../agent/bond/bond";
-import type { Personality } from "../agent/personality/assemble";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -26,16 +25,4 @@ export function storyLines(bond: Bond, now: number): { id: MilestoneId; date: st
 	return [...bond.milestones]
 		.sort((a, b) => a.at.localeCompare(b.at))
 		.map((m) => ({ id: m.id, date: shortDate(m.at, now), text: STORY[m.id] }));
-}
-
-export function madeFromLines(names: Personality["names"]): string[] {
-	if (!names) return ["I haven't been assembled yet."];
-	return [
-		`My heart comes from ${names.heart}.`,
-		`My judgement comes from ${names.brain}.`,
-		`My voice comes from ${names.voice}.`,
-		`My humor comes from ${names.humor}.`,
-		`My slang comes from ${names.slang}.`,
-		`My quirks come from ${names.quirks}.`,
-	];
 }

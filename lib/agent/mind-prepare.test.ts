@@ -4,12 +4,12 @@ import { CRISIS_CAUSE, newSession, prepareTurn, processTurn, type Session } from
 import { emptyBond, stageOf } from "./bond/bond";
 import { moodLabel } from "./heart";
 import { moodTheme } from "./mood-theme";
-import { resolve } from "./personality/assemble";
+import { CHARACTER, NEW_OSMO_REPLY } from "./character";
 import { CRISIS_REPLY } from "./safety";
-import { GUEST_NO_CHANGES, GUEST_PRIVATE } from "../voice/guest";
+import { GUEST_PRIVATE } from "../voice/guest";
 
-type Ctx = { now: number; lastAt: number | null; guest: boolean; userName: string | null; seed: number; recent: string[] };
-const ctx = (o: Partial<Ctx> = {}) => ({ now: 1_000_000, lastAt: null, uuid: () => "id-1", seed: 7, ...o });
+type Ctx = { now: number; lastAt: number | null; guest: boolean; userName: string | null; recent: string[] };
+const ctx = (o: Partial<Ctx> = {}) => ({ now: 1_000_000, lastAt: null, uuid: () => "id-1", ...o });
 const knownBond = {
 	...emptyBond(),
 	metAt: "2026-09-01T10:00:00.000Z",
@@ -49,17 +49,12 @@ describe("prepareTurn: replies code decides", () => {
 		expect(r.effects.map((e) => e.type)).toEqual(["verdict"]);
 	});
 
-	it("runs the whole re-roll flow", () => {
-		const offer = sameAsProcessTurn(defaultState(), newSession(), "roll a new osmo", ctx());
-		expect(offer.session.awaitingReroll).not.toBeNull();
-		sameAsProcessTurn(defaultState(), offer.session, "yes", ctx());
-		const rolled = sameAsProcessTurn(defaultState(), offer.session, "yes, roll", ctx());
-		expect(rolled.state.genome).not.toEqual(defaultState().genome);
-		sameAsProcessTurn(defaultState(), newSession(), "yes, roll", ctx());
+	it("answers the old roll command with the one line", () => {
+		expect(sameAsProcessTurn(defaultState(), newSession(), "roll a new osmo", ctx()).reply).toBe(NEW_OSMO_REPLY);
 	});
 
-	it("answers what he's made of, how close you are, and when you met", () => {
-		for (const text of ["what are you made of", "how close are we", "when did we meet"]) {
+	it("answers how close you are, and when you met", () => {
+		for (const text of ["how close are we", "when did we meet"]) {
 			expect(sameAsProcessTurn(withBond(), newSession(), text, ctx()).reply).not.toBeNull();
 		}
 	});
@@ -77,7 +72,7 @@ describe("prepareTurn: replies code decides", () => {
 			return r;
 		};
 		expect(same(withBond(), newSession(), "how close are we").reply).toBe(GUEST_PRIVATE);
-		expect(same(withBond(), newSession(), "roll a new osmo").reply).toBe(GUEST_NO_CHANGES);
+		expect(same(withBond(), newSession(), "roll a new osmo").reply).toBe(NEW_OSMO_REPLY);
 		const { state, session } = afterDilemma();
 		same(state, session, "yes");
 		expect(same(defaultState(), newSession(), "i want to kill myself").reply).toBe(CRISIS_REPLY);
@@ -153,7 +148,7 @@ describe("prepareTurn: the facts a prompt may use", () => {
 	it("gives Gur's facts to Gur", () => {
 		const c = ctx({ userName: "Gur", lastAt: 1_000_000 - 5_000 });
 		const r = prepareTurn(withBond(), session, "the weather is fine", c);
-		const baseline = resolve(r.state.genome).baseline;
+		const baseline = CHARACTER.baseline;
 		expect(r.facts).toEqual({
 			feeling: moodLabel(r.state.activations, baseline),
 			tone: moodTheme(r.state.activations, baseline).tone,
@@ -209,7 +204,7 @@ describe("prepareTurn: processed", () => {
 		const crisis = same(withBond(), newSession(), "i want to kill myself", ctx());
 		expect(crisis.processed.reply).toBe(CRISIS_REPLY);
 		const roll = same(withBond(), newSession(), "roll a new osmo", ctx());
-		expect(roll.processed.session.awaitingReroll).not.toBeNull();
+		expect(roll.processed.reply).toBe(NEW_OSMO_REPLY);
 		const { state, session } = afterDilemma();
 		expect(same(state, session, "yes", ctx()).processed.effects.map((e) => e.type)).toEqual(["verdict"]);
 	});

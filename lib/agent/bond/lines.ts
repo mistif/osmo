@@ -51,34 +51,6 @@ export function sharedMemory(bond: Bond, turn: number): string | null {
 	return options.length ? pickAt(options, turn) : null;
 }
 
-// Genuine slang for each slang donor, hand-picked and written out as plain words so it can be spoken.
-// The donors' own tags are not used: many are abbreviations or stretched ("ngl", "slayy"), or not slang at all.
-// Left out, so no joke is made: the-trivia-champion, the-sarcastic-barista, the-night-shift-nurse,
-// the-protective-big-sister and the-pun-machine, whose phrases are ordinary sayings rather than slang.
-const SLANG: Record<string, string[]> = {
-	"the-hype-coach": ["beast mode", "let's go"],
-	"the-street-party-host": ["big vibes", "turn up"],
-	"the-gen-z-group-chat": ["no cap", "slay", "it hits different"],
-	"the-streamer": ["good game", "clutch"],
-	"the-code-wizard": ["ship it"],
-	"the-old-friend": ["no worries", "cheers, mate"],
-	"the-rescue-firefighter": ["copy that"],
-};
-
-const JOKE_FRAMES = [
-	(w: string) => `Or, as I believe the expression goes, ${w}.`,
-	(w: string) => `I am told the phrase is ${w}.`,
-	(w: string) => `Some would say ${w}.`,
-];
-
-// A deadpan frame around one of the slang donor's words, or null when that donor has no real slang.
-export function slangJoke(donorId: string, turn: number): string | null {
-	const words = SLANG[donorId];
-	if (!words) return null;
-	// The frame moves on once per lap of the words, so every word meets every frame.
-	return pickAt(JOKE_FRAMES, Math.floor(Math.abs(turn) / words.length))(pickAt(words, turn));
-}
-
 // "Are we close" only counts as the whole question, not "are we close to done?".
 export function isAskCloseness(text: string): boolean {
 	return /^\s*(?:(?:how close are we|what are we to each other|how well do you know me)\b|are we (?:friends|close)\W*$)/i.test(text);

@@ -5,7 +5,7 @@ import { moodTheme } from "./mood-theme";
 import { stateFromRows, type Loaded } from "./load";
 import type { Effect } from "./mind";
 import { defaultState, type AgentState } from "./state";
-import { resolve } from "./personality/assemble";
+import { CHARACTER } from "./character";
 
 export async function loadState(): Promise<Loaded> {
 	const failed: Loaded = { state: defaultState(), ok: false, lastAt: null };
@@ -13,7 +13,7 @@ export async function loadState(): Promise<Loaded> {
 		const session = await ensureSession();
 		if (!session) return failed;
 		const [row, assoc, history] = await Promise.all([
-			supabase.from("agent_state").select("activations,coupling,weights,outlook,updated_at,genome,bond").maybeSingle(),
+			supabase.from("agent_state").select("activations,coupling,weights,outlook,updated_at,bond").maybeSingle(),
 			supabase.from("emotion_associations").select("kind,tendencies,count"),
 			supabase
 				.from("event_log")
@@ -44,7 +44,7 @@ async function bondToSave(bond: Bond): Promise<Bond> {
 async function saveMoodDay(state: AgentState, userId: string): Promise<void> {
 	try {
 		const day = localDay(Date.now());
-		const { valence, tone } = moodTheme(state.activations, resolve(state.genome).baseline);
+		const { valence, tone } = moodTheme(state.activations, CHARACTER.baseline);
 		const { data, error } = await supabase
 			.from("mood_days")
 			.select("day,valence,strongest,tally,samples")
@@ -80,7 +80,6 @@ export async function persistTurn(state: AgentState, effects: Effect[]): Promise
 					coupling: state.coupling,
 					weights: state.weights,
 					outlook: state.outlook,
-					genome: state.genome,
 					bond,
 					updated_at: new Date().toISOString(),
 				},
