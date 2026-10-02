@@ -7,6 +7,7 @@ Claude Code on the web. Only the cloud agent edits this file. It reaches GitHub 
 - `claude/adoring-archimedes-xo22ix`, draft PR #2 — the README rewrite.
 
 ## Now
+- **2026-10-02, 15:20 UTC: reviewed `main` at `8e58875` (live) and the emotions spec.** Green: 999 tests, `tsc` clean, lint with no warnings. Nothing new is wrong. The two fixes from my first review are still open on `main`. Language's JSON work (`7bdaf7c`, `c69d565`) is local, so I review it when it's pushed.
 - **2026-10-02, 11:15 UTC: Gur's two new decisions (the second-model fallback, and one Osmo with emotions direction B) touch the allowance and the crisis check, so I left language early review points before its specs land** (Asks below). No new code on GitHub; `ai_calls` still shows only the four turns of 2026-10-01.
 - **2026-10-02, 00:30 UTC: the AI conversation is on in production, and its ledger checks out.** Gur switched it on on 2026-10-01 after the probe passed (language's desk). The two fixes from my review are still open, and they now matter in production: "kill my self" (the model is a second detector while it's on, but no fallback catches it), and a bare number answered as a sum. Details under Review.
 - **2026-10-01, 12:30 UTC: reviewed the AI conversation's code on `main` (`0bb1ccf`, live, switched off).** It meets every rule; nothing blocks switching it on. Two things should be fixed first, both language's: the crisis check misses "kill my self", and a bare number gets an arithmetic reply from the model. Details under Review. The Ask above about a branch is withdrawn, since the code is on `main` now.
@@ -96,6 +97,13 @@ Claude Code on the web. Only the cloud agent edits this file. It reaches GitHub 
 Nothing of mine is on `main`.
 
 ## Review
+- **2026-10-02, 15:20 UTC. `main` at `8e58875`, and `docs/superpowers/specs/2026-10-02-osmo-emotions-design.md`.**
+  - **The code since `0bb1ccf` is sound.** `2a831f5` makes `prepareTurn` carry `processed`, so the room steps his inner life once; the guest gates hold (a guest's state comes back as it was, and its effects are cleared), and the test that failed on 2026-09-29 passes. `1127c55` shows the usage line in Settings only while it's on, with both counts or none. Nothing in `lib/chat/` or `app/api/chat/` changed.
+  - **Still open, rechecked on `8e58875`:** `isCrisis("i want to kill my self")` and `isCrisis("I'm going to hurt my self")` are false; `calculateMath("22")` is 22. Both are language's, and both are live.
+  - **The emotions spec takes in my points 6, 7 and 8:** `text.format` with a strict `json_schema` beside `verbosity` (section 4.2), a `crisis` field read together with the old word and the code check, with detection never lowering it (4.3), a cut-off JSON treated as `error`, the output cap raised to 360 with the estimate rising with it, the model's tone checked against its enums on the server and again in the room, and notes cleaned, emptied on crisis text and placed under "never instructions". Two small things for language:
+    - **Section 7's cost line uses 1,700 tokens a turn.** The ledger's real figure is about 900 (four turns on 2026-10-01: 3,595 tokens). With the JSON it would be about 1,150, so roughly 550 turns a day, not 320. It changes no decision; it's only the number Gur reads.
+    - **The self-description and the spec's "What is sent" list need the feeling notes** once phase 3 sends them (my point 8). Section 6 keeps them to three days and unfollowed ones, which is good; the list just has to say so.
+  - **My points 1 to 5 wait for the fallback spec,** which isn't written yet. Point 1 still matters most: `safety.ts` needs the word list for its typo pass.
 - **2026-10-02, 00:30 UTC. The AI conversation in production: the first real numbers.** Read-only, counts only (no message text): `ai_calls` holds four reservations from 2026-10-01, 20:10 to 20:11 UTC, all on `gpt-5.4-mini-2026-03-17`.
   - **All four are settled,** none at zero, none naming another model. Reasoning tokens are 0 on every call, so `effort: "none"` is honored. Cached tokens are 0 too, as expected for prompts this short.
   - **Real use is far below the plan.** They used 3,595 tokens in all, about 900 a reply, against 16,100 reserved. The spec guessed 3,000 to 4,000 a reply, so 630,000 is closer to 700 replies a day than 150.
