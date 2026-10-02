@@ -160,7 +160,7 @@ describe("answerFromMemory", () => {
 		expect(answerFromMemory("blorp", [], 0)).toBe("I'm not sure I follow. Could you rephrase that?");
 		expect(answerFromMemory("blorp", [], 2)).toBe("I didn't quite catch that. Could you say it another way?");
 		expect(answerFromMemory("blorp", [], 6)).toBe(
-			"I don't recognize that. If it's a word I haven't learned, tell me what it means and I'll remember.",
+			"I don't recognize that. If it's a word I haven't learned, tell me what it means.",
 		);
 		expect(answerFromMemory("blorp", [], 6, true)).toBe("I don't recognize that, I'm afraid. Could you put it another way?");
 		expect(answerFromMemory("why is the sky purple?", [], 0)).toBe(

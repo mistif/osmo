@@ -62,7 +62,7 @@ describe("Osmo with a guest", () => {
 			expect(reply, `${turn}`).not.toMatch(/remember|tell me what it means/i);
 			expect(reply, `${turn}`).not.toMatch(CASUAL);
 		}
-		expect([0, 1, 2, 3].some((turn) => /I'll remember/.test(fallbackReply(turn, "blah blah")))).toBe(true);
+		expect([0, 1, 2, 3].some((turn) => /tell me what it means/.test(fallbackReply(turn, "blah blah")))).toBe(true);
 	});
 
 	it("tells a guest plainly that he keeps notes only for his owner", () => {

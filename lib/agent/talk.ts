@@ -10,7 +10,7 @@ import { isKnownWord, WORD_LIST, wordRank } from "./lexicon/words";
 // ---- 1. Clean up the text -------------------------------------------------
 
 // Slang and abbreviations, read as plain words. An empty string drops a filler word.
-// Built-in slang wins over donor slang; words the user taught win over both (see normalize).
+// Words the user taught win over built-in slang (see normalize).
 export const SLANG: Record<string, string> = {
 	u: "you",
 	ur: "your",
@@ -698,7 +698,7 @@ export function fallbackReply(turn: number, text = "", guest = false): string {
 			"That's new to me. What do you mean?",
 			guest
 				? "I don't recognize that, I'm afraid. Could you put it another way?"
-				: "I don't recognize that. If it's a word I haven't learned, tell me what it means and I'll remember.",
+				: "I don't recognize that. If it's a word I haven't learned, tell me what it means.",
 		],
 		turn,
 	);
