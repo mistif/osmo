@@ -1,3 +1,4 @@
+import { relaxMood } from "./slow-mood";
 import { defaultState, sanitizeState, type AgentState } from "./state";
 
 type Result<T> = { data: T | null; error: unknown };
@@ -10,6 +11,7 @@ export function stateFromRows(
 	row: Result<Record<string, unknown>>,
 	assoc: Result<{ kind: string; count: number; tendencies: unknown }[]>,
 	history: Result<{ event_id: string; valence: string }[]>,
+	now = Date.now(),
 ): Loaded {
 	if (row.error || assoc.error || history.error) {
 		return { state: defaultState(), ok: false, lastAt: null };
@@ -22,6 +24,8 @@ export function stateFromRows(
 		),
 		history: [...(history.data ?? [])].reverse().map((r) => ({ id: r.event_id, valence: r.valence })),
 	});
+	// The slow mood fades by the clock, so it is relaxed to now as it loads; a missing column is null (resting).
+	state.mood = state.mood ? relaxMood(state.mood, now) : null;
 	return {
 		state,
 		ok: true,

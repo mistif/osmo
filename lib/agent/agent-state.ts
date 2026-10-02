@@ -13,7 +13,7 @@ export async function loadState(): Promise<Loaded> {
 		const session = await ensureSession();
 		if (!session) return failed;
 		const [row, assoc, history] = await Promise.all([
-			supabase.from("agent_state").select("activations,coupling,weights,outlook,updated_at,bond").maybeSingle(),
+			supabase.from("agent_state").select("activations,coupling,weights,outlook,updated_at,bond,mood").maybeSingle(),
 			supabase.from("emotion_associations").select("kind,tendencies,count"),
 			supabase
 				.from("event_log")
@@ -81,6 +81,7 @@ export async function persistTurn(state: AgentState, effects: Effect[]): Promise
 					weights: state.weights,
 					outlook: state.outlook,
 					bond,
+					mood: state.mood,
 					updated_at: new Date().toISOString(),
 				},
 				{ onConflict: "user_id" },
