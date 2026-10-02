@@ -3,6 +3,7 @@ import { CRISIS_CAUSE } from "../agent/mind";
 import { CRISIS_REPLY } from "../agent/safety";
 import { DEFAULT_WEIGHTS } from "../agent/state";
 import { checkBody } from "./request";
+import { LIMITS } from "./types";
 
 // A body as the room's chatBody sends it. Every call builds a fresh one, so a case can change it freely.
 function valid() {
@@ -27,6 +28,8 @@ function valid() {
 			userName: "Gur",
 			turn: 3,
 			gur: null,
+			own: null,
+			mood: "",
 		},
 		persona: {
 			weights: { ...DEFAULT_WEIGHTS },
@@ -222,6 +225,31 @@ describe("checkBody and Gur's last tone", () => {
 
 	it("refuses a gur that isn't a valid read", () => {
 		for (const gur of ["x", { tones: ["bogus"] }, 7]) expect(checkBody(withFacts({ gur })), JSON.stringify(gur)).toEqual({ ok: false });
+	});
+});
+
+describe("checkBody and his own mood and slow mood", () => {
+	it("reads a body from a stale tab, with neither, as own null and mood empty", () => {
+		const b = valid();
+		const facts: Record<string, unknown> = { ...b.facts };
+		delete facts.own;
+		delete facts.mood;
+		const checked = checkBody({ ...b, facts });
+		expect(checked.ok && checked.body.facts.own).toBeNull();
+		expect(checked.ok && checked.body.facts.mood).toBe("");
+	});
+
+	it("passes both through when they are text within the limit", () => {
+		const checked = checkBody(withFacts({ own: "a little uneasy", mood: "a little low" }));
+		expect(checked.ok && checked.body.facts.own).toBe("a little uneasy");
+		expect(checked.ok && checked.body.facts.mood).toBe("a little low");
+		expect(checkBody(withFacts({ own: "o".repeat(LIMITS.factField), mood: "m".repeat(LIMITS.factField) })).ok).toBe(true);
+	});
+
+	it("refuses an own or a mood that is not text, or is too long", () => {
+		const bad = [7, true, {}, [], ["x"], "x".repeat(LIMITS.factField + 1)];
+		for (const own of bad) expect(checkBody(withFacts({ own })), `own ${JSON.stringify(own)}`).toEqual({ ok: false });
+		for (const mood of [...bad, null]) expect(checkBody(withFacts({ mood })), `mood ${JSON.stringify(mood)}`).toEqual({ ok: false });
 	});
 });
 

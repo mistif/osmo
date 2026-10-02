@@ -202,13 +202,24 @@ describe("chatBody", () => {
 	it("cuts the facts' strings to 200 characters and keeps the rest as they are", () => {
 		const facts = { ...turnFacts(), feeling: "f".repeat(250), cause: "c".repeat(250), userName: "n".repeat(250) };
 		const body = chatBody(input({ facts }));
-		expect(body?.facts).toEqual({ ...facts, gur: null, feeling: "f".repeat(200), cause: "c".repeat(200), userName: "n".repeat(200) });
+		expect(body?.facts).toEqual({ ...facts, gur: null, own: null, mood: "", feeling: "f".repeat(200), cause: "c".repeat(200), userName: "n".repeat(200) });
 	});
 
 	it("passes Gur's last tone on, and a null one stays null", () => {
 		const gur = { tones: ["worried" as const], intensity: 2 as const, about: "someone_close" as const, wants: "listen" as const };
 		expect(chatBody(input({ facts: { ...turnFacts(), gur } }))?.facts.gur).toEqual(gur);
 		expect(chatBody(input({ facts: { ...turnFacts(), gur: null } }))?.facts.gur).toBeNull();
+	});
+
+	it("passes his own mood and slow mood on, cut to 200 characters, and an absent one becomes null and empty", () => {
+		const both = chatBody(input({ facts: { ...turnFacts(), own: "a little uneasy", mood: "a little low" } }));
+		expect([both?.facts.own, both?.facts.mood]).toEqual(["a little uneasy", "a little low"]);
+		const long = chatBody(input({ facts: { ...turnFacts(), own: "o".repeat(250), mood: "m".repeat(250) } }));
+		expect([long?.facts.own, long?.facts.mood]).toEqual(["o".repeat(200), "m".repeat(200)]);
+		const bare = chatBody(input({ facts: turnFacts() }));
+		expect([bare?.facts.own, bare?.facts.mood]).toEqual([null, ""]);
+		const nulled = chatBody(input({ facts: { ...turnFacts(), own: null, mood: undefined } }));
+		expect([nulled?.facts.own, nulled?.facts.mood]).toEqual([null, ""]);
 	});
 
 	it("never sends the crisis cause", () => {

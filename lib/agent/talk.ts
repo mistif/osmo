@@ -558,6 +558,8 @@ export type TalkContext = {
 	turn: number;
 	userName?: string | null;
 	baseline?: Activations;
+	// How the last day has felt, in words ("a little low"); absent or empty says nothing. Never set for a guest.
+	mood?: string;
 };
 
 const pick = <T>(options: T[], turn: number): T => options[turn % options.length];
@@ -577,8 +579,10 @@ export function respond(parsed: Parsed, ctx: TalkContext): string | null {
 				: `Hello${shownName ? `, ${shownName}` : ""}. I'll admit I'm feeling ${feeling} today. How are you?`;
 		case "farewell":
 			return pick([`Goodbye${withName}. Take care.`, `Until next time${withName}.`], turn);
-		case "howAreYou":
-			return calm ? "I'm doing well, thank you. How are you?" : `Honestly, I'm feeling ${feeling}. How are you?`;
+		case "howAreYou": {
+			const day = ctx.mood ? ` Over the day I have felt ${ctx.mood}.` : "";
+			return calm ? `I'm doing well, thank you.${day} How are you?` : `Honestly, I'm feeling ${feeling}.${day} How are you?`;
+		}
 		case "askActivity":
 			return "I'm here and ready to help. What are you working on?";
 		case "askFeeling":

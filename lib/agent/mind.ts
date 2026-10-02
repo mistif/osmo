@@ -310,6 +310,7 @@ function answerOpen(open: OpenTurn, ctx: TurnContext): TurnResult {
 				turn: guest ? 0 : turn,
 				userName: guest ? null : ctx.userName,
 				baseline: p.baseline,
+				mood: guest ? "" : moodWords(relaxMood(s.mood, ctx.now)),
 			}),
 		)
 		.filter((r): r is string => r !== null);

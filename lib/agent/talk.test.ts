@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { BASELINE, defaultState, type Activations } from "./state";
 import { causeOf, fallbackReply, feelingPhrase, feelingWords, normalize, parse, respond } from "./talk";
-import { moodLabel } from "./heart";
+import { CHARACTER } from "./character";
+import { moodLabel, moodPosition } from "./heart";
+import { newSession, processTurn } from "./mind";
 
 const base = (): Activations => ({ ...BASELINE });
 const stateWith = (over: Partial<Activations>) => ({ ...defaultState(), activations: { ...base(), ...over } });
@@ -245,6 +247,35 @@ describe("respond: names", () => {
 		const r = respond(parse("hello"), { state: defaultState(), cause: null, turn: 0, userName: "gur" });
 		expect(r).toContain("Gur");
 		expect(r).not.toContain("gur");
+	});
+});
+
+describe("how are you and the slow mood", () => {
+	const rest = moodPosition(CHARACTER.baseline);
+	// A slow mood a little toward joy, which moodWords calls "happy".
+	const happy = { pad: [rest[0] + 0.1, rest[1] + 0.05, rest[2] + 0.05] as [number, number, number], at: 0, causes: [] };
+	const ask = (mood?: string) => respond(parse("how are you"), { state: defaultState(), cause: null, turn: 0, mood });
+
+	it("adds how the day has felt before the closing question, only when there is a mood", () => {
+		expect(ask("a little low")).toBe("I'm doing well, thank you. Over the day I have felt a little low. How are you?");
+		const unsettled = respond(parse("how are you"), { state: stateWith({ sadness: 0.5 }), cause: null, turn: 0, mood: "happy" });
+		expect(unsettled).toBe("Honestly, I'm feeling sad. Over the day I have felt happy. How are you?");
+	});
+
+	it("says nothing of the day at rest, with an empty mood or none", () => {
+		expect(ask("")).toBe("I'm doing well, thank you. How are you?");
+		expect(ask()).toBe("I'm doing well, thank you. How are you?");
+		for (const text of ["hello", "thanks", "what is your name", "im sad"]) {
+			expect(respond(parse(text), { state: defaultState(), cause: null, turn: 0, mood: "happy" }), text).not.toContain("Over the day");
+		}
+	});
+
+	it("is fed by the room's slow mood for Gur, and never for a guest", () => {
+		const state = { ...defaultState(), mood: happy };
+		const ctx = { now: 0, lastAt: null, uuid: () => "id" };
+		expect(processTurn(state, newSession(), "how are you", ctx).reply).toContain("Over the day I have felt happy.");
+		expect(processTurn(defaultState(), newSession(), "how are you", ctx).reply ?? "").not.toContain("Over the day");
+		expect(processTurn(state, newSession(), "how are you", { ...ctx, guest: true }).reply ?? "").not.toContain("Over the day");
 	});
 });
 

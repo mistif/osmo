@@ -256,6 +256,36 @@ describe("buildInstructions", () => {
 		expect(buildInstructions(body())).not.toContain(heavy);
 	});
 
+	it("tells how the last day has felt only when there is a slow mood, right after the feeling", () => {
+		const line = "Over the last day you have felt a little low.";
+		const text = buildInstructions(body({ facts: { mood: "a little low" } }));
+		expect(text).toContain(line);
+		const feel = text.indexOf('You feel happy and at ease, because "you told me you were happy".');
+		expect(text.indexOf(line)).toBeGreaterThan(feel);
+		expect(text.indexOf(line)).toBe(feel + 'You feel happy and at ease, because "you told me you were happy".'.length + 1);
+		for (const facts of [{}, { mood: "" }, { mood: undefined }]) expect(buildInstructions(body({ facts })), JSON.stringify(facts)).not.toContain("Over the last day");
+	});
+
+	it("lets him mention his own mood after answering only when the room says he may", () => {
+		const line = "You may mention your own mood in one short clause after you have answered Gur. Do not do it otherwise.";
+		const text = buildInstructions(body({ facts: { own: "a little uneasy" } }));
+		expect(text).toContain(line);
+		expect(text.indexOf(line)).toBeGreaterThan(text.indexOf("You feel happy and at ease"));
+		for (const facts of [{}, { own: null }, { own: undefined }]) expect(buildInstructions(body({ facts })), JSON.stringify(facts)).not.toContain("You may mention your own mood");
+		// The fixed rule against making the reply about himself stays in both cases.
+		expect(text).toContain(RULES[3]);
+	});
+
+	it("keeps the two mood lines independent of each other", () => {
+		const moodOnly = buildInstructions(body({ facts: { mood: "a little low" } }));
+		expect(moodOnly).not.toContain("You may mention your own mood");
+		const ownOnly = buildInstructions(body({ facts: { own: "a little uneasy" } }));
+		expect(ownOnly).not.toContain("Over the last day");
+		const both = buildInstructions(body({ facts: { mood: "a little low", own: "a little uneasy" } }));
+		expect(both).toContain("Over the last day you have felt a little low. You may mention your own mood in one short clause after you have answered Gur. Do not do it otherwise.");
+		expect(both.split("\n\n")).toHaveLength(8);
+	});
+
 	it("carries the exact result of Gur's arithmetic", () => {
 		expect(buildInstructions(body({ hint: { math: 444 } }))).toContain("The exact result is 444. State it.");
 		expect(buildInstructions(body())).not.toContain("exact result");
@@ -301,7 +331,7 @@ describe("buildInstructions", () => {
 
 	it("has no markdown", () => {
 		const gur: GurRead = { tones: ["worried"], intensity: 2, about: "someone_close", wants: "listen" };
-		const text = body({ facts: { milestone: "friend", awayMs: 30 * HOUR, gur }, hint: { math: 12.5 } });
+		const text = body({ facts: { milestone: "friend", awayMs: 30 * HOUR, gur, mood: "a little low", own: "a little uneasy" }, hint: { math: 12.5 } });
 		for (const format of ["json", "feeling"] as const) expect(buildInstructions(text, format)).not.toMatch(MARKDOWN);
 	});
 

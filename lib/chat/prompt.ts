@@ -141,12 +141,16 @@ function gurLine({ gur }: ChatBody["facts"]): string {
 	return `Earlier in this chat Gur seemed ${gur.tones.join(" and ")}, ${STRENGTH[gur.intensity - 1]}, about ${WHO_ABOUT[gur.about]}, and seemed to want ${WANTS_WORDS[gur.wants]}. Read this message yourself before you rely on that.`;
 }
 
-// This turn: Gur's last tone, how he feels and why, a heavy turn, and the exact result of Gur's arithmetic.
+// This turn: Gur's last tone, how he feels and why, how the last day has felt, whether he may mention his own mood, a heavy
+// turn, and the exact result of Gur's arithmetic.
 function thisTurn({ facts, hint }: ChatBody): string {
 	const cause = facts.cause === null || facts.cause === CRISIS_CAUSE ? "" : plain(facts.cause);
+	const mood = plain(facts.mood ?? "");
 	return sentences(
 		gurLine(facts),
 		`You feel ${feelingWords(plain(facts.feeling)) || "calm"}${cause ? `, because "${cause}"` : ""}.`,
+		mood !== "" ? `Over the last day you have felt ${mood}.` : "",
+		facts.own != null ? "You may mention your own mood in one short clause after you have answered Gur. Do not do it otherwise." : "",
 		facts.heavy ? "This turn is heavy: no jokes, catchphrases, slang or milestone." : "",
 		hint ? `The exact result is ${hint.math}. State it.` : "",
 	);

@@ -99,6 +99,9 @@ export function chatBody(input: {
 			turn: facts.turn,
 			// Gur's last tone, as the model read it earlier in this chat; null when there is none.
 			gur: facts.gur ?? null,
+			// What he may say of his own mood and how the day has felt; an older room's facts have neither.
+			own: facts.own == null ? null : clip(facts.own, LIMITS.factField),
+			mood: clip(facts.mood ?? "", LIMITS.factField),
 		},
 		persona: { weights: state.weights, outlook: state.outlook },
 		...(input.math !== null ? { hint: { math: input.math } } : {}),

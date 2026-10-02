@@ -45,6 +45,9 @@ function checkMemory(raw: unknown): MemoryFact[] | null {
 function checkFacts(raw: unknown): TurnFacts | null {
 	if (!isFields(raw)) return null;
 	const { feeling, tone, cause, stage, milestone, heavy, awayMs, userName, turn, gur } = raw;
+	// His own mood he may mention (own) and how the day has felt (mood): a stale tab sends neither, which reads as null and "".
+	const ownRaw = raw.own === undefined ? null : raw.own;
+	const moodRaw = raw.mood === undefined ? "" : raw.mood;
 	if (
 		!isText(feeling, LIMITS.factField) ||
 		!(tone === "calm" || isOneOf(EMOTIONS, tone)) ||
@@ -57,14 +60,16 @@ function checkFacts(raw: unknown): TurnFacts | null {
 		!(userName === null || isText(userName, LIMITS.factField)) ||
 		typeof turn !== "number" ||
 		!Number.isInteger(turn) ||
-		turn < 0
+		turn < 0 ||
+		!(ownRaw === null || isText(ownRaw, LIMITS.factField)) ||
+		!isText(moodRaw, LIMITS.factField)
 	) {
 		return null;
 	}
 	// Gur's last tone, as the room remembers it. A stale tab sends none, which reads as null; one that isn't a valid read is refused.
 	const read = gur === undefined || gur === null ? null : validateDetection(gur);
 	if (gur !== undefined && gur !== null && read === null) return null;
-	return { feeling, tone, cause, stage, milestone, heavy, awayMs, userName, turn, gur: read === null ? null : readOf(read) };
+	return { feeling, tone, cause, stage, milestone, heavy, awayMs, userName, turn, gur: read === null ? null : readOf(read), own: ownRaw, mood: moodRaw };
 }
 
 // Exactly the five values, each a finite number.
