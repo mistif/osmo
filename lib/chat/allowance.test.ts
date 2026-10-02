@@ -30,8 +30,10 @@ const ON = {
 
 describe("the allowlist", () => {
 	it("maps each listed snapshot to the small pool and its own request options", () => {
-		expect(modelEntry("gpt-5.4-mini-2026-03-17")).toEqual({ model: "gpt-5.4-mini-2026-03-17", pool: "mini", reasoning: true, verbosity: true, strict: false });
-		expect(modelEntry("gpt-4.1-mini-2025-04-14")).toEqual({ model: "gpt-4.1-mini-2025-04-14", pool: "mini", reasoning: false, verbosity: false, strict: false });
+		expect(modelEntry("gpt-5.4-mini-2026-03-17")).toEqual({ model: "gpt-5.4-mini-2026-03-17", pool: "mini", reasoning: true, verbosity: true, strict: true });
+		expect(modelEntry("gpt-4.1-mini-2025-04-14")).toEqual({ model: "gpt-4.1-mini-2025-04-14", pool: "mini", reasoning: false, verbosity: false, strict: true });
+		// Both snapshots returned strict JSON with all seven keys in the 2026-10-02 probe; a change to either flag is deliberate.
+		expect(MODELS.every((m) => typeof m.strict === "boolean")).toBe(true);
 		expect(MODELS).toHaveLength(2);
 		expect(DEFAULT_MODEL).toBe("gpt-5.4-mini-2026-03-17");
 		expect(modelEntry(DEFAULT_MODEL)).not.toBeNull();

@@ -14,8 +14,10 @@ export const ALLOWLIST_DATE = "2026-09-29";
 // Dated snapshots only: OpenAI can move an alias to a snapshot that isn't on the free list.
 // `reasoning` and `verbosity` say which request options the model accepts.
 export const MODELS: readonly ModelEntry[] = [
-	{ model: "gpt-5.4-mini-2026-03-17", pool: "mini", reasoning: true, verbosity: true, strict: false },
-	{ model: "gpt-4.1-mini-2025-04-14", pool: "mini", reasoning: false, verbosity: false, strict: false },
+	// probe 2026-10-02: 182 in, 69 out, 0 reasoning, 3338 ms; strict JSON, all 7 keys.
+	{ model: "gpt-5.4-mini-2026-03-17", pool: "mini", reasoning: true, verbosity: true, strict: true },
+	// probe 2026-10-02: 184 in, 77 out, 0 reasoning, 1753 ms; strict JSON, all 7 keys.
+	{ model: "gpt-4.1-mini-2025-04-14", pool: "mini", reasoning: false, verbosity: false, strict: true },
 ];
 
 export const DEFAULT_MODEL = "gpt-5.4-mini-2026-03-17";
