@@ -2,8 +2,8 @@
 
 Osmo is a chat companion built for one person.
 
-He has a mood that moves on its own, a personality stitched together from a hundred
-donor characters, a bond that grows over the weeks you talk to him, a memory of what
+He has a mood that moves on its own, one hand-written character — composed, precise
+and a little dry — a bond that grows over the weeks you talk to him, a memory of what
 you tell him, and a voice: he speaks his replies, listens through the microphone, and
 tells your voice from a stranger's.
 
@@ -24,8 +24,8 @@ what Osmo says, and only if you switch his natural voice on.
 | He speaks his replies, word by word | working, with the device's built-in voices |
 | The microphone button, and speech to text | working |
 | He knows your voice from a guest's | working, once you've taught him |
-| He wakes when you say "Osmo" | **the model isn't trained yet** — see [`docs/osmo-wake-word.md`](docs/osmo-wake-word.md). Until it is, the listening switch stays disabled and the mic button is the only voice path. |
-| A language model writes his replies | **not built.** Every reply today comes from code in `lib/agent/`. The design is under way. |
+| He wakes when you say "Osmo" | working, with the model at `public/models/wake/osmo.onnx`. Use the "Listen for Osmo" switch in Settings. |
+| A language model writes his replies | working, behind the `OSMO_CHAT` switch on Vercel. Falls back to the rule-based chain when it is off or unavailable. |
 | A more human cloud voice | **built, and off by default.** OpenAI `gpt-4o-mini-tts` through `POST /api/speak`, one clip per sentence, cached, with the built-in voice as the fallback on every failure path. It stays off per device until you turn it on. |
 
 ## How he works
@@ -38,9 +38,9 @@ coupling acts on each emotion's deviation from a baseline, so a resting Osmo sta
 rest and what you say moves him from there. `heart.ts` holds all of it, and `stepHeart`
 is under twenty lines.
 
-His personality is assembled at birth from **100 donor characters** across six "organs" —
-heart, brain, voice, humor, slang, quirks — drawn by a seeded PRNG so the same seed
-always grows the same Osmo. `personality/assemble.ts`.
+His personality is fixed: composed, precise and a little dry. He keeps his warmth
+quiet and his sentences short. `character.ts` holds his temperament, and `personality/`
+has `flavor.ts` (how his replies are polished) and `rng.ts`.
 
 On top of that sit the bond (`bond/`), his memory of facts you tell him, a dictionary,
 and a vocabulary he can be taught. `mind.ts` runs a turn: the crisis check first, then
@@ -137,8 +137,8 @@ components/
   osmo/           panels, the lock screen, the voice hooks
   ui/             the primitives
 lib/
-  agent/          heart, brain, personality, bond, dictionary, memory, safety
-    personality/  the 100 donors, and assembling a genome from a seed
+  agent/          heart, brain, personality, bond, dictionary, memory, safety, character
+    personality/  flavor.ts (how his replies are polished) and rng.ts
   voice/          features, voiceprints, wake word, the conversation machine
     web/          the browser's side: mic, recognizer, speech, ONNX, storage
   shell/          passkeys, devices, the story
