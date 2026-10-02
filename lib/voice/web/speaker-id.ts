@@ -3,7 +3,7 @@
 import { embedVoice } from "../speaker";
 import { loadModel } from "./ort";
 
-export const SPEAKER_MODEL_URL = "/models/speaker/campplus-en.onnx";
+const SPEAKER_MODEL_URL = "/models/speaker/campplus-en.onnx";
 let model: ReturnType<typeof loadModel> | null = null;
 
 function speakerModel(): ReturnType<typeof loadModel> {

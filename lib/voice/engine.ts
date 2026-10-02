@@ -15,9 +15,9 @@ export const MODEL_FAILED = "I couldn't load what I need to listen. Check your c
 export const LISTENING_STOPPED = "Listening stopped. Tap the mic to start again.";
 
 // The second of audio before the detector fired holds "Osmo" itself; it's judged together with the message.
-export const WAKE_AUDIO_SAMPLES = 16000;
+const WAKE_AUDIO_SAMPLES = 16000;
 // Recognizer failures in a row before listening gives up.
-export const MAX_FAILURES = 3;
+const MAX_FAILURES = 3;
 // How long to wait for word timing before his text types out at speaking pace instead.
 export const WORD_TIMING_WAIT_MS = 800;
 // If the device never reports the end of speech (an iPhone that blocked speech, a stuck voice), a watchdog

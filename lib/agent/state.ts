@@ -24,7 +24,7 @@ export type Value = (typeof VALUES)[number];
 export type Weights = Record<Value, number>;
 
 export type Valence = "happy" | "tragic";
-export type Association = { count: number; tendencies: Partial<Record<Emotion, number>> };
+type Association = { count: number; tendencies: Partial<Record<Emotion, number>> };
 export type EventRecord = { id: string; valence: Valence };
 
 export const ORGANS = ["heart", "brain", "voice", "humor", "slang", "quirks"] as const;

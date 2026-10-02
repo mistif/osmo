@@ -1,11 +1,11 @@
 import type { Dilemma } from "./dilemmas";
 import { BASELINE, VALUES, type Activations, type AgentState, type Emotion, type Value, type Weights } from "./state";
 
-export const TILT = 0.3;
-export const OUTLOOK_TILT = 0.15;
-export const TORN_MARGIN = 0.05;
-export const NUDGE = 0.02;
-export const MIN_WEIGHT = 0.02;
+const TILT = 0.3;
+const OUTLOOK_TILT = 0.15;
+const TORN_MARGIN = 0.05;
+const NUDGE = 0.02;
+const MIN_WEIGHT = 0.02;
 
 export type Decision = {
 	chosen: number;
@@ -16,7 +16,7 @@ export type Decision = {
 	pull: Value | null;
 };
 
-export function effectiveWeights(
+function effectiveWeights(
 	w: Weights,
 	a: AgentState["activations"],
 	outlook: number,

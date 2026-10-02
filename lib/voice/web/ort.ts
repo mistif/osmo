@@ -6,7 +6,7 @@ import type * as Ort from "onnxruntime-web";
 const RUNTIME_URL = "/ort/ort.wasm.min.mjs";
 let runtime: Promise<typeof Ort> | null = null;
 
-export function loadOrt(): Promise<typeof Ort> {
+function loadOrt(): Promise<typeof Ort> {
 	if (!runtime) {
 		runtime = (async () => {
 			const ort = (await import(/* webpackIgnore: true */ RUNTIME_URL)) as typeof Ort;

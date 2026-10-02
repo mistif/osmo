@@ -39,10 +39,10 @@ export const EVENTS: StoryEvent[] = [
 	{ id: "t10", kind: "poverty", valence: "tragic", text: "A family shares a single loaf of bread for three days.", shifts: { sadness: 0.3, guilt: 0.1, hope: -0.1, anger: 0.1 } },
 ];
 
-export const OUTLOOK_RATE = 0.08;
-export const LINK_STEP = 0.02;
-export const LINK_MAX = 0.8;
-export const ARGUE_STEP = 0.02;
+const OUTLOOK_RATE = 0.08;
+const LINK_STEP = 0.02;
+const LINK_MAX = 0.8;
+const ARGUE_STEP = 0.02;
 
 export function pickEvent(history: EventRecord[]): StoryEvent {
 	const happy = history.filter((h) => h.valence === "happy").length;

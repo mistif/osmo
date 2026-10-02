@@ -14,7 +14,7 @@ export const DONOR_FAMILIES = [
 	"fierce",
 	"strange",
 ] as const;
-export type DonorFamily = (typeof DONOR_FAMILIES)[number];
+type DonorFamily = (typeof DONOR_FAMILIES)[number];
 
 export type Donor = {
 	id: string; // kebab-case, e.g. "the-gentle-poet"

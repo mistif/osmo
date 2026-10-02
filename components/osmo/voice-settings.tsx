@@ -8,7 +8,7 @@ import styles from "./panels.module.css";
 const UNREACHABLE = "I can't reach my memory right now. Try again in a moment.";
 const FORGET_FAILED = "Couldn't save that. Try again.";
 
-export function Switch({ label, on, onChange, disabled }: { label: string; on: boolean; onChange(on: boolean): void; disabled?: boolean }) {
+function Switch({ label, on, onChange, disabled }: { label: string; on: boolean; onChange(on: boolean): void; disabled?: boolean }) {
 	return (
 		<button type="button" role="switch" aria-checked={on} className={styles.switch} onClick={() => onChange(!on)} disabled={disabled}>
 			<span className={styles.switchTrack} aria-hidden="true">

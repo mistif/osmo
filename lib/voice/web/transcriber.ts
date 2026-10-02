@@ -41,7 +41,7 @@ export const canListen = (): boolean => recognizerClass() !== null;
 let local: Promise<boolean> | null = null;
 
 // Chrome can recognize English entirely on the device once its offline pack is installed; it installs it when it can.
-export function preferOnDevice(): Promise<boolean> {
+function preferOnDevice(): Promise<boolean> {
 	if (!local) {
 		local = (async () => {
 			const R = recognizerClass();

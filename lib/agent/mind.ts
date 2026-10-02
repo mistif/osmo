@@ -26,7 +26,7 @@ import { vary } from "./lexicon/variety";
 import { causeOf, combineReplies, normalize, respond, understand } from "./talk";
 import { GUEST_DILEMMA, GUEST_NO_CHANGES, GUEST_PRIVATE } from "../voice/guest";
 
-export type Pending = { logId: string; dilemmaId: string; decision: Decision };
+type Pending = { logId: string; dilemmaId: string; decision: Decision };
 export type Session = {
 	pending: Pending | null;
 	last: Pending | null;

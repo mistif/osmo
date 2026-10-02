@@ -4,7 +4,7 @@
 import type { Speaker, Via } from "./guest";
 import { WAKE } from "./wake";
 
-export type Mode = "off" | "paused" | "sleeping" | "awake" | "thinking" | "speaking" | "followup";
+type Mode = "off" | "paused" | "sleeping" | "awake" | "thinking" | "speaking" | "followup";
 
 export type VoiceState = {
 	mode: Mode;

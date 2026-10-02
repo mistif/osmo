@@ -6,7 +6,7 @@ import { wakeModels } from "../wake-models";
 import { WakeStream } from "../wake-stream";
 import { loadModel } from "./ort";
 
-export const WAKE_MODEL_URL = "/models/wake/osmo.onnx";
+const WAKE_MODEL_URL = "/models/wake/osmo.onnx";
 
 // The detector exists only once Gur has trained it (docs/osmo-wake-word.md).
 export async function wakeWordTrained(): Promise<boolean> {

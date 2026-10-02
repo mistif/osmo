@@ -16,7 +16,7 @@ export type HeartMotion = {
 // Eases Osmo's heart toward what his speech asks of it, one frame at a time, and writes the result
 // into CSS variables on the stage (--voice, --open, --flow, --r1..3) for figure.module.css.
 // The loop runs only while something is still moving.
-export function createHeartMotion(): HeartMotion {
+function createHeartMotion(): HeartMotion {
 	let el: HTMLElement | null = null;
 	const style = () => el?.style;
 	let target = STILL;

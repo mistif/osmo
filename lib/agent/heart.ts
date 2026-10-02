@@ -8,9 +8,9 @@ import {
 	type Vec3,
 } from "./state";
 
-export const STEP = 0.1;
-export const DECAY = 0.05;
-export const SALIENCE = 0.1;
+const STEP = 0.1;
+const DECAY = 0.05;
+const SALIENCE = 0.1;
 
 export const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
@@ -102,7 +102,7 @@ const OPENERS: Record<string, string> = {
 	boredom: "I'm a little bored.",
 };
 
-export function moodOpener(label: string): string {
+function moodOpener(label: string): string {
 	return OPENERS[label] ?? "";
 }
 

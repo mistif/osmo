@@ -8,7 +8,7 @@ export const MODEL_ID = "campplus-en-voxceleb-16k";
 // At or above this, the voice is Gur's. Anything else, including unsure, is someone else.
 export const MATCH_THRESHOLD = 0.5;
 // While teaching, each reading must be at least this close to the average of the others.
-export const READING_AGREEMENT = 0.5;
+const READING_AGREEMENT = 0.5;
 // Follow-ups shorter than this keep the conversation's speaker once Gur has been recognized.
 export const CARRY_OVER_SECONDS = 1.5;
 

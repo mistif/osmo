@@ -5,7 +5,7 @@ import styles from "./panels.module.css";
 
 export type PanelId = "memory" | "insights" | "settings";
 
-export const PANEL_TITLES: Record<PanelId, string> = {
+const PANEL_TITLES: Record<PanelId, string> = {
 	memory: "What I remember",
 	insights: "How I've been",
 	settings: "Settings",

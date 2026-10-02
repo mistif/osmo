@@ -7,11 +7,11 @@ const QUIET_RMS = 0.01;
 // 100 ms of quiet kept on each side when trimming.
 const PAD_STEPS = 5;
 
-export const MIN_READING_SECONDS = 2;
-export const READING_END_SILENCE_MS = 1200;
-export const READING_MAX_MS = 10_000;
+const MIN_READING_SECONDS = 2;
+const READING_END_SILENCE_MS = 1200;
+const READING_MAX_MS = 10_000;
 
-export function stepLevels(samples: Float32Array): number[] {
+function stepLevels(samples: Float32Array): number[] {
 	const levels: number[] = [];
 	for (let at = 0; at + STEP <= samples.length; at += STEP) {
 		let sum = 0;
