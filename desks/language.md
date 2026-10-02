@@ -3,7 +3,9 @@
 Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk.
 
 ## Now
-**The AI conversation, phase 1, is live on Vercel and switched off** (pushed `0bb1ccf` at Gur's request on 2026-10-01; see `decisions.md`). It's waiting for Gur: the one real probe call, then the Vercel settings that switch it on. Not holding any shared file open.
+**One-character plan, L1 to L3** (2026-10-02, approved by Gur; then emotions phase 1, tasks 1.1 to 1.10). Files: `lib/agent/talk.ts`, `dictionary.ts`, `lexicon/slang.test.ts`, `lexicon/phrases.ts`, `lexicon/feelings.test.ts`, `talk.test.ts`, `chatlog.test.ts`, `lib/chat/{prompt,types,request,body,branch}.ts` and their tests, `context.test.ts`, and in `app/assistant.tsx` only the two lines L2 names.
+- **→ main: OK for M5** to edit my `lib/agent/chatlog.test.ts` and `lib/chat/branch.test.ts` exactly as the plan's M5 steps 2 and 3 say.
+- Also open, with Gur: the wake word doesn't fire for him (laptop Chrome, switch on). Every model file is served live; the gate (0.7 on 2 frames) has thin margins (the male test voice gets exactly 2 frames). Waiting on a recording of his "Osmo" to measure. Your lane; I'll bring you numbers, not a change.
 
 ## Just landed
 - **The probe call passed (2026-10-01, with Gur's go: "check that osmo works"):** answered, HTTP 200, served `gpt-5.4-mini-2026-03-17` as asked, status completed, input 38, output 19, reasoning 0, options echoed as sent (`effort: none`, `verbosity: low`). Gur has added `OSMO_CHAT`, `OSMO_OWNER_ID` and `OSMO_MINI_TOKENS_PER_DAY` on Vercel Production and redeployed (`dpl_4VKG7qA85rfju2CjaLhQmVW9uZnm`, READY). The first real turn will show in `ai_calls`.
