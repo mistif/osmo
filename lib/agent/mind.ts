@@ -2,6 +2,8 @@ import { closeness, mentioned, recordTurn, stageOf, type MilestoneId, type Stage
 import { closenessReply, isAskCloseness, isAskMet, metReply, milestoneLine } from "./bond/lines";
 import { applyFeedback, decide, explain, parseVerdict, type Decision } from "./brain";
 import { applyCues, applyGap, bondBaseline, missYou } from "./cues";
+import { CRISIS_CAUSE } from "./crisis-cause";
+import { NEGATIVE_TONES, type GurRead } from "./detection";
 import { DILEMMAS, findDilemma, nextDilemma } from "./dilemmas";
 import {
 	applyEvent,
@@ -33,6 +35,8 @@ export type Session = {
 	// Why it feels the way it does, as a clause that follows "because".
 	cause: string | null;
 	turns: number;
+	// Gur's last message read, if under 30 minutes old.
+	gur: { read: GurRead; at: number } | null;
 };
 
 export type Effect =
@@ -68,6 +72,7 @@ export const newSession = (): Session => ({
 	dilemmasSeen: [],
 	cause: null,
 	turns: 0,
+	gur: null,
 });
 
 const STORY_TRIGGER = /\b(tell me a story|give me an experience|feed me an event|experience something)\b/i;
@@ -351,7 +356,9 @@ export function processTurn(state: AgentState, session: Session, text: string, c
 
 // What a prompt may know about him this turn. For a guest, only how he feels: never why, never the bond, never Gur's name.
 // The cause a crisis leaves behind. prepareTurn never hands it to a model; the route can check for it too.
-export const CRISIS_CAUSE = "you told me you're hurting";
+export { CRISIS_CAUSE } from "./crisis-cause";
+
+export const GUR_FRESH_MS = 30 * 60 * 1000;
 
 export type TurnFacts = {
 	// How he feels, in words ("calm", "a little lonely").
@@ -369,6 +376,8 @@ export type TurnFacts = {
 	userName: string | null;
 	// Messages before this one in the session.
 	turn: number;
+	// Gur's last message, if under 30 minutes old.
+	gur?: GurRead | null;
 };
 export type PreparedTurn = TurnResult & {
 	facts: TurnFacts;
@@ -430,6 +439,9 @@ export function prepareTurn(state: AgentState, session: Session, text: string, c
 			: (open?.result ?? { state: start.open.s, session: start.open.sess, reply: null, effects: [] });
 	const baseline = CHARACTER.baseline;
 	const tone = moodTheme(result.state.activations, baseline).tone;
+	const age = ctx.now - (result.session.gur?.at ?? Number.NEGATIVE_INFINITY);
+	const gur = !guest && result.session.gur !== null && age >= 0 && age < GUR_FRESH_MS ? result.session.gur.read : null;
+	const upset = gur !== null && gur.intensity === 3 && gur.tones.some((t) => NEGATIVE_TONES.includes(t));
 	const facts: TurnFacts = {
 		feeling: moodLabel(result.state.activations, baseline),
 		tone,
@@ -437,10 +449,11 @@ export function prepareTurn(state: AgentState, session: Session, text: string, c
 		cause: guest || result.session.cause === CRISIS_CAUSE ? null : result.session.cause,
 		stage: guest ? "stranger" : stageOf(result.state.bond),
 		milestone: open?.milestone ?? null,
-		heavy: open ? open.heavy : heavyTurn(tone, false),
+		heavy: (open ? open.heavy : heavyTurn(tone, false)) || upset,
 		awayMs: guest || ctx.lastAt === null ? 0 : ctx.now - ctx.lastAt,
 		userName: guest ? null : (ctx.userName ?? null),
 		turn: guest ? 0 : session.turns,
+		gur,
 	};
 	if (guest) return { state, session, reply: result.reply, effects: [], facts, processed };
 	return { ...result, facts, processed };

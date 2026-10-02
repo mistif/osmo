@@ -159,6 +159,7 @@ describe("prepareTurn: the facts a prompt may use", () => {
 			awayMs: 5_000,
 			userName: "Gur",
 			turn: 3,
+			gur: null,
 		});
 	});
 

@@ -6,6 +6,10 @@ export const GAP_MS = 6 * 60 * 60 * 1000;
 type Cue = { pattern: RegExp; shifts: Partial<Record<Emotion, number>> };
 
 // Life events ("my dog died", "I got the job") are handled in events.ts, not here.
+// Shared with detection.ts, which reads an insult as Gur being angry at Osmo.
+export const INSULT = /\b(stupid|idiot|useless|dumb|hate you|shut up|stfu|moron|retard(?:ed)?|loser|fuck (?:you|off))\b/i;
+export const YOU_SUCK = /\b(?:you|u) suck\b/i;
+
 const CUES: Cue[] = [
 	{
 		pattern:
@@ -13,7 +17,7 @@ const CUES: Cue[] = [
 		shifts: { joy: 0.15, trust: 0.1, love: 0.1 },
 	},
 	{
-		pattern: /\b(stupid|idiot|useless|dumb|hate you|shut up|stfu|moron|retard(?:ed)?|loser|fuck (?:you|off))\b/i,
+		pattern: INSULT,
 		shifts: { anger: 0.25, trust: -0.2, sadness: 0.1 },
 	},
 	{
@@ -47,7 +51,7 @@ const CUES: Cue[] = [
 		shifts: { joy: 0.1 },
 	},
 	{
-		pattern: /\b(?:you|u) suck\b/i,
+		pattern: YOU_SUCK,
 		shifts: { anger: 0.25, trust: -0.2, sadness: 0.1 },
 	},
 	{
