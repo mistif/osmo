@@ -12,6 +12,7 @@ import {
 	renameDevice,
 } from "@/lib/shell/passkeys";
 import type { DeviceSource } from "@/lib/shell/devices";
+import type { ChatStatus } from "@/lib/chat/types";
 import { VoiceSettings } from "./voice-settings";
 import type { VoiceControls } from "./use-voice";
 import styles from "./panels.module.css";
@@ -21,7 +22,7 @@ const SAVE_FAILED = "Couldn't save that. Try again.";
 // Gur is already in Settings, so this skips the lock screen's "try again from Settings".
 const PASSKEY_FAILED_HERE = "This device couldn't save a passkey. Try again.";
 
-export function SettingsPanel({ voice }: { voice: VoiceControls }) {
+export function SettingsPanel({ voice, aiUsage }: { voice: VoiceControls; aiUsage?: ChatStatus | null }) {
 	const router = useRouter();
 	const [devices, setDevices] = useState<DeviceSource[] | null>(null);
 	// Captured when the list loads rather than read live at render, so render stays pure (no Date.now() there).
@@ -149,6 +150,15 @@ export function SettingsPanel({ voice }: { voice: VoiceControls }) {
 			</section>
 
 			<VoiceSettings voice={voice} />
+
+			{aiUsage?.enabled && (
+				<p className={styles.note}>
+					AI conversation: on
+					{aiUsage.usedToday !== null && aiUsage.usable !== null
+						? `, ${aiUsage.usedToday.toLocaleString("en-US")} of ${aiUsage.usable.toLocaleString("en-US")} tokens used today.`
+						: "."}
+				</p>
+			)}
 
 			<section className={styles.section}>
 				<h3 className={styles.sectionTitle}>Lock Osmo</h3>
