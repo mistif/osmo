@@ -8,7 +8,7 @@ import { resolve } from "./personality/assemble";
 import { CRISIS_REPLY } from "./safety";
 import { GUEST_NO_CHANGES, GUEST_PRIVATE } from "../voice/guest";
 
-type Ctx = { now: number; lastAt: number | null; guest: boolean; userName: string | null; seed: number };
+type Ctx = { now: number; lastAt: number | null; guest: boolean; userName: string | null; seed: number; recent: string[] };
 const ctx = (o: Partial<Ctx> = {}) => ({ now: 1_000_000, lastAt: null, uuid: () => "id-1", seed: 7, ...o });
 const knownBond = {
 	...emptyBond(),
@@ -30,8 +30,9 @@ function afterDilemma(): { state: AgentState; session: Session } {
 
 // The start of a turn that code answers on its own must be exactly what processTurn does.
 function sameAsProcessTurn(state: AgentState, session: Session, text: string, c: ReturnType<typeof ctx>) {
-	const { facts, ...prepared } = prepareTurn(state, session, text, c);
+	const { facts, processed, ...prepared } = prepareTurn(state, session, text, c);
 	expect(facts).toBeDefined();
+	expect(processed).toEqual(prepared);
 	expect(prepared).toEqual(processTurn(state, session, text, c));
 	return prepared;
 }
@@ -193,5 +194,57 @@ describe("prepareTurn: the facts a prompt may use", () => {
 		const r = prepareTurn(withBond(), session, "i want to kill myself", ctx({ guest: true }));
 		expect(r.reply).toBe(CRISIS_REPLY);
 		expect(r.facts.cause).toBeNull();
+	});
+});
+
+// The room calls prepareTurn once and shows `processed` when no model answers, so it has to be processTurn's result.
+describe("prepareTurn: processed", () => {
+	const same = (state: AgentState, session: Session, text: string, c: ReturnType<typeof ctx>) => {
+		const r = prepareTurn(state, session, text, c);
+		expect(r.processed).toEqual(processTurn(state, session, text, c));
+		return r;
+	};
+
+	it("is processTurn's result when code decides the turn", () => {
+		const crisis = same(withBond(), newSession(), "i want to kill myself", ctx());
+		expect(crisis.processed.reply).toBe(CRISIS_REPLY);
+		const roll = same(withBond(), newSession(), "roll a new osmo", ctx());
+		expect(roll.processed.session.awaitingReroll).not.toBeNull();
+		const { state, session } = afterDilemma();
+		expect(same(state, session, "yes", ctx()).processed.effects.map((e) => e.type)).toEqual(["verdict"]);
+	});
+
+	it("is processTurn's result on an open everyday turn, with its own effects", () => {
+		for (const text of ["the weather is fine", "hello", "i feel so lonely today", "im good and i made you"]) {
+			const r = same(withBond(), newSession(), text, ctx({ userName: "Gur", lastAt: 1_000_000 - 5_000 }));
+			// processed is the rule-based answer; the prepared reply is left for the model.
+			expect(r.reply).toBeNull();
+			expect(r.effects).not.toBe(r.processed.effects);
+		}
+	});
+
+	it("is processTurn's result for a guest, who leaves no trace", () => {
+		const guest = ctx({ guest: true, userName: "Gur" });
+		for (const text of ["hello", "how close are we", "roll a new osmo", "my mom died last week", "i want to kill myself"]) {
+			const r = same(withBond(), newSession(), text, guest);
+			expect(r.processed.effects).toEqual([]);
+			expect(r.effects).toEqual([]);
+		}
+	});
+});
+
+// One parse, with the spell context (the words said lately), so a typo read as a feeling counts for the bond too. Before,
+// the bond read the message without that context and could call it plain talk while the answer took it for a feeling.
+describe("a typo'd feeling counts for the bond", () => {
+	it("moves the message and feeling counters like \"im so grumpy today\" does", () => {
+		const recent = ctx({ recent: ["grumpy"] });
+		const clean = prepareTurn(withBond(), newSession(), "im so grumpy today", recent);
+		const typo = prepareTurn(withBond(), newSession(), "im so gumpy today", recent);
+		expect(clean.state.bond.messages).toBe(knownBond.messages + 1);
+		expect(clean.state.bond.shared).toBe(knownBond.shared + 1);
+		expect(typo.state.bond.messages).toBe(clean.state.bond.messages);
+		expect(typo.state.bond.shared).toBe(clean.state.bond.shared);
+		expect(typo.processed.state.bond.shared).toBe(clean.processed.state.bond.shared);
+		expect(typo.processed).toEqual(processTurn(withBond(), newSession(), "im so gumpy today", recent));
 	});
 });

@@ -102,6 +102,10 @@ type OpenTurn = {
 	awayMs: number;
 	guest: boolean;
 	trimmed: string;
+	// What the message says, read once (with the spell context) and shared by everything that follows.
+	parts: ReturnType<typeof understand>;
+	// Messages before this one in the session.
+	turn: number;
 	effects: Effect[];
 };
 
@@ -140,7 +144,14 @@ function startTurn(state: AgentState, session: Session, text: string, ctx: TurnC
 	const guest = ctx.guest === true;
 	const hypothetical = WHAT_WOULD_YOU_DO.test(trimmed);
 	const told = hypothetical ? [] : classifyUserEvents(trimmed);
-	const feeling = understand(trimmed, ctx.slang).some((part) => part.intent.type === "userFeeling");
+	// A message can say several things ("im good and i made you"), so it is read once, into parts, with the spell context
+	// (what was said lately, his own words, his name for a non-guest), and every later step reuses them.
+	const parts = understand(trimmed, ctx.slang, {
+		recent: ctx.recent,
+		protect: ctx.userName && !guest ? new Set([ctx.userName.toLowerCase()]) : undefined,
+		personal: ctx.vocabulary ? new Map(Object.entries(ctx.vocabulary)) : undefined,
+	});
+	const feeling = parts.some((part) => part.intent.type === "userFeeling");
 	if (!guest) {
 		s = {
 			...s,
@@ -313,34 +324,22 @@ function startTurn(state: AgentState, session: Session, text: string, ctx: TurnC
 		};
 	}
 
-	return { open: { s, sess, p, awayMs, guest, trimmed, effects } };
+	return { open: { s, sess, p, awayMs, guest, trimmed, parts, turn: session.turns, effects } };
 }
 
-function takeTurn(
-	state: AgentState,
-	session: Session,
-	text: string,
-	ctx: TurnContext,
-): TurnResult {
-	const start = startTurn(state, session, text, ctx);
-	if ("decided" in start) return start.decided;
-	const { s, sess, p, awayMs, guest, trimmed, effects } = start.open;
-
-	// 6. Everyday conversation: greetings, feelings, small talk.
-	// A message can say several things ("im good and i made you"), so answer each part.
-	const spell = {
-		recent: ctx.recent,
-		protect: ctx.userName && !guest ? new Set([ctx.userName.toLowerCase()]) : undefined,
-		personal: ctx.vocabulary ? new Map(Object.entries(ctx.vocabulary)) : undefined,
-	};
-	const parts = understand(trimmed, ctx.slang, spell);
+// 6. Everyday conversation: greetings, feelings, small talk, answered by code. A message can say several things, so
+// each part is answered.
+function answerOpen(open: OpenTurn, ctx: TurnContext): TurnResult {
+	const { s, sess, p, awayMs, guest, trimmed, parts, turn } = open;
+	// Its own copy, so this answer never shares an array with another result made from the same open turn.
+	const effects = [...open.effects];
 	// A guest hears how he feels, but never why (that's Gur's history), never Gur's name, and never a welcome back.
 	const spoken = parts
 		.map((parsed) =>
 			respond(parsed, {
 				state: s,
 				cause: guest ? null : sess.cause,
-				turn: guest ? 0 : session.turns,
+				turn: guest ? 0 : turn,
 				userName: guest ? null : ctx.userName,
 				baseline: p.baseline,
 			}),
@@ -358,10 +357,10 @@ function takeTurn(
 			((intent.type === "userFeeling" || intent.type === "feelingFromOsmo") && !intent.positive),
 		);
 		// Vary his own words, but never a word the user just used.
-		const flavored = flavorTurn(vary(combineReplies(spoken), session.turns, new Set(normalize(trimmed).split(" "))), {
+		const flavored = flavorTurn(vary(combineReplies(spoken), turn, new Set(normalize(trimmed).split(" "))), {
 			intent: parts[0].intent.type,
 			personality: p,
-			turn: session.turns,
+			turn,
 			tone: moodTheme(s.activations, p.baseline).tone,
 			sensitive,
 			// A guest is a stranger: no milestones, shared memories or welcome-backs.
@@ -383,10 +382,12 @@ function takeTurn(
 	return { state: s, session: sess, reply: null, effects };
 }
 
+// A guest's turn records nothing: no events, dilemmas or verdicts.
+const forWho = (result: TurnResult, ctx: TurnContext): TurnResult => (ctx.guest ? { ...result, effects: [] } : result);
+
 export function processTurn(state: AgentState, session: Session, text: string, ctx: TurnContext): TurnResult {
-	const result = takeTurn(state, session, text, ctx);
-	// A guest's turn records nothing: no events, dilemmas or verdicts.
-	return ctx.guest ? { ...result, effects: [] } : result;
+	const start = startTurn(state, session, text, ctx);
+	return forWho("decided" in start ? start.decided : answerOpen(start.open, ctx), ctx);
 }
 
 // What a prompt may know about him this turn. For a guest, only how he feels: never why, never the bond, never Gur's name.
@@ -410,7 +411,12 @@ export type TurnFacts = {
 	// Messages before this one in the session.
 	turn: number;
 };
-export type PreparedTurn = TurnResult & { facts: TurnFacts };
+export type PreparedTurn = TurnResult & {
+	facts: TurnFacts;
+	// Exactly what processTurn returns for the same inputs, from this same pass over the turn: the rule-based answer, for
+	// a room that shows it when no model answers. The heart, bond, crisis and verdict steps ran once, not twice.
+	processed: TurnResult;
+};
 
 // Same rule as step 6: these turns get no extras (and a guest's words never fill Gur's).
 function sensitiveTurn(parts: ReturnType<typeof understand>): boolean {
@@ -427,13 +433,9 @@ function sensitiveTurn(parts: ReturnType<typeof understand>): boolean {
 
 // An open turn left the way step 6 leaves it once it has answered: the new cause, the milestone that's due marked as
 // said (the model is asked to say it), and a first feeling not thanked for this turn not brought up later.
-function leaveForModel(open: OpenTurn, ctx: TurnContext): { result: TurnResult; milestone: MilestoneId | null; heavy: boolean } {
-	const { s, sess, p, awayMs, trimmed, effects } = open;
-	const parts = understand(trimmed, ctx.slang, {
-		recent: ctx.recent,
-		protect: ctx.userName ? new Set([ctx.userName.toLowerCase()]) : undefined,
-		personal: ctx.vocabulary ? new Map(Object.entries(ctx.vocabulary)) : undefined,
-	});
+function leaveForModel(open: OpenTurn): { result: TurnResult; milestone: MilestoneId | null; heavy: boolean } {
+	const { s, sess, p, awayMs, parts } = open;
+	const effects = [...open.effects];
 	const cause = parts.map((x) => causeOf(x.intent)).find((c) => c !== null) ?? null;
 	const tone = moodTheme(s.activations, p.baseline).tone;
 	const sensitive = sensitiveTurn(parts);
@@ -461,9 +463,12 @@ function leaveForModel(open: OpenTurn, ctx: TurnContext): { result: TurnResult; 
 export function prepareTurn(state: AgentState, session: Session, text: string, ctx: TurnContext): PreparedTurn {
 	const guest = ctx.guest === true;
 	const start = startTurn(state, session, text, ctx);
-	const open = !("decided" in start) && !guest ? leaveForModel(start.open, ctx) : null;
+	const processed = forWho("decided" in start ? start.decided : answerOpen(start.open, ctx), ctx);
+	const open = !("decided" in start) && !guest ? leaveForModel(start.open) : null;
 	const result: TurnResult =
-		"decided" in start ? start.decided : (open?.result ?? { state: start.open.s, session: start.open.sess, reply: null, effects: [] });
+		"decided" in start
+			? start.decided
+			: (open?.result ?? { state: start.open.s, session: start.open.sess, reply: null, effects: [] });
 	const baseline = resolve(result.state.genome).baseline;
 	const tone = moodTheme(result.state.activations, baseline).tone;
 	const facts: TurnFacts = {
@@ -478,6 +483,6 @@ export function prepareTurn(state: AgentState, session: Session, text: string, c
 		userName: guest ? null : (ctx.userName ?? null),
 		turn: guest ? 0 : session.turns,
 	};
-	if (guest) return { state, session, reply: result.reply, effects: [], facts };
-	return { ...result, facts };
+	if (guest) return { state, session, reply: result.reply, effects: [], facts, processed };
+	return { ...result, facts, processed };
 }

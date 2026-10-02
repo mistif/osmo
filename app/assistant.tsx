@@ -16,7 +16,7 @@ import { formatDefinition, lookupWord, parseLookup, type Lookup } from "@/lib/ag
 import { getCachedLookup, putCachedLookup } from "@/lib/agent/dictionary-store";
 import { learnFromMessage } from "@/lib/agent/lexicon/vocabulary";
 import { loadVocabulary, saveVocabulary } from "@/lib/agent/vocabulary-store";
-import { newSession, prepareTurn, processTurn, type Session, type TurnContext, type TurnResult } from "@/lib/agent/mind";
+import { newSession, prepareTurn, type Session, type TurnContext, type TurnResult } from "@/lib/agent/mind";
 import {
 	answersPendingLearning,
 	taughtMeanings,
@@ -347,8 +347,8 @@ export default function AgentChat() {
 			setMemory((current) => [...current.filter((fact) => fact.key !== "name"), nameFact]);
 			void saveFact(nameFact);
 		};
-		// His inner life steps once either way. processTurn is today's step; prepareTurn is the same step left for
-		// the model to put into words. Both are pure, and only the result whose reply is used is kept (keptTurn).
+		// His inner life steps once. prepareTurn runs it, and carries the rule-based result (processed) beside the facts the
+		// model puts into words; it is pure, and only the result whose reply is used is kept (keptTurn).
 		const ctx: TurnContext = {
 			now,
 			lastAt: lastAtRef.current,
@@ -360,8 +360,8 @@ export default function AgentChat() {
 			vocabulary: view.vocabulary,
 			guest,
 		};
-		const turn = learning ? null : processTurn(agent, session, text, ctx);
 		const prepared = learning ? null : prepareTurn(agent, session, text, ctx);
+		const turn = prepared ? prepared.processed : null;
 		// The gap since Gur last spoke drives his heart, so a guest's turn doesn't reset it.
 		if (!guest) lastAtRef.current = now;
 
