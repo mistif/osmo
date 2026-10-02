@@ -319,13 +319,13 @@ describe("flavorTurn: welcome back", () => {
 	it("replaces talk's calm openers too, keeping the name once and capitalized", () => {
 		for (const reply of ["Good to see you, Gur. How can I help?", "Welcome back, Gur. How can I help?", "Hello, Gur. How can I help?"]) {
 			const out = away(reply, grown(10));
-			expect(out, reply).toMatch(/^(?:Welcome back, Gur\. It has been quiet here\.|Good to have you back, Gur\.) How can I help\?$/);
+			expect(out, reply).toMatch(/^Good to have you back, Gur\. How can I help\?$/);
 		}
 	});
 
 	it("leaves no trailing space when the greeting was the whole reply", () => {
 		const out = away("Hello, Gur!", grown(10));
-		expect(out).toMatch(/^(?:Welcome back, Gur\. It has been quiet here\.|Good to have you back, Gur\.)$/);
+		expect(out).toMatch(/^Good to have you back, Gur\.$/);
 	});
 
 	it("at stranger, keeps the greeting and its name, and only prepends the welcome", () => {

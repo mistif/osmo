@@ -18,8 +18,17 @@ describe("welcomeBack", () => {
 	it("gets warmer with the stage and uses the name only past stranger", () => {
 		expect(welcomeBack("stranger", "Gur", 0)).toBe("Welcome back.");
 		expect(welcomeBack("acquaintance", "Gur", 0)).toContain("Gur");
-		expect(welcomeBack("oldFriend", "Gur", 0)).toContain("missing you");
+		expect(welcomeBack("friend", "gur", 0)).toBe("Good to have you back, Gur.");
+		expect(welcomeBack("oldFriend", "gur", 0)).toBe("Welcome back, Gur. The room is better with you in it.");
 		expect(welcomeBack("friend", null, 0)).not.toMatch(/,\s*\./);
+	});
+
+	it.each(["stranger", "acquaintance", "friend", "oldFriend"] as const)("%s welcome never guilts", (stage) => {
+		for (let turn = 0; turn < 6; turn++) {
+			for (const name of [null, "gur"]) {
+				expect(welcomeBack(stage, name, turn)).not.toMatch(/miss|waiting|quiet here|lonely|where were you|left/i);
+			}
+		}
 	});
 
 	it("capitalizes a name stored in lowercase", () => {

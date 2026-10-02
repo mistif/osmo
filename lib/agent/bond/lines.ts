@@ -19,9 +19,9 @@ export function welcomeBack(stage: Stage, name: string | null, turn: number): st
 		case "acquaintance":
 			return pickAt([`Good to see you again${n}.`, `Welcome back${n}.`], turn);
 		case "friend":
-			return pickAt([`Welcome back${n}. It has been quiet here.`, `Good to have you back${n}.`], turn);
+			return `Good to have you back${n}.`;
 		case "oldFriend":
-			return pickAt([`There you are${n}. I took the liberty of missing you.`, `Welcome back${n}. The place is better with you in it.`], turn);
+			return `Welcome back${n}. The room is better with you in it.`;
 	}
 }
 
