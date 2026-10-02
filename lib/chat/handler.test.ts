@@ -813,7 +813,7 @@ describe("handleChat POST: the request to OpenAI", () => {
 			const sent = sentTo(fetcher);
 			expect(Object.keys(sent).sort(), entry.model).toEqual(KEYS[entry.model]);
 			expect(sent.model, entry.model).toBe(entry.model);
-			expect(sent.max_output_tokens, entry.model).toBe(300);
+			expect(sent.max_output_tokens, entry.model).toBe(MAX_OUTPUT_TOKENS);
 			expect(sent.store, entry.model).toBe(false);
 			expect(sent.safety_identifier, entry.model).toBe(createHash("sha256").update(GUR).digest("hex"));
 			if (entry.reasoning) expect(sent.reasoning, entry.model).toEqual({ effort: "none" });

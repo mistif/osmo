@@ -80,13 +80,13 @@ describe("reservationRow and settlingRow", () => {
 	it("books the estimate in the model's pool: the output cap as output, the rest as input", () => {
 		const entry = modelEntry(DEFAULT_MODEL);
 		if (!entry) throw new Error("the default model is not on the allowlist");
-		expect(reservationRow({ day: DAY, pool: entry.pool, model: entry.model, estimate: 4316, maxOutput: MAX_OUTPUT_TOKENS })).toEqual({
+		expect(reservationRow({ day: DAY, pool: entry.pool, model: entry.model, estimate: 4376, maxOutput: MAX_OUTPUT_TOKENS })).toEqual({
 			day: DAY,
 			pool: "mini",
 			model: "gpt-5.4-mini-2026-03-17",
 			input_tokens: 4016,
 			cached_tokens: 0,
-			output_tokens: 300,
+			output_tokens: 360,
 			reasoning_tokens: 0,
 			settles: null,
 			signature: null,

@@ -57,7 +57,7 @@ describe("requestBody", () => {
 			model: "gpt-5.4-mini-2026-03-17",
 			instructions: "You are Osmo, Gur's companion.",
 			input: request().input,
-			max_output_tokens: 300,
+			max_output_tokens: 360,
 			store: false,
 			safety_identifier: SAFETY_ID,
 			reasoning: { effort: "none" },
@@ -67,6 +67,32 @@ describe("requestBody", () => {
 		expect(older.model).toBe("gpt-4.1-mini-2025-04-14");
 		expect(older).not.toHaveProperty("reasoning");
 		expect(older).not.toHaveProperty("text");
+	});
+
+	it("verbosity: true plus format gives body.text equal to { verbosity: \"low\", format }", () => {
+		const format = { type: "json_schema", name: "test" };
+		const req = request();
+		expect(requestBody({ ...req, format }).text).toEqual({ verbosity: "low", format });
+	});
+
+	it("verbosity: false plus format gives { format }", () => {
+		const format = { type: "json_schema", name: "test" };
+		const req = request("gpt-4.1-mini-2025-04-14");
+		expect(requestBody({ ...req, format }).text).toEqual({ format });
+	});
+
+	it("no format and verbosity: false leaves text undefined", () => {
+		const req = request("gpt-4.1-mini-2025-04-14");
+		expect(requestBody(req)).not.toHaveProperty("text");
+	});
+
+	it("format never changes instructions or input", () => {
+		const format = { type: "json_schema", name: "test" };
+		const req = request();
+		const withFormat = requestBody({ ...req, format });
+		const withoutFormat = requestBody(req);
+		expect(withFormat.instructions).toBe(withoutFormat.instructions);
+		expect(withFormat.input).toEqual(withoutFormat.input);
 	});
 
 	it("sends each conversation item as its role and content only", () => {

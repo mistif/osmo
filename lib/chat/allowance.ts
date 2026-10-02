@@ -3,7 +3,7 @@
 // scripts/chat-probe.mjs loads this file straight into Node, which only strips the types.
 
 export type Pool = "mini" | "large";
-export type ModelEntry = { model: string; pool: Pool; reasoning: boolean; verbosity: boolean };
+export type ModelEntry = { model: string; pool: Pool; reasoning: boolean; verbosity: boolean; strict: boolean };
 export type Env = Readonly<Record<string, string | undefined>>;
 export type ChatConfig = { key: string; entry: ModelEntry; usable: number };
 
@@ -14,8 +14,8 @@ export const ALLOWLIST_DATE = "2026-09-29";
 // Dated snapshots only: OpenAI can move an alias to a snapshot that isn't on the free list.
 // `reasoning` and `verbosity` say which request options the model accepts.
 export const MODELS: readonly ModelEntry[] = [
-	{ model: "gpt-5.4-mini-2026-03-17", pool: "mini", reasoning: true, verbosity: true },
-	{ model: "gpt-4.1-mini-2025-04-14", pool: "mini", reasoning: false, verbosity: false },
+	{ model: "gpt-5.4-mini-2026-03-17", pool: "mini", reasoning: true, verbosity: true, strict: false },
+	{ model: "gpt-4.1-mini-2025-04-14", pool: "mini", reasoning: false, verbosity: false, strict: false },
 ];
 
 export const DEFAULT_MODEL = "gpt-5.4-mini-2026-03-17";
@@ -27,7 +27,8 @@ export const POOL_SIZE: Readonly<Record<Pool, number>> = { mini: 2_500_000, larg
 export const CAP_SETTING: Readonly<Record<Pool, string>> = { mini: "OSMO_MINI_TOKENS_PER_DAY", large: "OSMO_LARGE_TOKENS_PER_DAY" };
 
 // The cap covers reasoning and hidden formatting tokens too; three spoken sentences fit well under it.
-export const MAX_OUTPUT_TOKENS = 300;
+// JSON adds about 50 tokens; measured in 1.2.
+export const MAX_OUTPUT_TOKENS = 360;
 // No single call may be estimated above this. The route trims the body until it fits.
 export const CALL_CEILING = 20_000;
 export const DEFAULT_RESERVE = 0.1;

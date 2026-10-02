@@ -30,8 +30,8 @@ const ON = {
 
 describe("the allowlist", () => {
 	it("maps each listed snapshot to the small pool and its own request options", () => {
-		expect(modelEntry("gpt-5.4-mini-2026-03-17")).toEqual({ model: "gpt-5.4-mini-2026-03-17", pool: "mini", reasoning: true, verbosity: true });
-		expect(modelEntry("gpt-4.1-mini-2025-04-14")).toEqual({ model: "gpt-4.1-mini-2025-04-14", pool: "mini", reasoning: false, verbosity: false });
+		expect(modelEntry("gpt-5.4-mini-2026-03-17")).toEqual({ model: "gpt-5.4-mini-2026-03-17", pool: "mini", reasoning: true, verbosity: true, strict: false });
+		expect(modelEntry("gpt-4.1-mini-2025-04-14")).toEqual({ model: "gpt-4.1-mini-2025-04-14", pool: "mini", reasoning: false, verbosity: false, strict: false });
 		expect(MODELS).toHaveLength(2);
 		expect(DEFAULT_MODEL).toBe("gpt-5.4-mini-2026-03-17");
 		expect(modelEntry(DEFAULT_MODEL)).not.toBeNull();
@@ -67,7 +67,7 @@ describe("the allowlist", () => {
 		expect(ALLOWLIST_DATE).toBe("2026-09-29");
 		expect(POOL_SIZE).toEqual({ mini: 2_500_000, large: 250_000 });
 		expect(CAP_SETTING).toEqual({ mini: "OSMO_MINI_TOKENS_PER_DAY", large: "OSMO_LARGE_TOKENS_PER_DAY" });
-		expect(MAX_OUTPUT_TOKENS).toBe(300);
+		expect(MAX_OUTPUT_TOKENS).toBe(360);
 		expect(CALL_CEILING).toBe(20_000);
 		expect(DEFAULT_RESERVE).toBe(0.1);
 	});

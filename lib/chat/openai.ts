@@ -7,7 +7,7 @@ import type { InputItem } from "./types";
 export const RESPONSES_URL = "https://api.openai.com/v1/responses";
 export const MODEL_TIMEOUT_MS = 10_000;
 
-export type ModelRequest = { entry: ModelEntry; instructions: string; input: InputItem[]; safetyId: string; maxOutput: number };
+export type ModelRequest = { entry: ModelEntry; instructions: string; input: InputItem[]; safetyId: string; maxOutput: number; format?: unknown };
 export type ModelUsage = { input: number; cached: number; output: number; reasoning: number };
 export type Parsed = { status: string | null; incomplete: string | null; model: string | null; text: string; refused: boolean; usage: ModelUsage | null };
 export type ModelOutcome =
@@ -36,7 +36,10 @@ export function requestBody(req: ModelRequest): Record<string, unknown> {
 		safety_identifier: req.safetyId,
 	};
 	if (req.entry.reasoning) body.reasoning = { effort: "none" };
-	if (req.entry.verbosity) body.text = { verbosity: "low" };
+	const text: Record<string, unknown> = {};
+	if (req.entry.verbosity) text.verbosity = "low";
+	if (req.format !== undefined) text.format = req.format;
+	if (Object.keys(text).length > 0) body.text = text;
 	return body;
 }
 
