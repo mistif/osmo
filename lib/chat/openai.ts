@@ -8,7 +8,7 @@ export const RESPONSES_URL = "https://api.openai.com/v1/responses";
 export const MODEL_TIMEOUT_MS = 10_000;
 
 export type ModelRequest = { entry: ModelEntry; instructions: string; input: InputItem[]; safetyId: string; maxOutput: number; format?: unknown };
-export type ModelUsage = { input: number; cached: number; output: number; reasoning: number };
+type ModelUsage = { input: number; cached: number; output: number; reasoning: number };
 export type Parsed = { status: string | null; incomplete: string | null; model: string | null; text: string; refused: boolean; usage: ModelUsage | null };
 export type ModelOutcome =
 	| { kind: "answered"; parsed: Parsed; requestId: string | null }

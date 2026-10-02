@@ -6,7 +6,7 @@ import { SLANG } from "./talk";
 // Word questions: "what does ephemeral mean", "define petrichor", "what's a platypus".
 // Definitions come from Datamuse, then Wiktionary, and are cached per user. Replies are whole spoken sentences.
 
-export type Sense = { text: string; pos: string | null; slang: boolean };
+type Sense = { text: string; pos: string | null; slang: boolean };
 export type Lookup =
 	| { kind: "found"; term: string; word: string; sense: Sense; source: "taught" | "slang" | "cache" | "datamuse" | "wiktionary" }
 	| { kind: "blocked"; term: string }
@@ -55,7 +55,7 @@ const SLANGY = /\b(?:slang|informal|internet|colloquial)\b/i;
 const POS: Record<string, string> = { n: "noun", v: "verb", adj: "adjective", adv: "adverb" };
 
 // Turns raw senses into clean, speakable ones. Any offensive sense blocks the whole word.
-export function cleanSenses(raw: { pos: string | null; text: string }[]): { senses: Sense[]; blocked: boolean } {
+function cleanSenses(raw: { pos: string | null; text: string }[]): { senses: Sense[]; blocked: boolean } {
 	const senses: Sense[] = [];
 	for (const r of raw) {
 		let text = r.text.trim();

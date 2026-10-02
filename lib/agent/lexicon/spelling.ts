@@ -20,7 +20,7 @@ export type SpellConfig = {
 };
 
 // Messages a word must appear in before Osmo treats it as the user's own.
-export const MIN_USES = 2;
+const MIN_USES = 2;
 
 const ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
 // Keys next to each other on a QWERTY keyboard, including the staggered rows above and below.

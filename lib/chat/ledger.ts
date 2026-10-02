@@ -19,7 +19,7 @@ export type LedgerRow = {
 	signature: string | null;
 };
 export type NewRow = Omit<LedgerRow, "id">;
-export type StoreResult<T> = { ok: true; value: T } | { ok: false; code: string };
+type StoreResult<T> = { ok: true; value: T } | { ok: false; code: string };
 export type LedgerStore = {
 	// Fails when the query errors, or when the exact count is more than the rows returned.
 	readDay(day: string): Promise<StoreResult<LedgerRow[]>>;

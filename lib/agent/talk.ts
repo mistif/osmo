@@ -293,7 +293,7 @@ export const POSITIVE_FEELINGS = (
 	"blessed|amazing|awesome|better|hopeful|loved|grateful|cheerful|well|alright|swell|decent|fantastic|lovely|" +
 	"excellent|peachy|content|solid|superb|splendid"
 ).split("|");
-export const ALL_FEELINGS = [...NEGATIVE_FEELINGS, ...POSITIVE_FEELINGS];
+const ALL_FEELINGS = [...NEGATIVE_FEELINGS, ...POSITIVE_FEELINGS];
 
 // Feeling words Osmo understands but won't say himself: crude words and casual slang. He answers
 // the feeling ("I'm sorry you're feeling this way") without repeating the word.
