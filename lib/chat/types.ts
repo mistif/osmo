@@ -2,6 +2,7 @@
 // Types only, apart from the body's limits, so the browser can import this without pulling in the
 // server's code.
 
+import type { Detection } from "../agent/detection";
 import type { TurnFacts } from "../agent/mind";
 import type { Weights } from "../agent/state";
 import type { MemoryFact } from "../facts";
@@ -22,7 +23,7 @@ export type ChatBody = {
 export type Usage = { usedToday: number; usable: number };
 export type FallbackReason = "off" | "allowance" | "error" | "empty" | "crisis";
 export type ChatAnswer =
-	| { source: "model"; reply: string; usage: Usage }
+	| { source: "model"; reply: string; usage: Usage; detection: Detection | null }
 	| { source: "fallback"; reason: FallbackReason; usage: Usage | null };
 // GET /api/chat, and the room's aiUsage.
 export type ChatStatus = { enabled: boolean; usedToday: number | null; usable: number | null };

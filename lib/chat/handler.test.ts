@@ -10,6 +10,7 @@ import { chatDeps, handleChat, type ChatDeps } from "./handler";
 import { ledgerKey, reservationRow, settlingRow, supabaseLedger, type LedgerRow, type LedgerStore } from "./ledger";
 import { RESPONSES_URL } from "./openai";
 import { buildInput, buildInstructions } from "./prompt";
+import { TURN_FORMAT } from "./turn-schema";
 import type { ChatBody } from "./types";
 
 const GUR = "4f1c2b8e-9a37-4d21-b6f0-2c5e8d7a9b13";
@@ -448,6 +449,7 @@ describe("handleChat POST: the budget", () => {
 			source: "model",
 			reply: "Pasta with garlic and lemon is quick and good.",
 			usage: { usedToday: SPENT, usable: USABLE },
+			detection: null,
 		});
 		expect(fetcher).toHaveBeenCalledTimes(1);
 		expect(ledger.rows).toHaveLength(2);
@@ -562,6 +564,7 @@ describe("handleChat POST: the ledger failing", () => {
 			source: "model",
 			reply: "Pasta with garlic and lemon is quick and good.",
 			usage: { usedToday: estimate, usable: USABLE },
+			detection: null,
 		});
 		expect(ledger.rows).toHaveLength(1);
 		expect(logs).toEqual([{ event: "chat.ledger", fields: { step: "settle", code: "42501" } }]);
@@ -759,7 +762,7 @@ describe("handleChat POST: the reply", () => {
 
 	it("cuts a reply stopped by the output cap back to its last full sentence", async () => {
 		const { deps } = rig({ fetcher: openai({ status: "incomplete", incomplete: "max_output_tokens", text: "Pasta is quick. And you could also" }) });
-		expect(await read(await handleChat(post(body()), deps))).toEqual({ source: "model", reply: "Pasta is quick.", usage: { usedToday: SPENT, usable: USABLE } });
+		expect(await read(await handleChat(post(body()), deps))).toEqual({ source: "model", reply: "Pasta is quick.", usage: { usedToday: SPENT, usable: USABLE }, detection: null });
 	});
 
 	it("answers empty, with the tokens counted, when nothing speakable is left", async () => {
@@ -796,10 +799,87 @@ describe("handleChat POST: the reply", () => {
 	});
 });
 
+describe("handleChat POST: the detection", () => {
+	const turn = (over: Record<string, unknown> = {}) =>
+		JSON.stringify({ reply: "I am sorry to hear that.", crisis: false, tone: ["worried"], intensity: 2, about: "someone_close", wants: "listen", note: "his mother is in hospital again", ...over });
+	const DETECTION = { tones: ["worried"], intensity: 2, about: "someone_close", wants: "listen", note: "his mother is in hospital again", source: "model" };
+
+	it("asks a strict model for the turn schema and returns the reply with a validated detection", async () => {
+		const { deps, fetcher } = rig({ fetcher: openai({ text: turn() }) });
+		expect(await read(await handleChat(post(body()), deps))).toEqual({
+			source: "model",
+			reply: "I am sorry to hear that.",
+			usage: { usedToday: SPENT, usable: USABLE },
+			detection: DETECTION,
+		});
+		const sent = sentTo(fetcher);
+		expect((sent.text as { format: { name: string }; verbosity: string }).format.name).toBe("osmo_turn");
+		expect((sent.text as { verbosity: string }).verbosity).toBe("low");
+	});
+
+	it("sends no format to a model that is not strict, and a plain-text answer gives no detection", async () => {
+		const entry = MODELS.find((m) => m.model === "gpt-4.1-mini-2025-04-14")!;
+		entry.strict = false;
+		try {
+			const plain = rig({ env: { ...ENV, OSMO_CHAT_MODEL: entry.model }, fetcher: openai({ text: "Pasta is quick." }) });
+			expect(await read(await handleChat(post(body()), plain.deps))).toEqual({ source: "model", reply: "Pasta is quick.", usage: { usedToday: SPENT, usable: USABLE }, detection: null });
+			expect(sentTo(plain.fetcher).text).toBeUndefined();
+			// The old FEELING line still carries a detection.
+			const line = `I am sorry to hear that.\nFEELING: ${turn({ reply: undefined })}`;
+			const feeling = rig({ env: { ...ENV, OSMO_CHAT_MODEL: entry.model }, fetcher: openai({ text: line }) });
+			expect(await read(await handleChat(post(body()), feeling.deps))).toMatchObject({ source: "model", reply: "I am sorry to hear that.", detection: DETECTION });
+		} finally {
+			entry.strict = true;
+		}
+	});
+
+	it("answers crisis when the model flags it, even beside a cheerful tone, and for the bare word", async () => {
+		for (const text of [turn({ reply: "Hello.", crisis: true, tone: ["happy"] }), turn({ reply: "CRISIS" }), "CRISIS"]) {
+			const { deps } = rig({ fetcher: openai({ text }) });
+			expect(await read(await handleChat(post(body()), deps)), text).toEqual({ source: "fallback", reason: "crisis", usage: { usedToday: SPENT, usable: USABLE } });
+		}
+	});
+
+	it("answers error and logs format for half a JSON cut off by the output cap, and for a fenced block", async () => {
+		const cut = '{"reply":"I am sorry to hear that. Tell me more about';
+		for (const served of [{ status: "incomplete", incomplete: "max_output_tokens", text: cut }, { text: "```json\n" + turn() + "\n```" }]) {
+			const { deps, logs } = rig({ fetcher: openai(served) });
+			expect(await read(await handleChat(post(body()), deps)), served.text).toEqual({ source: "fallback", reason: "error", usage: { usedToday: SPENT, usable: USABLE } });
+			expect(logs, served.text).toEqual([{ event: "chat.reply", fields: { why: "format", requestId: "req_abc123" } }]);
+		}
+	});
+
+	it("answers empty for JSON whose reply is empty or not speakable", async () => {
+		for (const reply of ["", "   ", "**🙂**"]) {
+			const { deps } = rig({ fetcher: openai({ text: turn({ reply }) }) });
+			expect(await read(await handleChat(post(body()), deps)), reply).toEqual({ source: "fallback", reason: "empty", usage: { usedToday: SPENT, usable: USABLE } });
+		}
+	});
+
+	it("blanks a note that holds crisis text", async () => {
+		for (const note of ["he said i want to die", `because ${CRISIS_CAUSE}`]) {
+			const { deps } = rig({ fetcher: openai({ text: turn({ note }) }) });
+			expect(await read(await handleChat(post(body()), deps)), note).toEqual({
+				source: "model",
+				reply: "I am sorry to hear that.",
+				usage: { usedToday: SPENT, usable: USABLE },
+				detection: { ...DETECTION, note: "" },
+			});
+		}
+	});
+
+	it("gives no detection for a reply that is JSON without tones, and never speaks a bare number as JSON", async () => {
+		const { deps } = rig({ fetcher: openai({ text: JSON.stringify({ reply: "Hello there.", crisis: false, tone: [], intensity: 1, about: "gur", wants: "nothing", note: "" }) }) });
+		expect(await read(await handleChat(post(body()), deps))).toMatchObject({ source: "model", reply: "Hello there.", detection: null });
+		const number = rig({ fetcher: openai({ text: "56" }) });
+		expect(await read(await handleChat(post(body()), number.deps))).toMatchObject({ source: "model", reply: "56", detection: null });
+	});
+});
+
 describe("handleChat POST: the request to OpenAI", () => {
 	const KEYS: Record<string, string[]> = {
 		"gpt-5.4-mini-2026-03-17": ["input", "instructions", "max_output_tokens", "model", "reasoning", "safety_identifier", "store", "text"],
-		"gpt-4.1-mini-2025-04-14": ["input", "instructions", "max_output_tokens", "model", "safety_identifier", "store"],
+		"gpt-4.1-mini-2025-04-14": ["input", "instructions", "max_output_tokens", "model", "safety_identifier", "store", "text"],
 	};
 
 	it("sends exactly the allowed fields for each listed model, with the key as a bearer and the user id hashed", async () => {
@@ -813,11 +893,11 @@ describe("handleChat POST: the request to OpenAI", () => {
 			const sent = sentTo(fetcher);
 			expect(Object.keys(sent).sort(), entry.model).toEqual(KEYS[entry.model]);
 			expect(sent.model, entry.model).toBe(entry.model);
-			expect(sent.max_output_tokens, entry.model).toBe(MAX_OUTPUT_TOKENS);
+			expect(sent.max_output_tokens, entry.model).toBe(360);
 			expect(sent.store, entry.model).toBe(false);
 			expect(sent.safety_identifier, entry.model).toBe(createHash("sha256").update(GUR).digest("hex"));
 			if (entry.reasoning) expect(sent.reasoning, entry.model).toEqual({ effort: "none" });
-			if (entry.verbosity) expect(sent.text, entry.model).toEqual({ verbosity: "low" });
+			expect(sent.text, entry.model).toEqual({ ...(entry.verbosity ? { verbosity: "low" } : {}), format: TURN_FORMAT });
 			expect(sent.input, entry.model).toEqual([
 				{ role: "user", content: "I had a long day at work." },
 				{ role: "assistant", content: "That sounds tiring. I'm glad you're home." },

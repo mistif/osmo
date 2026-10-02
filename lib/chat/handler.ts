@@ -6,13 +6,16 @@
 
 import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { validateDetection, type Detection } from "../agent/detection";
 import { bearerToken, requireUser, type ServerUser } from "../server/auth";
 import { CALL_CEILING, dayKey, estimateTokens, fits, MAX_OUTPUT_TOKENS, ownerId, readConfig, sameUser, type Env } from "./allowance";
 import { dayUse, ledgerKey, reservationRow, settlingRow, supabaseLedger, ZERO, type Counts, type LedgerStore, type Reservation } from "./ledger";
 import { callModel, type ModelOutcome, type Parsed } from "./openai";
 import { buildInput, buildInstructions, fitToCeiling } from "./prompt";
 import { checkBody } from "./request";
+import { parseModelOutput } from "./reply-json";
 import { isCrisisFlag, lastFullSentence, speakable } from "./speakable";
+import { TURN_FORMAT } from "./turn-schema";
 import type { ChatAnswer, ChatStatus, FallbackReason, Usage } from "./types";
 
 export type ChatDeps = {
@@ -165,7 +168,7 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 
 	// 10. The one call, with no retries.
 	const safetyId = createHash("sha256").update(user.id).digest("hex");
-	const outcome = await callModel(deps.fetch, config.key, { entry, instructions, input, safetyId, maxOutput: MAX_OUTPUT_TOKENS });
+	const outcome = await callModel(deps.fetch, config.key, { entry, instructions, input, safetyId, maxOutput: MAX_OUTPUT_TOKENS, format: entry.strict ? TURN_FORMAT : undefined });
 
 	// 11. Settle. usedToday is the second read's count with this call's estimate replaced by what was settled.
 	let usedToday = after.used;
@@ -191,7 +194,7 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 	}
 
 	// 13. Answer.
-	return answer({ source: "model", reply: result.reply, usage });
+	return answer({ source: "model", reply: result.reply, usage, detection: result.detection });
 }
 
 // What a call is settled with: OpenAI's own counts when it reported them, and zero for a request it
@@ -211,21 +214,25 @@ function settlement(outcome: ModelOutcome, reservation: Reservation): { counts: 
 }
 
 type Verdict =
-	| { reply: string }
-	| { reason: "error" | "crisis" | "empty"; why: "model" | "refusal" | "content_filter" | "status" | "incomplete" | null };
+	| { reply: string; detection: Detection | null }
+	| { reason: "error" | "crisis" | "empty"; why: "model" | "refusal" | "content_filter" | "status" | "incomplete" | "format" | null };
 
-// Step 12, in this order: the crisis flag read from the raw text (it stands whichever model wrote it), then
-// the served model (a missing one counts as a mismatch), a refusal or content filter, the status, a reply cut
-// off by the output cap cut back to its last full sentence, and last whether anything speakable is left.
+// Step 12, in this order: the crisis flag (the JSON field, the reply, or the old bare word anywhere in the raw
+// text; it stands whichever model wrote it), then the served model (a missing one counts as a mismatch), a
+// refusal or content filter, the status, text that is half a JSON or a fence, a reply cut off by the output cap
+// cut back to its last full sentence, and last whether anything speakable is left. The detection is checked
+// here, so the browser only ever gets a validated one.
 function verdict(parsed: Parsed, model: string): Verdict {
+	const out = parseModelOutput(parsed.text);
 	// A crisis flag stands whichever model wrote it; a mismatch is still logged, and its settling row still stops the day.
-	if (isCrisisFlag(parsed.text)) return { reason: "crisis", why: parsed.model !== model ? "model" : null };
+	if (out?.crisis || isCrisisFlag(parsed.text)) return { reason: "crisis", why: parsed.model !== model ? "model" : null };
 	if (parsed.model !== model) return { reason: "error", why: "model" };
 	if (parsed.refused || (parsed.status === "incomplete" && parsed.incomplete === "content_filter")) {
 		return { reason: "error", why: parsed.refused ? "refusal" : "content_filter" };
 	}
 	if (parsed.status !== "completed" && parsed.status !== "incomplete") return { reason: "error", why: "status" };
 	if (parsed.status === "incomplete" && parsed.incomplete !== "max_output_tokens") return { reason: "error", why: "incomplete" };
-	const reply = speakable(parsed.status === "incomplete" ? lastFullSentence(parsed.text) : parsed.text);
-	return reply === "" ? { reason: "empty", why: null } : { reply };
+	if (out === null) return { reason: "error", why: "format" };
+	const reply = speakable(parsed.status === "incomplete" ? lastFullSentence(out.reply) : out.reply);
+	return reply === "" ? { reason: "empty", why: null } : { reply, detection: validateDetection(out.detection, "model") };
 }
