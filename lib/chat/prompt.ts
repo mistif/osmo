@@ -29,7 +29,7 @@ const SPEECH =
 	"You understand Gur's slang and spelling, but you never copy them.";
 
 // The two ways the model answers: the strict JSON turn, or plain sentences ending in a FEELING line.
-type Format = "json" | "feeling";
+export type Format = "json" | "feeling";
 
 // The rules the code relies on: it does the saving, asks for his name and gives the crisis reply.
 const RULES_BEFORE =
@@ -181,9 +181,10 @@ export function buildInput(body: ChatBody): InputItem[] {
 	];
 }
 
-// Over the per-call ceiling, the oldest history goes first, then the oldest memory. The name fact always stays.
-export function fitToCeiling(body: ChatBody, ceiling: number = CALL_CEILING): ChatBody {
-	const fits = (b: ChatBody) => estimateTokens(buildInstructions(b), buildInput(b)) <= ceiling;
+// Over the per-call ceiling, the oldest history goes first, then the oldest memory. The name fact always stays. It
+// measures the instructions in the format that will be sent, since the FEELING ones are longer.
+export function fitToCeiling(body: ChatBody, format: Format = "json", ceiling: number = CALL_CEILING): ChatBody {
+	const fits = (b: ChatBody) => estimateTokens(buildInstructions(b, format), buildInput(b)) <= ceiling;
 	let fitted = body;
 	while (!fits(fitted) && fitted.history.length > 0) fitted = { ...fitted, history: fitted.history.slice(1) };
 	while (!fits(fitted)) {

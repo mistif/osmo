@@ -115,8 +115,9 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 	if (checked.crisis) return fallback("crisis", null);
 
 	// 4. The prompt, trimmed to the per-call ceiling.
-	const body = fitToCeiling(checked.body);
-	const instructions = buildInstructions(body, entry.strict ? "json" : "feeling");
+	const format = entry.strict ? "json" : "feeling";
+	const body = fitToCeiling(checked.body, format);
+	const instructions = buildInstructions(body, format);
 	const input = buildInput(body);
 	const estimate = estimateTokens(instructions, input);
 

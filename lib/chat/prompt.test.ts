@@ -400,8 +400,21 @@ describe("fitToCeiling", () => {
 		expect(fitted.memory).toEqual([name, ...others.slice(others.length - (fitted.memory.length - 1))]);
 	});
 
+	it("measures the instructions in the format it is given, so a FEELING prompt is never over the ceiling", () => {
+		const feelingCost = (b: ChatBody) => estimateTokens(buildInstructions(b, "feeling"), buildInput(b));
+		const b = body({ history: longHistory });
+		// A ceiling the JSON prompt with the last five lines exactly fits, and the longer FEELING one doesn't.
+		const lastFive = { ...b, history: longHistory.slice(-5) };
+		const ceiling = cost(lastFive);
+		expect(feelingCost(lastFive)).toBeGreaterThan(ceiling);
+		expect(fitToCeiling(b, "json", ceiling).history).toHaveLength(5);
+		const fitted = fitToCeiling(b, "feeling", ceiling);
+		expect(fitted.history).toEqual(longHistory.slice(-4));
+		expect(feelingCost(fitted)).toBeLessThanOrEqual(ceiling);
+	});
+
 	it("keeps the name fact even when nothing else fits", () => {
-		const fitted = fitToCeiling(body(), 1);
+		const fitted = fitToCeiling(body(), "json", 1);
 		expect(fitted.history).toEqual([]);
 		expect(fitted.memory).toEqual([{ key: "name", value: "Gur" }]);
 	});
@@ -409,7 +422,7 @@ describe("fitToCeiling", () => {
 	it("never changes the body it was given", () => {
 		const b = body({ history: longHistory });
 		const before = structuredClone(b);
-		fitToCeiling(b, 1);
+		fitToCeiling(b, "json", 1);
 		expect(b).toEqual(before);
 	});
 });
