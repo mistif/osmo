@@ -23,12 +23,38 @@ describe("parseModelOutput", () => {
 		expect(twice).toMatchObject({ reply: "The word FEELING: is odd." });
 		expect(twice?.detection).toMatchObject({ tone: ["sad"] });
 	});
-	it("never speaks the FEELING JSON, even with text after it", () => {
-		for (const text of ['That sounds hard. FEELING: {"tone":["sad"],"intensity":2} I am here.', 'That sounds hard.\nFEELING: {"tone":["sad"],"intensity":2}\nTake your time.']) {
+	it("never speaks the FEELING JSON, and keeps the speech after it", () => {
+		for (const text of ['That sounds hard. FEELING: {"tone":["sad"],"intensity":2} I am here.', 'That sounds hard.\nFEELING: {"tone":["sad"],"intensity":2}\nI am here.']) {
+			const r = parseModelOutput(text);
+			expect(r?.reply, text).toBe("That sounds hard. I am here.");
+			expect(r?.detection, text).toMatchObject({ tone: ["sad"], intensity: 2 });
+		}
+	});
+	it("reads a FEELING line in any case or markdown, with a fence or a stop after its JSON", () => {
+		for (const text of [
+			'That sounds hard.\nFeeling: {"tone":["sad"],"intensity":2}',
+			'That sounds hard.\nfeeling:{"tone":["sad"],"intensity":2}',
+			'That sounds hard.\n**FEELING:** {"tone":["sad"],"intensity":2}',
+			'That sounds hard.\n**Feeling**: {"tone":["sad"],"intensity":2}.',
+			'That sounds hard.\nFEELING: ```json\n{"tone":["sad"],"intensity":2}\n```',
+			'That sounds hard.\nFEELING: {"tone":["sad"],"intensity":2,"note":"a } and a \\" inside"}',
+		]) {
 			const r = parseModelOutput(text);
 			expect(r?.reply, text).toBe("That sounds hard.");
-			expect(r?.detection, text).toBeNull();
+			expect(r?.detection, text).toMatchObject({ tone: ["sad"], intensity: 2 });
 		}
+	});
+	it("leaves a lower-case feeling that isn't followed by JSON in the reply", () => {
+		expect(parseModelOutput("My feeling: you deserve a rest.")).toEqual({ reply: "My feeling: you deserve a rest.", crisis: false, detection: null });
+	});
+	it("drops only the line of a FEELING with no JSON, and everything after JSON that never closes", () => {
+		expect(parseModelOutput("That sounds hard.\nFEELING: sad\nI am here.")).toEqual({ reply: "That sounds hard. I am here.", crisis: false, detection: null });
+		expect(parseModelOutput('That sounds hard.\nFEELING: {"tone":["sad"], "note":"I am')).toEqual({ reply: "That sounds hard.", crisis: false, detection: null });
+	});
+	it("gives null for half a JSON reply cut off before a FEELING marker", () => {
+		expect(parseModelOutput('{"reply":"That sounds hard. FEELING: x')).toBeNull();
+		expect(parseModelOutput('Sure. {"reply":"Hi"} FEELING: {"tone":["sad"]}')).toBeNull();
+		expect(parseModelOutput('That sounds hard. FEELING: {"tone":["sad"]} {"reply":"Hi"}')).toBeNull();
 	});
 	it("gives null for text that holds a JSON object after other words", () => {
 		expect(parseModelOutput('Here: {"reply":"Hi."}')).toBeNull();
