@@ -146,7 +146,7 @@ describe("a delivery that fails", () => {
 		expect(rows).toHaveLength(1);
 		expect(rows[0]).toMatchObject({ surface: "cron", connector: "reminders", name: "reminder_due", status: "failed" });
 		expect(JSON.stringify(rows[0])).not.toMatch(/secret surprise|Call Dad/);
-		expect(db.tables.reminders[0].status).toBe("sent");
+		expect(db.tables.reminders[0].status).toBe("missed");
 	});
 
 	it("logs a failed row when every send fails, and none when one device got it", async () => {
@@ -155,6 +155,7 @@ describe("a delivery that fails", () => {
 		expect(await (await handleDue(call(), bad.deps)).json()).toEqual({ sent: 0, failed: 1 });
 		expect(bad.db.tables.actions).toHaveLength(1);
 		expect(bad.db.tables.actions[0].status).toBe("failed");
+		expect(bad.db.tables.reminders[0].status).toBe("missed");
 
 		const two = setup({
 			push_subscriptions: [
@@ -168,6 +169,15 @@ describe("a delivery that fails", () => {
 		});
 		expect(await (await handleDue(call(), two.deps)).json()).toEqual({ sent: 1, failed: 0 });
 		expect(two.db.tables.actions ?? []).toHaveLength(0);
+		expect(two.db.tables.reminders[0].status).toBe("sent");
+	});
+
+	it("marks only the undelivered reminders missed when two come due and nothing is subscribed", async () => {
+		const { deps, db } = setup({ push_subscriptions: [], reminders: [due("r1", "Call Dad"), due("r2", "Water the plants"), due("r3", "Later", NOW + 30 * MIN)] });
+		expect(await (await handleDue(call(), deps)).json()).toEqual({ sent: 0, failed: 2 });
+		const rows = Object.fromEntries(db.tables.reminders.map((r) => [r.id, r]));
+		expect([rows.r1.status, rows.r2.status, rows.r3.status]).toEqual(["missed", "missed", "pending"]);
+		expect(db.tables.actions).toHaveLength(2);
 	});
 
 	it("deletes a subscription the push service reports gone", async () => {

@@ -157,8 +157,9 @@ Settings has "Pause everything Osmo can do", which sets `profile.paused`: every 
 - **Disconnect:** revoke at the provider, then delete the row.
 
 ### 6.2 Reminders and notes (no OAuth)
-- Tables `reminders` (`id`, `user_id`, `text`, `due_at`, `status` pending, sent or cancelled, `created_at`, `sent_at`) and `notes` (`id`, `user_id`, `text`, `created_at`). Owner-only RLS; the browser may select and delete (a "Reminders and notes" list in the room, main's); the server inserts.
+- Tables `reminders` (`id`, `user_id`, `text`, `due_at`, `status` pending, sent, cancelled or missed, `created_at`, `sent_at`) and `notes` (`id`, `user_id`, `text`, `created_at`). Owner-only RLS; the browser may select and delete (a "Reminders and notes" list in the room, main's); the server inserts.
 - `note_delete` is tier 3 because it cannot be undone.
+- A reminder that reached no device (no subscription, or every send failed) is marked `missed`, not left `sent`; the Settings list shows it with the word "Missed" before the time, and `reminder_list` reads missed ones first.
 - Caps: 50 reminders and 100 notes created a day; 500 notes in all. No external cost.
 - Time zone: saved silently from the browser (`Intl`) into `profile.timezone` the first time the room opens; without it `reminder_set` says so.
 
@@ -202,7 +203,7 @@ Settings, "Notifications on this device", a button (a tap is required by iOS and
 **Choice: Supabase `pg_cron` plus `pg_net`.** A Vercel cron on the free Hobby plan can run only once a day (unverified: Gur's plan), useless for "remind me in ten minutes"; faster crons need a paid plan. `pg_cron` runs every minute for free inside Supabase. A database function `notify_due()` runs each minute and calls `/api/cron/due` through `pg_net` only if a reminder is due within the next minute, so idle minutes cost no Vercel invocation. The shared secret for that call sits in Supabase Vault (Gur pastes it in the dashboard) and matches `OSMO_CRON_SECRET`. The schedule is part of the migration (main applies it, with Gur's OK). **Unverified:** that `pg_cron` and `pg_net` are available on Gur's Supabase plan.
 
 ### 7.4 `/api/cron/due`
-Rejects anything without the exact secret (constant-time compare; no secret set means 404). It claims due reminders in one statement (`update ... set status='sent' where status='pending' and due_at <= now() returning`), so two overlapping runs cannot both send. For each it sends Web Push to every subscription, and to Telegram when linked and chosen (question 5); a delivery failure is logged as `failed` in `actions`. Once a day it also prunes expired `oauth_states` and actions older than 90 days. If Osmo is paused it sends nothing and leaves reminders pending. Delay is up to about a minute plus the push service's own (iPhone pushes are not guaranteed instant; unverified).
+Rejects anything without the exact secret (constant-time compare; no secret set means 404). It claims due reminders in one statement (`update ... set status='sent' where status='pending' and due_at <= now() returning`), so two overlapping runs cannot both send. For each it sends Web Push to every subscription, and to Telegram when linked and chosen (question 5); a delivery failure is logged as `failed` in `actions`. Once a day it also prunes expired `oauth_states` and actions older than 90 days, and deletes `pending_actions` rows older than a day because they hold quoted text. If Osmo is paused it sends nothing and leaves reminders pending. Delay is up to about a minute plus the push service's own (iPhone pushes are not guaranteed instant; unverified).
 - Fallback: when the room opens it lists reminders that came due while nothing could be delivered, and Osmo mentions them once.
 - A setting "Hide reminder text on the lock screen" sends "A reminder from Osmo" instead of the text (default: show).
 - **Unverified:** that Windows Chrome or Edge show the push with the browser window closed (needs background running, normally on).

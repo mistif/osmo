@@ -34,6 +34,13 @@ const MAX_ENDPOINT = 500;
 const MAX_KEY = 200;
 const MAX_LABEL = 40;
 
+// Only the real push services: a stored endpoint is later fetched by the server, so a stranger's address must never get in.
+const PUSH_HOSTS = ["fcm.googleapis.com", "updates.push.services.mozilla.com"];
+const PUSH_SUFFIXES = [".push.apple.com", ".notify.windows.com", ".push.services.mozilla.com"];
+const pushHost = (host: string) => PUSH_HOSTS.includes(host) || PUSH_SUFFIXES.some((s) => host.endsWith(s));
+const MAX_DEVICES = 10;
+const TOO_MANY = { error: "too_many_devices", message: "Ten devices are already saved. Remove one in Settings first." };
+
 type Sub = { endpoint: string; p256dh: string; auth: string; label: string | null };
 
 const text = (v: unknown, max: number): v is string => typeof v === "string" && v.length > 0 && v.length <= max;
@@ -55,7 +62,7 @@ function readSub(raw: string): Sub | null {
 	} catch {
 		return null;
 	}
-	if (url.protocol !== "https:") return null;
+	if (url.protocol !== "https:" || !pushHost(url.hostname.toLowerCase())) return null;
 	const keys = o.keys;
 	if (keys === null || typeof keys !== "object" || Array.isArray(keys)) return null;
 	const k = keys as Record<string, unknown>;
@@ -79,7 +86,12 @@ export async function pushSubscribe(request: Request, d: PushApiDeps): Promise<R
 	const sub = readSub(raw);
 	if (sub === null) return json(400, { error: "bad_request" });
 	try {
-		const { error } = await d.db().from("push_subscriptions").upsert({ endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth, label: sub.label }, "endpoint");
+		const db = d.db();
+		const have = await db.from("push_subscriptions").select("endpoint");
+		if (have.error || !Array.isArray(have.data)) return json(500, { error: "save_failed" });
+		const known = (have.data as { endpoint: string }[]).some((r) => r.endpoint === sub.endpoint);
+		if (!known && have.data.length >= MAX_DEVICES) return json(409, TOO_MANY); // a saved device may still renew
+		const { error } = await db.from("push_subscriptions").upsert({ endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth, label: sub.label }, "endpoint");
 		if (error) return json(500, { error: "save_failed" });
 	} catch {
 		return json(500, { error: "save_failed" });

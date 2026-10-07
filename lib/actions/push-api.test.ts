@@ -25,7 +25,7 @@ const req = (method: string, body?: unknown, token: string | null = "good") =>
 		headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
 		body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body),
 	});
-const valid = { endpoint: "https://push.example/abc", keys: { p256dh: "pp", auth: "aa" }, label: "iPhone" };
+const valid = { endpoint: "https://fcm.googleapis.com/fcm/send/abc", keys: { p256dh: "pp", auth: "aa" }, label: "iPhone" };
 
 describe("pushKey", () => {
 	it("is 404 when OSMO_VAPID_PUBLIC is unset, whoever asks", async () => {
@@ -89,6 +89,53 @@ describe("pushSubscribe", () => {
 	it("is 405 for GET", async () => {
 		const { deps } = setup();
 		expect((await pushSubscribe(req("GET"), deps)).status).toBe(405);
+	});
+
+	it.each([
+		"https://fcm.googleapis.com/fcm/send/x",
+		"https://web.push.apple.com/x",
+		"https://dm3p.notify.windows.com/x",
+		"https://updates.push.services.mozilla.com/wpush/v2/x",
+		"https://eu.push.services.mozilla.com/x",
+	])("accepts the push service %s", async (endpoint) => {
+		const { deps, db } = setup();
+		expect((await pushSubscribe(req("POST", { ...valid, endpoint }), deps)).status).toBe(200);
+		expect(db.tables.push_subscriptions).toHaveLength(1);
+	});
+
+	it.each([
+		"https://push.example/abc",
+		"https://evil.example/fcm.googleapis.com",
+		"https://fcm.googleapis.com.evil.example/x",
+		"https://evilpush.apple.com.example/x",
+		"https://notpush.apple.com/x",
+		"https://push.apple.com/x",
+		"https://xnotify.windows.com/x",
+		"https://example.com/updates.push.services.mozilla.com",
+		"https://127.0.0.1/x",
+	])("answers 400 for the host of %s, and saves nothing", async (endpoint) => {
+		const { deps, db } = setup();
+		expect((await pushSubscribe(req("POST", { ...valid, endpoint }), deps)).status).toBe(400);
+		expect(db.tables.push_subscriptions ?? []).toHaveLength(0);
+	});
+
+	it("allows ten devices, and answers the 11th with 409 and a plain line", async () => {
+		const ten = Array.from({ length: 10 }, (_, i) => ({ id: String(i), endpoint: `https://fcm.googleapis.com/fcm/send/${i}`, p256dh: "p", auth: "a" }));
+		const { deps, db } = setup({}, { push_subscriptions: ten.slice(0, 9) });
+		expect((await pushSubscribe(req("POST", valid), deps)).status).toBe(200);
+		expect(db.tables.push_subscriptions).toHaveLength(10);
+		const res = await pushSubscribe(req("POST", { ...valid, endpoint: "https://fcm.googleapis.com/fcm/send/eleven" }), deps);
+		expect(res.status).toBe(409);
+		expect(res.headers.get("cache-control")).toBe("no-store");
+		expect(await res.json()).toEqual({ error: "too_many_devices", message: "Ten devices are already saved. Remove one in Settings first." });
+		expect(db.tables.push_subscriptions).toHaveLength(10);
+	});
+
+	it("still lets a device that is already saved renew at the cap", async () => {
+		const ten = Array.from({ length: 10 }, (_, i) => ({ id: String(i), endpoint: `https://fcm.googleapis.com/fcm/send/${i}`, p256dh: "p", auth: "a" }));
+		const { deps, db } = setup({}, { push_subscriptions: ten });
+		expect((await pushSubscribe(req("POST", { ...valid, endpoint: ten[3].endpoint, label: "renewed" }), deps)).status).toBe(200);
+		expect(db.tables.push_subscriptions).toHaveLength(10);
 	});
 });
 

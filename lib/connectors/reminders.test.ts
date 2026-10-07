@@ -155,6 +155,30 @@ describe("reminder_list", () => {
 		const one = (await reminderList.run({}, rc(fakeDb({ reminders: rows.slice(0, 1) })))) as any;
 		expect(one.say.startsWith("You have 1 reminder waiting. ")).toBe(true);
 	});
+	it("names a missed reminder first, then the pending ones", async () => {
+		const db = fakeDb({
+			reminders: [
+				{ id: "1", text: "pending one", due_at: "2026-10-09T07:00:00.000Z", status: "pending" },
+				{ id: "2", text: "missed one", due_at: "2026-10-08T07:00:00.000Z", status: "missed" },
+				{ id: "3", text: "sent one", due_at: "2026-10-07T07:00:00.000Z", status: "sent" },
+			],
+		});
+		const out = (await reminderList.run({}, rc(db))) as any;
+		expect(out.ok).toBe(true);
+		expect(out.say.startsWith("One reminder was missed: Thursday 8 October at 09:00: missed one. You have 1 reminder waiting. ")).toBe(true);
+		expect(out.say).toContain("Friday 9 October at 09:00: pending one.");
+		expect(out.say).not.toContain("sent one");
+		expect(out.result).toBe(out.say);
+	});
+	it("says a missed reminder even when none are pending, and counts several", async () => {
+		const one = (await reminderList.run({}, rc(fakeDb({ reminders: [{ id: "2", text: "missed one", due_at: "2026-10-08T07:00:00.000Z", status: "missed" }] })))) as any;
+		expect(one.say).toBe("One reminder was missed: Thursday 8 October at 09:00: missed one. You have no reminders waiting.");
+		const two = (await reminderList.run({}, rc(fakeDb({ reminders: [
+			{ id: "1", text: "a", due_at: "2026-10-08T07:00:00.000Z", status: "missed" },
+			{ id: "2", text: "b", due_at: "2026-10-09T07:00:00.000Z", status: "missed" },
+		] })))) as any;
+		expect(two.say.startsWith("2 reminders were missed: Thursday 8 October at 09:00: a. Friday 9 October at 09:00: b. ")).toBe(true);
+	});
 	it("says it could not read them when the database says no", async () => {
 		const db = fakeDb();
 		const chain: any = { eq: () => chain, order: () => chain, limit: () => chain, then: (ok: any) => Promise.resolve({ data: null, error: { message: "x" } }).then(ok) };

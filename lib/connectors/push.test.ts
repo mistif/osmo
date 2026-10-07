@@ -70,7 +70,7 @@ describe("vapidConfigured and webPushSender", () => {
 		const send = webPushSender(env);
 		await send({ endpoint: "https://push.example/1", keys: { p256dh: "p", auth: "a" } }, '{"title":"Osmo"}');
 		expect(setVapidDetails).toHaveBeenCalledWith("mailto:a@example.com", "pub", "priv");
-		expect(sendNotification).toHaveBeenCalledWith({ endpoint: "https://push.example/1", keys: { p256dh: "p", auth: "a" } }, '{"title":"Osmo"}');
+		expect(sendNotification).toHaveBeenCalledWith({ endpoint: "https://push.example/1", keys: { p256dh: "p", auth: "a" } }, '{"title":"Osmo"}', { timeout: 5000, TTL: 3600 });
 		vi.doUnmock("web-push");
 	});
 

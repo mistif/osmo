@@ -110,11 +110,14 @@ describe("weather", () => {
 		expect(db.tables.actions[0]).toMatchObject({ status: "done", summary: "Checked the weather" });
 	});
 	it("an unknown city is a plain line and no weather request", async () => {
-		const { deps, fetch } = setup();
+		const { db, deps, fetch } = setup();
 		fetch.mockImplementationOnce(async () => new Response(JSON.stringify({}), { status: 200 }));
 		const out = await runAction(propose("weather_now", { place: "Zzyzx" }), ctx, deps);
 		expect(out).toEqual({ kind: "failed", line: "I could not find a place called Zzyzx." });
 		expect(fetch).toHaveBeenCalledTimes(1);
+		expect(db.tables.actions).toHaveLength(1);
+		expect(db.tables.actions[0]).toMatchObject({ status: "failed", summary: "Check the weather" });
+		expect(JSON.stringify(db.tables.actions)).not.toContain("Zzyzx");
 	});
 	it("stops at 100 a day, counting only the last 24 hours", async () => {
 		const { deps, fetch } = setup({ actions: history(100, "weather_forecast", NOW - 3_600_000) });

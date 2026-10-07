@@ -18,7 +18,7 @@ export function RemindersNotes() {
 
 	async function refresh() {
 		const [r, n] = await Promise.all([
-			supabase.from("reminders").select("id,text,due_at").eq("status", "pending").order("due_at"),
+			supabase.from("reminders").select("id,text,due_at,status").in("status", ["pending", "missed"]).order("due_at"),
 			supabase.from("notes").select("id,text,created_at").order("created_at", { ascending: false }),
 		]);
 		if (r.error || n.error) {
@@ -53,13 +53,13 @@ export function RemindersNotes() {
 			{reminders === null && notes === null && <p className={styles.note}>Checking...</p>}
 			{reminders && (
 				<>
-					<p className={styles.note}>Reminders waiting</p>
+					<p className={styles.note}>Reminders waiting or missed</p>
 					{reminders.length === 0 && !error && <p className={styles.note}>None waiting.</p>}
 					{reminders.map((r) => (
 						<div key={r.id} className={styles.line}>
 							<div>
 								{r.text}
-								<p className={styles.note}>{dueLine(r.due_at, now)}</p>
+								<p className={styles.note}>{r.missed ? "Missed " : ""}{dueLine(r.due_at, now)}</p>
 							</div>
 							<div className={styles.actions}>
 								<button type="button" className={styles.action} onClick={() => void remove("reminders", r.id)}>

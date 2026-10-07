@@ -9,13 +9,16 @@ export type PushResult = { sent: number; failed: number };
 
 export const vapidConfigured = (env: Env) => Boolean(env.OSMO_VAPID_PUBLIC && env.OSMO_VAPID_PRIVATE && env.OSMO_VAPID_SUBJECT);
 
+const SEND_TIMEOUT_MS = 5000; // a push service that does not answer must not hold the cron run
+const TTL_SECONDS = 3600; // a reminder an hour late is no longer worth showing
+
 // The real sender. Throws "push_unconfigured" when a VAPID name is missing, before the library is loaded.
 export function webPushSender(env: Env): Sender {
 	return async (subscription, payload) => {
 		if (!vapidConfigured(env)) throw new Error("push_unconfigured");
 		const webpush = (await import("web-push")).default;
 		webpush.setVapidDetails(env.OSMO_VAPID_SUBJECT!, env.OSMO_VAPID_PUBLIC!, env.OSMO_VAPID_PRIVATE!);
-		return webpush.sendNotification({ endpoint: subscription.endpoint, keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth } }, payload);
+		return webpush.sendNotification({ endpoint: subscription.endpoint, keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth } }, payload, { timeout: SEND_TIMEOUT_MS, TTL: TTL_SECONDS });
 	};
 }
 

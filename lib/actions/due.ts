@@ -85,6 +85,12 @@ export async function handleDue(request: Request, d: DueDeps): Promise<Response>
 				if (out.sent > 0) sent++;
 				else {
 					failed++;
+					// Reached no device: say so on the row, so Settings and reminder_list can show it was missed.
+					try {
+						await db.from("reminders").update({ status: "missed" }).eq("id", r.id);
+					} catch {
+						// the log row below still records it
+					}
 					// No text in the log: only that a reminder could not be delivered.
 					await writeAction(db, {
 						surface: "cron",

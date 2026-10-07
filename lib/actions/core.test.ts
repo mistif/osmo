@@ -240,11 +240,12 @@ describe("execute", () => {
 		expect(db.tables.actions[0]).toMatchObject({ status: "done", summary: "Add a note." });
 	});
 
-	it("logs the say, not logLine, for a failed run", async () => {
+	it("logs the def's describe, not the say or logLine, for a failed run", async () => {
 		const db = fakeDb();
-		const d = { ...def(async () => ({ ok: false as const, say: "No such thing." })), logLine: () => "Added a note" } as Def;
-		await execute(d, {}, rc(db), logger(db, d, "room"));
-		expect(db.tables.actions[0]).toMatchObject({ status: "failed", summary: "No such thing." });
+		const d = { ...def(async () => ({ ok: false as const, say: "No such thing: my secret." })), logLine: () => "Added a note" } as Def;
+		expect(await execute(d, {}, rc(db), logger(db, d, "room"))).toEqual({ kind: "failed", line: "No such thing: my secret." });
+		expect(db.tables.actions[0]).toMatchObject({ status: "failed", summary: "Add a note.", error: "run" });
+		expect(JSON.stringify(db.tables.actions[0])).not.toContain("secret");
 	});
 
 	it("passes a result on for call 2", async () => {

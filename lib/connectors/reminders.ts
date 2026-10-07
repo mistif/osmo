@@ -60,13 +60,20 @@ export const reminderList: Def = {
 		const { data, error } = await c.db.from("reminders").select("id,text,due_at").eq("status", "pending").order("due_at", { ascending: true }).limit(LISTED);
 		if (error || !Array.isArray(data)) return { ok: false, say: "I could not read your reminders just now." };
 		const rows = data as unknown as Reminder[];
-		if (rows.length === 0) return { ok: true, say: "You have no reminders waiting.", result: null };
+		const tz = c.timezone ?? "UTC";
+		// Reminders that reached no device come first. If they cannot be read, the pending ones are still said.
+		const lost = await c.db.from("reminders").select("id,text,due_at").eq("status", "missed").order("due_at", { ascending: true }).limit(LISTED);
+		const gone = !lost.error && Array.isArray(lost.data) ? (lost.data as unknown as Reminder[]) : [];
+		const missed = gone.length === 0 ? "" : `${gone.length === 1 ? "One reminder was" : `${gone.length} reminders were`} missed: ${gone.map((r) => `${speak(Date.parse(r.due_at), tz)}: ${r.text}.`).join(" ")} `;
+		if (rows.length === 0) {
+			const say = `${missed}You have no reminders waiting.`;
+			return { ok: true, say, result: missed ? say : null };
+		}
 		// The true number waiting (a head count, no rows); if it cannot be read, the rows in hand are all that is said.
 		const head = await c.db.from("reminders").select("id", { count: "exact", head: true }).eq("status", "pending"),
 			total = head.error || typeof head.count !== "number" ? rows.length : Math.max(head.count, rows.length);
-		const tz = c.timezone ?? "UTC",
-			list = rows.map((r) => `${speak(Date.parse(r.due_at), tz)}: ${r.text}.`).join(" "),
-			say = total > rows.length ? `You have ${total} reminders waiting; here are the next ${rows.length}. ${list}` : `You have ${total} ${total === 1 ? "reminder" : "reminders"} waiting. ${list}`;
+		const list = rows.map((r) => `${speak(Date.parse(r.due_at), tz)}: ${r.text}.`).join(" "),
+			say = missed + (total > rows.length ? `You have ${total} reminders waiting; here are the next ${rows.length}. ${list}` : `You have ${total} ${total === 1 ? "reminder" : "reminders"} waiting. ${list}`);
 		return { ok: true, say, result: say };
 	},
 };

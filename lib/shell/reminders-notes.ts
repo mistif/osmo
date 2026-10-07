@@ -1,5 +1,5 @@
 // The "Reminders and notes" lists in Settings: rows from the database, made safe to show.
-export type ReminderRow = { id: string; text: string; due_at: string };
+export type ReminderRow = { id: string; text: string; due_at: string; missed: boolean };
 export type NoteRow = { id: string; text: string; created_at: string };
 
 const validDate = (v: unknown): v is string => typeof v === "string" && !Number.isNaN(new Date(v).getTime());
@@ -8,7 +8,7 @@ export function sanitizeReminder(raw: unknown): ReminderRow | null {
 	if (typeof raw !== "object" || raw === null) return null;
 	const r = raw as Record<string, unknown>;
 	if (typeof r.id !== "string" || typeof r.text !== "string" || !validDate(r.due_at)) return null;
-	return { id: r.id, text: r.text, due_at: r.due_at };
+	return { id: r.id, text: r.text, due_at: r.due_at, missed: r.status === "missed" };
 }
 
 export function sanitizeNote(raw: unknown): NoteRow | null {

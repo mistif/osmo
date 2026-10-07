@@ -5,7 +5,8 @@ const NOW = Date.parse("2026-10-07T12:00:00Z");
 
 describe("sanitizeReminder and sanitizeNote", () => {
 	it("keep a well-formed row and drop anything else", () => {
-		expect(sanitizeReminder({ id: "r1", text: "Call Dad", due_at: "2026-10-08T09:00:00Z", extra: 1 })).toEqual({ id: "r1", text: "Call Dad", due_at: "2026-10-08T09:00:00Z" });
+		expect(sanitizeReminder({ id: "r1", text: "Call Dad", due_at: "2026-10-08T09:00:00Z", extra: 1 })).toEqual({ id: "r1", text: "Call Dad", due_at: "2026-10-08T09:00:00Z", missed: false });
+		expect(sanitizeReminder({ id: "r1", text: "Call Dad", due_at: "2026-10-08T09:00:00Z", status: "missed" })).toEqual({ id: "r1", text: "Call Dad", due_at: "2026-10-08T09:00:00Z", missed: true });
 		expect(sanitizeReminder({ id: 5, text: "x", due_at: "2026-10-08T09:00:00Z" })).toBeNull();
 		expect(sanitizeReminder({ id: "r1", text: "x", due_at: "not a date" })).toBeNull();
 		expect(sanitizeReminder(null)).toBeNull();

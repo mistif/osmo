@@ -290,7 +290,7 @@ describe("the waiting log row is resolved", () => {
 		await hold(db);
 		await answerPending(deps, "yes", "typed", NOW);
 		expect(db.tables.actions).toHaveLength(1);
-		expect(db.tables.actions[0]).toMatchObject({ status: "failed", summary: "No luck.", error: "run" });
+		expect(db.tables.actions[0]).toMatchObject({ status: "failed", summary: "Do the thing", error: "run" });
 	});
 
 	it("to cancelled on no", async () => {

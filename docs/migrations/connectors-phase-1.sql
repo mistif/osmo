@@ -6,7 +6,7 @@ create table public.reminders (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   text text not null check (char_length(text) between 1 and 200), due_at timestamptz not null,
-  status text not null default 'pending' check (status in ('pending','sent','cancelled')),
+  status text not null default 'pending' check (status in ('pending','sent','cancelled','missed')),
   created_at timestamptz not null default now(), sent_at timestamptz);
 create index reminders_due on public.reminders (status, due_at);
 create table public.notes (
