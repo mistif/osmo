@@ -35,7 +35,7 @@ import { CRISIS_REPLY, isCrisis } from "@/lib/agent/safety";
 import { defaultState, type AgentState } from "@/lib/agent/state";
 import { learnFact, learnSlang, type MemoryFact } from "@/lib/facts";
 import { answerFromMemory, calculateMath, findUnknownTopic, isBuiltInTopic } from "@/lib/chat/answers";
-import { ASK_TIMEOUT_MS, askForReply, askStatus, nextUsage } from "@/lib/chat/ask";
+import { askForReply, askStatus, nextUsage } from "@/lib/chat/ask";
 import { chatBody } from "@/lib/chat/body";
 import { detectionOf, keptTurn, pickBranch, quietEffects, whileWaiting, writerFor, type QuietPlan } from "@/lib/chat/branch";
 import type { ChatStatus } from "@/lib/chat/types";
@@ -60,6 +60,9 @@ type ChatMessage = {
 type Waiting = { id: number; on: "model" | "lookup"; controller: AbortController | null; quiet: boolean; line: ChatMessage };
 
 const font = Bricolage_Grotesque({ subsets: ["latin"], display: "swap" });
+
+// How long a turn waits for the session before his own words answer; the model call keeps its own 15 s.
+const SESSION_TIMEOUT_MS = 3_000;
 
 export default function AgentChat() {
 	const [messages, setMessages] = useState<ChatMessage[]>([
@@ -556,10 +559,11 @@ export default function AgentChat() {
 			setMessages((current) => [...current, userMessage]);
 			const controller = new AbortController();
 			startWait("model", controller, async (wait) => {
-				// Reading the session can refresh the token over the network, with no limit of its own.
+				// Reading the session can refresh the token over the network, with no limit of its own. A slow one falls back
+				// to his own words fast, so the composer never waits the session's limit and then the model's on top.
 				const signedIn = await Promise.race([
 					ensureSession().catch(() => null),
-					new Promise<null>((resolve) => setTimeout(() => resolve(null), ASK_TIMEOUT_MS)),
+					new Promise<null>((resolve) => setTimeout(() => resolve(null), SESSION_TIMEOUT_MS)),
 				]);
 				const body = signedIn
 					? chatBody({ text, messages, memory: view.memory, facts: prepared.facts, state: prepared.state, math: branch === "math" ? mathResult : null })

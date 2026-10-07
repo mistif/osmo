@@ -1,0 +1,6 @@
+/* Dev page only: at phone width the toolbar wraps to two rows, so Osmo and the heard line sit lower to clear it. */
+@media (max-width: 480px) {
+	div.lower {
+		top: 56%;
+	}
+}

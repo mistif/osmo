@@ -7,6 +7,7 @@ import { Mic } from "lucide-react";
 import { Bricolage_Grotesque } from "next/font/google";
 import { notFound } from "next/navigation";
 import styles from "../../assistant.module.css";
+import dev from "./dev.module.css";
 import { Figure } from "@/components/osmo/figure";
 import { useHeartMotion } from "@/components/osmo/use-heart-motion";
 import { moodTheme } from "@/lib/agent/mood-theme";
@@ -73,7 +74,7 @@ export default function FigurePage() {
 				<span className={`${styles.orb} ${styles.orbA}`} />
 				<span className={`${styles.orb} ${styles.orbB}`} />
 				<Figure
-					className={styles.figure}
+					className={`${styles.figure} ${dev.lower}`}
 					said={chars === null ? currentSentence(LINE) : currentSentence(LINE.slice(0, chars))}
 					heard={listening ? "Osmo, what did I say yesterday" : null}
 				/>
