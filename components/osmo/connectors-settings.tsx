@@ -7,8 +7,8 @@ import { geocode, levelDescription, loadProfileRow, roundCoord, saveProfile, typ
 import { enablePush, INSTALL_HINT, pushState, type PushState } from "@/lib/shell/push-client";
 import styles from "./panels.module.css";
 
-const UNREACHABLE = "I can't reach my memory right now. Try again in a moment.";
-const SAVE_FAILED = "Couldn't save that. Try again.";
+const UNREACHABLE = "I cannot reach my memory right now. Try again in a moment.";
+const SAVE_FAILED = "I could not save that. Try again.";
 const CONNECTORS = [
 	{ id: "reminders", name: "Reminders" },
 	{ id: "notes", name: "Notes" },
@@ -200,7 +200,7 @@ export function ConnectorsSettings() {
 		<>
 			<section className={styles.section}>
 				<h3 className={styles.sectionTitle}>What I may do</h3>
-				<Switch label="Pause everything Osmo can do" on={row.paused} onChange={(paused) => void save({ paused }, (r) => ({ ...r, paused }))} />
+				<Switch label="Pause everything I can do" on={row.paused} onChange={(paused) => void save({ paused }, (r) => ({ ...r, paused }))} />
 				<p className={styles.note}>
 					{row.paused ? "I am paused. I will not act on anything, and no reminder will be sent, until you turn this off." : "While this is on, I do nothing but talk, and no reminder is sent."}
 				</p>
@@ -230,7 +230,7 @@ export function ConnectorsSettings() {
 						</div>
 					);
 				})}
-				<p className={styles.note}>When you use a connector, what it returns may be sent to OpenAI to write my answer.</p>
+				<p className={styles.note}>When I use reminders, notes or the weather, what they return may be sent to OpenAI to write my answer.</p>
 				{saveError && <p className={styles.error} role="alert">{saveError}</p>}
 			</section>
 

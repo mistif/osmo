@@ -6,7 +6,7 @@ import type { MemoryFact } from "@/lib/facts";
 import { cleanEditedValue, GROUP_TITLES, groupMemory, type MemoryGroup, type MemoryLine } from "@/lib/shell/memory-lines";
 import styles from "./panels.module.css";
 
-const SAVE_FAILED = "Couldn't save that. Try again.";
+const SAVE_FAILED = "I could not save that. Try again.";
 const GROUPS: MemoryGroup[] = ["about", "words", "explained"];
 
 // onChange is setMemory itself: functional updates touch only the edited/forgotten key, so a fact

@@ -94,7 +94,7 @@ export function LockScreen() {
 							Unlock with fingerprint or face
 						</button>
 						<button type="button" className={styles.quiet} onClick={() => { setError(null); setStep("password"); }}>
-							This device doesn&apos;t have my passkey
+							This device does not have my passkey
 						</button>
 					</>
 				)}

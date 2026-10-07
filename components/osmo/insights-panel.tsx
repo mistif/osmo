@@ -12,8 +12,8 @@ import { describeAction, sanitizeActionRow, type ActionRow } from "@/lib/shell/w
 import panel from "./panels.module.css";
 import styles from "./insights.module.css";
 
-const UNREACHABLE = "I can't reach my memory right now. Try again in a moment.";
-const FORGET_FAILED = "Couldn't forget that. Try again.";
+const UNREACHABLE = "I cannot reach my memory right now. Try again in a moment.";
+const FORGET_FAILED = "I could not forget that. Try again.";
 
 export function InsightsPanel({ agent }: { agent: AgentState }) {
 	const [rows, setRows] = useState<MoodDay[] | null>(null);
@@ -73,7 +73,7 @@ export function InsightsPanel({ agent }: { agent: AgentState }) {
 		rows === null || error
 			? null
 			: firstDay === null
-				? "I'll start keeping track of how I feel from today."
+				? "I will start keeping track of how I feel from today."
 				: firstDay > series[0].day
 					? `I started keeping track on ${spokenDate(`${firstDay}T12:00:00`, now)}.`
 					: null;
@@ -133,7 +133,7 @@ export function InsightsPanel({ agent }: { agent: AgentState }) {
 					<p className={panel.note} role="status">
 						{chosen.strongest
 							? `${dayName(chosen.day)}: ${strongestPhrase(chosen.strongest)}.`
-							: `${dayName(chosen.day)}: we didn't talk.`}
+							: `${dayName(chosen.day)}: we did not talk.`}
 					</p>
 				)}
 				{started && <p className={panel.note}>{started}</p>}

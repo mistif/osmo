@@ -19,10 +19,10 @@ import { VoiceSettings } from "./voice-settings";
 import type { VoiceControls } from "./use-voice";
 import styles from "./panels.module.css";
 
-const UNREACHABLE = "I can't reach my memory right now. Try again in a moment.";
-const SAVE_FAILED = "Couldn't save that. Try again.";
+const UNREACHABLE = "I cannot reach my memory right now. Try again in a moment.";
+const SAVE_FAILED = "I could not save that. Try again.";
 // Gur is already in Settings, so this skips the lock screen's "try again from Settings".
-const PASSKEY_FAILED_HERE = "This device couldn't save a passkey. Try again.";
+const PASSKEY_FAILED_HERE = "This device could not save a passkey. Try again.";
 
 export function SettingsPanel({ voice, aiUsage }: { voice: VoiceControls; aiUsage?: ChatStatus | null }) {
 	const router = useRouter();
@@ -80,7 +80,7 @@ export function SettingsPanel({ voice, aiUsage }: { voice: VoiceControls; aiUsag
 	async function lock() {
 		const failed = await lockOsmo();
 		if (failed) {
-			setLockError("Couldn't lock this device. Check your connection and try again.");
+			setLockError("I could not lock this device. Check your connection and try again.");
 			return;
 		}
 		router.replace("/lock");
@@ -167,7 +167,7 @@ export function SettingsPanel({ voice, aiUsage }: { voice: VoiceControls; aiUsag
 
 			<section className={styles.section}>
 				<h3 className={styles.sectionTitle}>Lock Osmo</h3>
-				<p className={styles.note}>Signs this device out. You&apos;ll unlock again with your fingerprint or face.</p>
+				<p className={styles.note}>Signs this device out. You will unlock again with your fingerprint or face.</p>
 				<button type="button" className={styles.action} onClick={() => void lock()}>
 					Lock Osmo
 				</button>

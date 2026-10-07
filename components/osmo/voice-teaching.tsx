@@ -13,8 +13,8 @@ import { saveVoiceprint } from "@/lib/voice/web/voiceprints";
 import styles from "./panels.module.css";
 
 const TOO_QUIET = "That was too quiet to learn from. Try again somewhere quieter.";
-const READ_AGAIN = "That one didn't sound like the others. Please read it again.";
-const SAVE_FAILED = "Couldn't save your voice. Try again.";
+const READ_AGAIN = "That one did not sound like the others. Please read it again.";
+const SAVE_FAILED = "I could not save your voice. Try again.";
 
 type Phase = "ready" | "recording" | "learning" | "saving" | "failed";
 
@@ -130,7 +130,7 @@ export function VoiceTeaching({ onDone }: { onDone(saved: boolean): void }) {
 			{phase === "recording" && (
 				<>
 					<p className={styles.note} role="status">
-						Listening. I&apos;ll stop when you pause.
+						Listening. I will stop when you pause.
 					</p>
 					<button type="button" className={styles.action} onClick={() => finishRef.current?.()}>
 						Done

@@ -5,8 +5,8 @@ import { supabase } from "@/lib/supabase";
 import { dueLine, sanitizeNote, sanitizeReminder, type NoteRow, type ReminderRow } from "@/lib/shell/reminders-notes";
 import styles from "./panels.module.css";
 
-const UNREACHABLE = "I can't reach my memory right now. Try again in a moment.";
-const REMOVE_FAILED = "Couldn't remove that. Try again.";
+const UNREACHABLE = "I cannot reach my memory right now. Try again in a moment.";
+const REMOVE_FAILED = "I could not remove that. Try again.";
 
 // Two short lists, each row with a Remove button. The browser may only read and delete these rows (RLS).
 export function RemindersNotes() {
