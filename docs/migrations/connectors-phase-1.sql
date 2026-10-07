@@ -1,5 +1,4 @@
--- Connectors phase 1a, the tables (spec 2026-10-07-osmo-connectors-design.md sections 6.2, 7.1, 10). NOT YET APPLIED: main applies it with Gur's OK
--- (apply_migration, name connectors_phase1_tables); this header is then changed to say "applied on <date>".
+-- Connectors phase 1a, the tables (spec 2026-10-07-osmo-connectors-design.md sections 6.2, 7.1, 10). Applied on 2026-10-07 as migration connectors_phase1_tables.
 -- The browser may only read and delete its own rows; the server (service role) inserts and updates. push_subscriptions keys are never readable by the browser.
 
 create table public.reminders (
