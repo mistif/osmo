@@ -31,3 +31,15 @@ export async function writeAction(db: OwnerDb, row: LogRow): Promise<number | nu
 		return null;
 	}
 }
+
+// Settles a log row that was written as "waiting" (spec 5). Update by id, the owner pinned by the db. It never throws.
+export async function resolveLog(db: OwnerDb, actionId: number, status: ActionStatus, error?: string): Promise<void> {
+	try {
+		await db
+			.from("actions")
+			.update({ status, ...(error === undefined ? {} : { error: error.slice(0, 200) }) })
+			.eq("id", actionId);
+	} catch {
+		// the daily sweep settles it
+	}
+}

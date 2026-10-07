@@ -100,7 +100,8 @@ describe("answerPending", () => {
 		expect(r).toEqual({ handled: true, reply: "Deleted." });
 		expect(runs).toEqual([{ id: 7 }]);
 		expect(statuses(db)).toEqual(["done"]);
-		expect(db.tables.actions.map((r) => r.status)).toEqual(["waiting", "done"]);
+		expect(db.tables.actions.map((r) => r.status)).toEqual(["done", "done"]);
+		expect(db.tables.actions[0]).toMatchObject({ summary: "Do it?", error: null });
 		expect(db.tables.actions[1]).toMatchObject({ surface: "confirm", name: "del", status: "done", pending_id: id });
 	});
 
@@ -250,5 +251,119 @@ describe("cancelAllPending", () => {
 		expect(statuses(db)).toEqual(["cancelled"]);
 		expect(await answerPending(deps, "yes", "typed", NOW)).toEqual({ handled: false });
 		expect(await answerPending(deps, "no", "typed", NOW)).toEqual({ handled: false });
+	});
+});
+
+const logs = (db: FakeDb) => db.tables.actions.map((r) => r.status);
+
+describe("the waiting log row is resolved", () => {
+	it("to done when the yes runs", async () => {
+		const { db, deps } = setup();
+		await hold(db);
+		await answerPending(deps, "yes", "typed", NOW);
+		expect(db.tables.actions[0]).toMatchObject({ status: "done", summary: "Do it?" });
+	});
+
+	it("to failed when the run fails", async () => {
+		const { db, deps } = setup();
+		deps.registry = [{ ...del, run: async () => ({ ok: false, say: "No luck." }) }];
+		await hold(db);
+		await answerPending(deps, "yes", "typed", NOW);
+		expect(db.tables.actions[0]).toMatchObject({ status: "failed", summary: "Do it?" });
+	});
+
+	it("to cancelled on no", async () => {
+		const { db, deps } = setup();
+		await hold(db);
+		await answerPending(deps, "no", "typed", NOW);
+		expect(logs(db)).toEqual(["cancelled"]);
+	});
+
+	it("to cancelled when Pause blocks the yes, the refusal stays its own row", async () => {
+		const { db, deps } = setup();
+		await hold(db);
+		db.tables.profile[0].paused = true;
+		await answerPending(deps, "yes", "typed", NOW);
+		expect(logs(db)).toEqual(["cancelled", "refused"]);
+	});
+
+	it("to expired when the answer comes late", async () => {
+		const { db, deps } = setup();
+		await hold(db);
+		await answerPending(deps, "yes", "typed", NOW + TTL_MS + 1000);
+		expect(statuses(db)).toEqual(["expired"]);
+		expect(logs(db)).toEqual(["expired"]);
+	});
+
+	it("to cancelled when a newer one replaces it", async () => {
+		const { db } = setup();
+		await hold(db);
+		await hold(db);
+		expect(logs(db)).toEqual(["cancelled", "waiting"]);
+	});
+
+	it("to cancelled by cancelAllPending", async () => {
+		const { db } = setup();
+		await hold(db);
+		await cancelAllPending(db);
+		expect(logs(db)).toEqual(["cancelled"]);
+	});
+
+	it("to failed with error exception when the run path throws", async () => {
+		const { db, deps } = setup();
+		await hold(db);
+		deps.db = () => ({ owner: db.owner, from: (t: string) => (t === "profile" ? ((): never => { throw new Error("down"); })() : db.from(t)) }) as unknown as OwnerDb;
+		await answerPending(deps, "yes", "typed", NOW);
+		expect(db.tables.actions).toHaveLength(1);
+		expect(db.tables.actions[0]).toMatchObject({ status: "failed", error: "exception", summary: "Do it?" });
+	});
+
+	it("with a new failed row when the pending row has no log row and the run path throws", async () => {
+		const { db, deps } = setup();
+		const id = await hold(db);
+		db.tables.actions.length = 0;
+		db.tables.pending_actions.find((r) => r.id === id)!.action_id = null;
+		deps.db = () => ({ owner: db.owner, from: (t: string) => (t === "profile" ? ((): never => { throw new Error("down"); })() : db.from(t)) }) as unknown as OwnerDb;
+		await answerPending(deps, "yes", "typed", NOW);
+		expect(db.tables.actions).toHaveLength(1);
+		expect(db.tables.actions[0]).toMatchObject({ status: "failed", error: "exception", name: "del", surface: "confirm", pending_id: id });
+	});
+});
+
+describe("finish when the pending update fails", () => {
+	it("retries once and then gives up quietly", async () => {
+		const { db, deps } = setup();
+		await hold(db);
+		let doneUpdates = 0;
+		deps.db = () =>
+			({
+				owner: db.owner,
+				from: (t: string) => {
+					const real = db.from(t);
+					if (t !== "pending_actions") return real;
+					return { ...real, update: (v: { status: string }) => (v.status === "done" ? (doneUpdates++, { eq: async () => ({ error: { message: "x" } }) }) : real.update(v)) };
+				},
+			}) as unknown as OwnerDb;
+		expect(await answerPending(deps, "yes", "typed", NOW)).toEqual({ handled: true, reply: "Deleted." });
+		expect(doneUpdates).toBe(2);
+		expect(runs).toHaveLength(1);
+	});
+
+	it("succeeds on the retry", async () => {
+		const { db, deps } = setup();
+		await hold(db);
+		let n = 0;
+		deps.db = () =>
+			({
+				owner: db.owner,
+				from: (t: string) => {
+					const real = db.from(t);
+					if (t !== "pending_actions") return real;
+					return { ...real, update: (v: { status: string }) => (v.status === "done" && ++n === 1 ? { eq: async () => ({ error: { message: "x" } }) } : real.update(v)) };
+				},
+			}) as unknown as OwnerDb;
+		await answerPending(deps, "yes", "typed", NOW);
+		expect(n).toBe(2);
+		expect(statuses(db)).toEqual(["done"]);
 	});
 });

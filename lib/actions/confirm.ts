@@ -2,7 +2,7 @@
 // level and the pause switch are checked again when the yes arrives, not when the action was proposed.
 import type { OwnerDb } from "../server/admin";
 import { execute, logger } from "./execute";
-import { writeAction } from "./log";
+import { type ActionStatus, resolveLog, writeAction } from "./log";
 import { levelOf, loadProfile } from "./profile";
 import { decide } from "./tiers";
 import type { Def, Deps, Surface } from "./types";
@@ -13,8 +13,13 @@ export const EXPIRED = "That request has expired. Ask me again if you still want
 export const NEEDS_TYPING = "For that one I need you to type yes.";
 export const DID_NOTHING = "I did nothing, because Osmo is paused or that setting changed.";
 
+// Settle the waiting log rows that belong to pending rows which were just cancelled or expired.
+async function settleLogs(db: OwnerDb, res: { data: unknown }, status: ActionStatus) {
+	for (const r of (res.data ?? []) as { action_id: number | null }[]) if (r.action_id != null) await resolveLog(db, r.action_id, status);
+}
+
 export async function holdPending(db: OwnerDb, h: { def: Def; args: unknown; summary: string; surface: Surface; now: number }): Promise<string | null> {
-	await db.from("pending_actions").update({ status: "cancelled" }).eq("status", "pending");
+	await settleLogs(db, await db.from("pending_actions").update({ status: "cancelled" }).eq("status", "pending").select("action_id"), "cancelled");
 	const { data, error } = await db
 		.from("pending_actions")
 		.insert({ name: h.def.name, args: h.args, summary: h.summary.slice(0, 400), surface: h.surface, status: "pending", expires_at: new Date(h.now + TTL_MS).toISOString() })
@@ -29,7 +34,7 @@ export async function holdPending(db: OwnerDb, h: { def: Def; args: unknown; sum
 }
 
 export const cancelAllPending = async (db: OwnerDb) => {
-	await db.from("pending_actions").update({ status: "cancelled" }).eq("status", "pending");
+	await settleLogs(db, await db.from("pending_actions").update({ status: "cancelled" }).eq("status", "pending").select("action_id"), "cancelled");
 };
 
 export async function answerPending(deps: Deps, decision: "yes" | "no", via: "typed" | "voice", now: number): Promise<Answer> {
@@ -37,7 +42,8 @@ export async function answerPending(deps: Deps, decision: "yes" | "no", via: "ty
 		iso = new Date(now).toISOString();
 	const peek = await db.from("pending_actions").select("id,name").eq("status", "pending").gt("expires_at", iso).maybeSingle();
 	if (!peek.data) {
-		const gone = await db.from("pending_actions").update({ status: "expired" }).eq("status", "pending").lte("expires_at", iso).select("id");
+		const gone = await db.from("pending_actions").update({ status: "expired" }).eq("status", "pending").lte("expires_at", iso).select("id,action_id");
+		await settleLogs(db, gone, "expired");
 		return (gone.data as unknown[] | null)?.length ? { handled: true, reply: EXPIRED } : { handled: false };
 	}
 	const seen = peek.data as { id: unknown; name: string };
@@ -50,12 +56,27 @@ export async function answerPending(deps: Deps, decision: "yes" | "no", via: "ty
 		.eq("id", seen.id)
 		.eq("status", "pending")
 		.gt("expires_at", iso)
-		.select("id,name,args")
+		.select("id,name,args,action_id")
 		.maybeSingle();
 	if (!claim.data) return { handled: false }; // another surface answered first
-	if (decision === "no") return { handled: true, reply: "Cancelled." };
-	const row = claim.data as { id: string; name: string; args: unknown };
-	const finish = (status: string) => db.from("pending_actions").update({ status }).eq("id", row.id);
+	const row = claim.data as { id: string; name: string; args: unknown; action_id: number | null };
+	if (decision === "no") {
+		if (row.action_id != null) await resolveLog(db, row.action_id, "cancelled");
+		return { handled: true, reply: "Cancelled." };
+	}
+	// Settle the pending row, and the waiting log row with it. The pending update is tried twice; if it still fails
+	// the daily sweep handles it. Never throws.
+	const finish = async (status: "done" | "failed" | "cancelled", error?: string) => {
+		for (let i = 0; i < 2; i++) {
+			try {
+				const res = await db.from("pending_actions").update({ status }).eq("id", row.id);
+				if (!res.error) break;
+			} catch {
+				// try once more
+			}
+		}
+		if (row.action_id != null) await resolveLog(db, row.action_id, status, error);
+	};
 	try {
 		// The def, and the voice gate, come from the row that was actually claimed.
 		const def = deps.registry.find((d) => d.name === row.name);
@@ -74,10 +95,10 @@ export async function answerPending(deps: Deps, decision: "yes" | "no", via: "ty
 		return { handled: true, reply: "line" in out ? out.line : DID_NOTHING };
 	} catch {
 		// never leave the row running
-		try {
-			await finish("failed");
-		} catch {
-			// the row will be swept by the daily clean-up
+		await finish("failed", "exception");
+		if (row.action_id == null) {
+			const def = deps.registry.find((d) => d.name === row.name);
+			if (def) await writeAction(db, { surface: "confirm", connector: def.connector, name: def.name, tier: def.tier, status: "failed", summary: def.describe(row.args), error: "exception", pending_id: row.id });
 		}
 		return { handled: true, reply: DID_NOTHING };
 	}

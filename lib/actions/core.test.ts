@@ -4,7 +4,7 @@ import type { OwnerDb } from "../server/admin";
 import { CAP_GROUPS, capReached } from "./caps";
 import { execute, logger } from "./execute";
 import { fakeDb } from "./fake-db";
-import { writeAction, type LogRow } from "./log";
+import { resolveLog, writeAction, type LogRow } from "./log";
 import { levelOf, loadProfile } from "./profile";
 import { REGISTRY } from "./registry";
 import { decide } from "./tiers";
@@ -167,6 +167,35 @@ describe("writeAction", () => {
 			from: () => ({ insert: () => ({ select: () => ({ single: async () => ({ data: null, error: { message: "x" } }) }) }) }),
 		} as unknown as OwnerDb;
 		expect(await writeAction(failing, row)).toBeNull();
+	});
+});
+
+describe("resolveLog", () => {
+	const row: LogRow = { surface: "room", connector: "notes", name: "note_add", tier: 2, status: "waiting", summary: "keep me", error: null, pending_id: null };
+
+	it("updates the status by id and leaves the summary alone", async () => {
+		const db = fakeDb();
+		const id = (await writeAction(db, row))!;
+		await writeAction(db, row);
+		await resolveLog(db, id, "done");
+		expect(db.tables.actions.map((r) => r.status)).toEqual(["done", "waiting"]);
+		expect(db.tables.actions[0]).toMatchObject({ summary: "keep me", error: null });
+	});
+
+	it("sets the error, cut to 200 characters, only when one is given", async () => {
+		const db = fakeDb();
+		const id = (await writeAction(db, row))!;
+		await resolveLog(db, id, "failed", "e".repeat(500));
+		expect(db.tables.actions[0]).toMatchObject({ status: "failed" });
+		expect(db.tables.actions[0].error).toHaveLength(200);
+	});
+
+	it("never touches another owner's row and never throws", async () => {
+		const db = fakeDb({ actions: [{ id: 5, status: "waiting" }] }, "owner-1");
+		db.tables.actions[0].user_id = "someone-else";
+		await resolveLog(db, 5, "done");
+		expect(db.tables.actions[0].status).toBe("waiting");
+		await expect(resolveLog(throwing(), 1, "done")).resolves.toBeUndefined();
 	});
 });
 
