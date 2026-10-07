@@ -40,7 +40,7 @@ describe("modelHistory", () => {
 			user("hi"),
 			agent("Good evening."),
 			guest(user("the secret password is banana")),
-			guest(agent("Hello. I don't believe we've met.")),
+			guest(agent("Hello. I do not believe we have met.")),
 			user("ok"),
 			agent("Very well."),
 		]);

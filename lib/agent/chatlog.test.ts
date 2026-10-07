@@ -93,7 +93,7 @@ describe("the Supabase chat log, replayed", () => {
 	it("finds a name the user already gave earlier in the chat", () => {
 		const log = [
 			{ role: "user" as const, text: "whats my name" },
-			{ role: "agent" as const, text: "I don't know your name yet. What should I call you?" },
+			{ role: "agent" as const, text: "I do not know your name yet. What should I call you?" },
 			{ role: "user" as const, text: "its Gur" },
 			{ role: "agent" as const, text: "Lol, you lost me. Run that by me again?" },
 		];

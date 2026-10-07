@@ -195,7 +195,7 @@ describe("writerFor", () => {
 		aiOn: true,
 		guest: false,
 		preparedReply: null,
-		ruleReply: "I'm not sure I follow. Could you rephrase that?",
+		ruleReply: "I am not sure I follow. Could you rephrase that?",
 		textLength: 19,
 	};
 
@@ -242,10 +242,10 @@ describe("writerFor", () => {
 
 	it("keeps code's reply when it asks Gur his name or says his saved name back", () => {
 		for (const ruleReply of [
-			"I'm Osmo. What should I call you?",
-			"I don't know your name yet. What should I call you?",
-			"I'm Osmo. And you're Gur, I remember.",
-			"Welcome back, Gur. I'm Osmo. And you're Gur, I remember.",
+			"I am Osmo. What should I call you?",
+			"I do not know your name yet. What should I call you?",
+			"I am Osmo. And you are Gur, I remember.",
+			"Welcome back, Gur. I am Osmo. And you are Gur, I remember.",
 			"Your name is Gur.",
 		]) {
 			expect(writerFor({ ...everyday, branch: "turn", ruleReply }), ruleReply).toBe("code");
@@ -283,7 +283,7 @@ describe("who writes the reply, through the real chain", () => {
 	});
 
 	it("keeps code for an explanation Osmo asked for, and runs neither turn", () => {
-		const asked = { role: "agent" as const, text: `I'm not familiar with "zorp". Could you explain it? I'll remember.` };
+		const asked = { role: "agent" as const, text: `I am not familiar with "zorp". Could you explain it?` };
 		const room = { messages: [GREETING, { role: "user" as const, text: "what is zorp" }, asked], pendingLearning: "zorp" };
 		const r = send("a kind of snack from finland", GUR, room);
 		expect(r).toMatchObject({ picked: { branch: "learning" }, writer: "code", processed: null, prepared: null });
@@ -292,7 +292,7 @@ describe("who writes the reply, through the real chain", () => {
 	});
 
 	it("keeps code for Gur's answer to code's name question", () => {
-		const asked = { role: "agent" as const, text: "I don't know your name yet. What should I call you?" };
+		const asked = { role: "agent" as const, text: "I do not know your name yet. What should I call you?" };
 		const room = { messages: [GREETING, { role: "user" as const, text: "what's my name" }, asked] };
 		expect(send("its Gur", GUR, room)).toMatchObject({ values: { answeredName: "Gur" }, picked: { branch: "answeredName" }, writer: "code" });
 	});
@@ -301,7 +301,7 @@ describe("who writes the reply, through the real chain", () => {
 		const yours = send("what's your name");
 		expect(yours).toMatchObject({ picked: { branch: "turn" }, rule: expect.stringMatching(/^I(?:'m| am) Osmo\. What should I call you\?$/), writer: "code" });
 		const mine = send("what's my name");
-		expect(mine).toMatchObject({ picked: { branch: "memory" }, rule: "I don't know your name yet. What should I call you?", writer: "code" });
+		expect(mine).toMatchObject({ picked: { branch: "memory" }, rule: "I do not know your name yet. What should I call you?", writer: "code" });
 		expect(send("can't you see my name")).toMatchObject({ picked: { branch: "lookedBack" }, writer: "code" });
 	});
 
@@ -396,7 +396,7 @@ describe("quietEffects", () => {
 
 	it("gives a lookup that misses the line that doesn't ask for an explanation", () => {
 		const plan = quietEffects("lookup");
-		expect(formatDefinition({ kind: "missing", term: "valo" }, plan.reply === "noExplain")).toBe(`I'm not familiar with "valo".`);
+		expect(formatDefinition({ kind: "missing", term: "valo" }, plan.reply === "noExplain")).toBe(`I am not familiar with "valo".`);
 	});
 });
 

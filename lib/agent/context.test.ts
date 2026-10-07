@@ -19,16 +19,16 @@ import { defaultState } from "./state";
 describe("askedForName", () => {
 	it("knows when Osmo's last message asked for the user's name", () => {
 		expect(askedForName("My name is Osmo. What's yours?")).toBe(false);
-		expect(askedForName("I don't know your name yet. What should I call you?")).toBe(true);
+		expect(askedForName("I do not know your name yet. What should I call you?")).toBe(true);
 		expect(askedForName("Hey! How are you doing today?")).toBe(false);
 		expect(askedForName(undefined)).toBe(false);
 	});
 
 	it("counts only code's own name questions, as the reply's last sentence", () => {
 		for (const text of [
-			"I'm Osmo. What should I call you?",
 			"I am Osmo. What should I call you?",
-			"Good to see you again. I'm Osmo. What should I call you?",
+			"I am Osmo. What should I call you?",
+			"Good to see you again. I am Osmo. What should I call you?",
 			"I looked back but could not find it. What is your name?",
 			"I looked back but could not find it. What is your name?",
 		]) {
@@ -48,7 +48,7 @@ describe("askedForName", () => {
 
 describe("nameAnswer", () => {
 	it("reads the answer to code's name question while no name is known", () => {
-		expect(nameAnswer("Green", "I'm Osmo. What should I call you?", null)).toBe("Green");
+		expect(nameAnswer("Green", "I am Osmo. What should I call you?", null)).toBe("Green");
 		expect(nameAnswer("its gur", "I looked back but could not find it. What is your name?", null)).toBe("Gur");
 	});
 
@@ -58,7 +58,7 @@ describe("nameAnswer", () => {
 
 	it("saves nothing once a name is known, even right after 'What's your name?'", () => {
 		expect(nameAnswer("Linda", "Lovely to meet your friend. What's your name?", "Gur")).toBeNull();
-		expect(nameAnswer("Linda", "I'm Osmo. What should I call you?", "Gur")).toBeNull();
+		expect(nameAnswer("Linda", "I am Osmo. What should I call you?", "Gur")).toBeNull();
 	});
 });
 
@@ -120,7 +120,7 @@ describe("justLearnedName", () => {
 		for (const text of [
 			"Nice to meet you, Maya!",
 			"Nice to meet you, Maya! Your sister sounds lovely.",
-			"Here's what I remember. Your name is Gur. Your sister is Maya.",
+			"Here is what I remember. Your name is Gur. Your sister is Maya.",
 			"Noted. Your name is gur.",
 			"Your name is Gur, and your sister is Maya.",
 			"Your name is Gur Arlen The Very Tall.",
@@ -133,7 +133,7 @@ describe("justLearnedName", () => {
 });
 
 describe("names read from what Osmo said", () => {
-	const LISTING = "Here's what I remember. Your name is Gur. Your sister is Maya.";
+	const LISTING = "Here is what I remember. Your name is Gur. Your sister is Maya.";
 
 	it("never takes 'no its Mia' after the memory listing as a correction", () => {
 		expect(nameCorrection("no its Mia", LISTING)).toBeNull();
@@ -175,7 +175,7 @@ describe("nameFromHistory", () => {
 	it("ignores answers to a name question once it has found a name", () => {
 		expect(
 			nameFromHistory([
-				{ role: "agent", text: "I'm Osmo. What should I call you?" },
+				{ role: "agent", text: "I am Osmo. What should I call you?" },
 				{ role: "user", text: "gur" },
 				{ role: "agent", text: "Good to meet you, Gur." },
 				{ role: "user", text: "my friend is here" },
@@ -275,7 +275,7 @@ describe("turnView", () => {
 		{ role: "user" as const, text: "gur" },
 		{ role: "agent" as const, text: "Nice to meet you, Gur!" },
 		{ role: "user" as const, text: "the secret password is banana", speaker: "guest" as const },
-		{ role: "agent" as const, text: "Hello. I don't believe we've met.", speaker: "guest" as const },
+		{ role: "agent" as const, text: "Hello. I do not believe we have met.", speaker: "guest" as const },
 	];
 
 	it("gives the owner their memory, name, slang and words, and reads only their own conversation", () => {

@@ -105,7 +105,7 @@ describe("processTurn: dilemmas", () => {
 
 	it("admits when it has no matching scenario", () => {
 		const r = processTurn(defaultState(), newSession(), "what would you do if aliens landed", ctx());
-		expect(r.reply).toMatch(/don't have a scenario/);
+		expect(r.reply).toMatch(/do not have a scenario/);
 		expect(r.effects).toEqual([]);
 		expect(r.session.pending).toBeNull();
 	});
@@ -146,7 +146,7 @@ describe("processTurn: hypotheticals (review fix)", () => {
 	it("does not log a hypothetical 'what would you do if' as a real event", () => {
 		const r = processTurn(defaultState(), newSession(), "what would you do if someone died", ctx());
 		expect(r.effects).toEqual([]);
-		expect(r.reply).toMatch(/don't have a scenario/);
+		expect(r.reply).toMatch(/do not have a scenario/);
 		expect(r.state.history).toEqual([]);
 	});
 });

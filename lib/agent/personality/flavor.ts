@@ -39,6 +39,20 @@ const CONTRACTIONS: [RegExp, string][] = [
 	[/\bdidn't\b/g, "did not"],
 	[/\bcan't\b/g, "cannot"],
 	[/\bwon't\b/g, "will not"],
+	[/\bwasn't\b/g, "was not"],
+	[/\bweren't\b/g, "were not"],
+	[/\bisn't\b/g, "is not"],
+	[/\baren't\b/g, "are not"],
+	[/\bcouldn't\b/g, "could not"],
+	[/\bwouldn't\b/g, "would not"],
+	[/\bshouldn't\b/g, "should not"],
+	[/\bhaven't\b/g, "have not"],
+	[/\bhasn't\b/g, "has not"],
+	[/\b(we|We|you|You|they|They)'ve\b/g, "$1 have"],
+	[/\b(you|You|we|We)'d\b/g, "$1 would"],
+	[/\b(you|You|we|We)'ll\b/g, "$1 will"],
+	[/\b(here|Here)'s\b/g, "$1 is"],
+	[/\b(let|Let)'s\b/g, "$1 us"],
 ];
 
 const swap = (text: string, table: [RegExp, string][]) => table.reduce((t, [re, to]) => t.replace(re, to), text);

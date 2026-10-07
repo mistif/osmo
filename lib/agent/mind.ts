@@ -267,7 +267,7 @@ function startTurn(state: AgentState, session: Session, text: string, ctx: TurnC
 				decided: {
 					state: s,
 					session: sess,
-					reply: 'I don\'t have a scenario like that yet. Say "give me a dilemma" and I\'ll take one of mine.',
+					reply: 'I do not have a scenario like that yet. Say "give me a dilemma" and I will take one of mine.',
 					effects,
 				},
 			};

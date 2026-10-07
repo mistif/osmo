@@ -78,7 +78,7 @@ describe("lookupWord and formatDefinition", () => {
 
 	it("offers to learn the word when both sources are down or silent", async () => {
 		const down = network({ datamuse: "down", wiktionary: "down" });
-		expect(formatDefinition(await lookupWord("zorpquux", { fetch: down.fetch }))).toBe('I\'m not familiar with "zorpquux". Could you explain it? I\'ll remember.');
+		expect(formatDefinition(await lookupWord("zorpquux", { fetch: down.fetch }))).toBe('I am not familiar with "zorpquux". Could you explain it?');
 		const hang = network({ datamuse: "hang", wiktionary: "hang" });
 		const started = Date.now();
 		const result = await lookupWord("zorpquux", { fetch: hang.fetch, timeoutMs: 50 });
@@ -90,7 +90,7 @@ describe("lookupWord and formatDefinition", () => {
 		const { fetch } = network({ datamuse: muse("zlur", ["n\t(offensive, ethnic slur) A slur.", "n\tSomething harmless."]) });
 		const { saved, cachePut } = put();
 		const result = await lookupWord("zlur", { fetch, cachePut });
-		expect(formatDefinition(result)).toBe("I'd rather not repeat that word.");
+		expect(formatDefinition(result)).toBe("I would rather not repeat that word.");
 		expect(saved).toEqual([]);
 		const banned = network({});
 		expect((await lookupWord("faggot", { fetch: banned.fetch })).kind).toBe("blocked");
@@ -154,7 +154,7 @@ describe("final review fixes", () => {
 
 describe("formatDefinition for a guest", () => {
 	it("never promises to learn a word from someone Osmo doesn't belong to", () => {
-		expect(formatDefinition({ kind: "missing", term: "zorp" }, true)).toBe(`I'm not familiar with "zorp".`);
-		expect(formatDefinition({ kind: "missing", term: "zorp" })).toMatch(/I'll remember/);
+		expect(formatDefinition({ kind: "missing", term: "zorp" }, true)).toBe(`I am not familiar with "zorp".`);
+		expect(formatDefinition({ kind: "missing", term: "zorp" })).toMatch(/Could you explain it[?]/);
 	});
 });

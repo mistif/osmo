@@ -211,9 +211,9 @@ function shorten(text: string): string {
 
 // A guest can't teach Osmo anything, so they never hear the offer to learn.
 export function formatDefinition(lookup: Lookup, guest = false): string {
-	if (lookup.kind === "blocked") return "I'd rather not repeat that word.";
+	if (lookup.kind === "blocked") return "I would rather not repeat that word.";
 	if (lookup.kind === "missing") {
-		return guest ? `I'm not familiar with "${lookup.term}".` : `I'm not familiar with "${lookup.term}". Could you explain it? I'll remember.`;
+		return guest ? `I am not familiar with "${lookup.term}".` : `I am not familiar with "${lookup.term}". Could you explain it?`;
 	}
 	const { term, word, sense, source } = lookup;
 	const body = lowerFirst(shorten(sense.text)).replace(/\bi\b/g, "I");

@@ -187,7 +187,7 @@ describe("respond", () => {
 
 	it("explains its own feeling from real state and the recorded cause", () => {
 		const r = reply("why are u feeling sad", { state: stateWith({ sadness: 0.5 }), cause: "you told me you were sad" });
-		expect(r).toContain("I'm feeling sad");
+		expect(r).toContain("I am feeling sad");
 		expect(r).toContain("because you told me you were sad");
 	});
 
@@ -202,7 +202,7 @@ describe("respond", () => {
 
 	it("never prefixes a stuck mood opener", () => {
 		const r = reply("hello", { state: stateWith({ sadness: 0.6 }) });
-		expect(r).not.toMatch(/^I'm a bit down\./);
+		expect(r).not.toMatch(/^I am a bit down[.]/);
 	});
 
 	it("returns proper sentences for every intent, with varied wording", () => {
@@ -257,14 +257,14 @@ describe("how are you and the slow mood", () => {
 	const ask = (mood?: string) => respond(parse("how are you"), { state: defaultState(), cause: null, turn: 0, mood });
 
 	it("adds how the day has felt before the closing question, only when there is a mood", () => {
-		expect(ask("a little low")).toBe("I'm doing well, thank you. Over the day I have felt a little low. How are you?");
+		expect(ask("a little low")).toBe("I am doing well, thank you. Over the day I have felt a little low. How are you?");
 		const unsettled = respond(parse("how are you"), { state: stateWith({ sadness: 0.5 }), cause: null, turn: 0, mood: "happy" });
-		expect(unsettled).toBe("Honestly, I'm feeling sad. Over the day I have felt happy. How are you?");
+		expect(unsettled).toBe("Honestly, I am feeling sad. Over the day I have felt happy. How are you?");
 	});
 
 	it("says nothing of the day at rest, with an empty mood or none", () => {
-		expect(ask("")).toBe("I'm doing well, thank you. How are you?");
-		expect(ask()).toBe("I'm doing well, thank you. How are you?");
+		expect(ask("")).toBe("I am doing well, thank you. How are you?");
+		expect(ask()).toBe("I am doing well, thank you. How are you?");
 		for (const text of ["hello", "thanks", "what is your name", "im sad"]) {
 			expect(respond(parse(text), { state: defaultState(), cause: null, turn: 0, mood: "happy" }), text).not.toContain("Over the day");
 		}

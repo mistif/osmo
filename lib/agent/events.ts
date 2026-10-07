@@ -170,7 +170,7 @@ export function leaning(outlook: number, happyKind: string, tragicKind: string):
 	if (outlook < -0.05) {
 		return `I lean toward caution. ${cap(tragicKind)} weighed on me more than ${happyKind}.`;
 	}
-	return `I'm undecided. ${cap(happyKind)} and ${tragicKind} pull on me about equally.`;
+	return `I am undecided. ${cap(happyKind)} and ${tragicKind} pull on me about equally.`;
 }
 
 export function kindFor(record: EventRecord): string {

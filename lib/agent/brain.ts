@@ -70,7 +70,7 @@ const NAMES: Record<Value, string> = {
 export function explain(d: Dilemma, dec: Decision): string {
 	const label = d.options[dec.chosen].label;
 	let text = dec.torn
-		? `I'm torn, but I'd lean toward "${label}".`
+		? `I am torn, but I would lean toward "${label}".`
 		: `I would choose "${label}".`;
 	if (dec.drivers.length > 0) {
 		text += ` Mostly because I weigh ${dec.drivers.map((v) => NAMES[v]).join(" and ")}.`;

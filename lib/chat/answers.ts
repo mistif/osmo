@@ -8,7 +8,7 @@ import { cleanMemoryKey, type MemoryFact } from "../facts";
 const KNOWLEDGE: MemoryFact[] = [
 	{
 		key: "local agent",
-		value: "an assistant that runs in your browser, using its built-in knowledge and what you teach it",
+		value: "Osmo, a program that runs in your browser, using his built-in knowledge and what you teach him",
 	},
 	{
 		key: "internet access",
@@ -90,11 +90,11 @@ const KNOWLEDGE: MemoryFact[] = [
 
 // With the AI conversation on, these four say honestly that an OpenAI model writes his everyday replies, and what is sent to it.
 const WITH_AI: Record<string, string> = {
-	"local agent": "an assistant that runs in your browser, while an OpenAI model writes its everyday replies",
+	"local agent": "Osmo, a program that runs in your browser, while an OpenAI model writes his everyday replies",
 	"internet access":
 		"used to look up word definitions from Datamuse and Wiktionary, and to have an OpenAI model write its everyday replies, so your messages, what it remembers of you and your recent chat are sent to OpenAI",
 	"conversation learning":
-		"when the agent does not know a topic, an OpenAI model answers it; if the model can't be reached, the agent asks the user to explain it and saves that explanation",
+		"when the agent does not know a topic, an OpenAI model answers it; if the model cannot be reached, the agent asks the user to explain it and saves that explanation",
 	internet:
 		"a worldwide network of connected computer networks; this agent uses it to look up word definitions and to have an OpenAI model write its everyday replies, which sends your messages, what it remembers of you and your recent chat to OpenAI",
 };
@@ -128,8 +128,8 @@ export function answerFromMemory(text: string, memory: MemoryFact[], turn: numbe
 	const normalizedText = text.toLowerCase();
 
 	if (/what do you know|what have you remembered|list my memories/.test(normalizedText)) {
-		if (memory.length === 0) return "I don't know anything about you yet.";
-		return `Here's what I remember. ${memory.map(describeFact).join(" ")}`;
+		if (memory.length === 0) return "I do not know anything about you yet.";
+		return `Here is what I remember. ${memory.map(describeFact).join(" ")}`;
 	}
 
 	// An explained term ("meaning:zorp blat") answers questions about that term.
@@ -144,7 +144,7 @@ export function answerFromMemory(text: string, memory: MemoryFact[], turn: numbe
 
 	if (/\b(?:what(?:'s| is)?|whats|do you know|remember) my name\b/.test(normalizedText)) {
 		// A guest's name can't be saved, so Osmo doesn't ask for it.
-		return guest ? "I'm afraid I don't know your name." : "I don't know your name yet. What should I call you?";
+		return guest ? "I am afraid I do not know your name." : "I do not know your name yet. What should I call you?";
 	}
 
 	const builtInFact = agentKnowledge(aiOn).find((item) => normalizedText.includes(item.key));

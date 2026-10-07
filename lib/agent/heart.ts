@@ -84,22 +84,20 @@ export function moodLabel(a: Activations, baseline: Activations = BASELINE): str
 
 const OPENERS: Record<string, string> = {
 	bittersweet: "Bittersweet, honestly.",
-	"anxious anticipation": "I'm nervous, but hopeful.",
-	conflicted: "I'm feeling conflicted.",
-	longing: "I miss something, I think.",
-	"content but restless": "I'm content, if a little restless.",
-	joy: "Feeling good!",
-	sadness: "I'm a bit down.",
-	anger: "I'm irritated.",
-	fear: "I'm uneasy.",
+	"anxious anticipation": "I am nervous, but hopeful.",
+	conflicted: "I am feeling conflicted.",
+	"content but restless": "I am content, if a little restless.",
+	joy: "I am feeling good.",
+	sadness: "I am a bit down.",
+	anger: "I am irritated.",
+	fear: "I am uneasy.",
 	trust: "I feel at ease with you.",
 	disgust: "That left a bad taste.",
-	surprise: "Oh!",
+	surprise: "That surprised me.",
 	love: "I feel warm toward you.",
-	hope: "I'm feeling hopeful.",
+	hope: "I am feeling hopeful.",
 	guilt: "I feel a bit guilty.",
-	loneliness: "I've been feeling lonely.",
-	boredom: "I'm a little bored.",
+	boredom: "I am a little bored.",
 };
 
 function moodOpener(label: string): string {

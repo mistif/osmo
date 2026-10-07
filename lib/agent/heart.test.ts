@@ -100,7 +100,7 @@ describe("withMood and applyShifts", () => {
 	});
 
 	it("prefixes a mood opener when a feeling stands out", () => {
-		expect(withMood({ ...base(), sadness: 0.6 }, "Hello.")).toBe("I'm a bit down. Hello.");
+		expect(withMood({ ...base(), sadness: 0.6 }, "Hello.")).toBe("I am a bit down. Hello.");
 	});
 
 	it("applies shifts and clamps to 0..1", () => {
