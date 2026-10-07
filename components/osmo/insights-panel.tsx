@@ -8,21 +8,34 @@ import { spokenDate } from "@/lib/agent/bond/lines";
 import { dayName, sanitizeMoodDay, strongestPhrase, weekSeries, type MoodDay } from "@/lib/agent/mood-days";
 import type { AgentState } from "@/lib/agent/state";
 import { storyLines } from "@/lib/shell/story";
+import { describeAction, sanitizeActionRow, type ActionRow } from "@/lib/shell/what-i-did";
 import panel from "./panels.module.css";
 import styles from "./insights.module.css";
 
 const UNREACHABLE = "I can't reach my memory right now. Try again in a moment.";
+const FORGET_FAILED = "Couldn't forget that. Try again.";
 
 export function InsightsPanel({ agent }: { agent: AgentState }) {
 	const [rows, setRows] = useState<MoodDay[] | null>(null);
 	const [firstDay, setFirstDay] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [selected, setSelected] = useState<string | null>(null);
+	const [did, setDid] = useState<ActionRow[] | null>(null);
+	const [didError, setDidError] = useState<string | null>(null);
+	// A row id, or "all": the one-step inline confirm, as in the memory panel.
+	const [confirming, setConfirming] = useState<number | "all" | null>(null);
 	// Read once at mount, not live at render, so render stays pure (no Date.now() call there).
 	const [now] = useState(() => Date.now());
 	const today = localDay(now);
 
 	useEffect(() => {
+		(async () => {
+			const log = await supabase.from("actions").select("id,at,surface,status,summary").order("at", { ascending: false }).limit(30);
+			if (log.error) {
+				setDidError(UNREACHABLE);
+				setDid([]);
+			} else setDid((log.data ?? []).map(sanitizeActionRow).filter((r): r is ActionRow => r !== null));
+		})();
 		(async () => {
 			const since = weekSeries([], localDay(Date.now()))[0].day;
 			const [week, first] = await Promise.all([
@@ -66,6 +79,29 @@ export function InsightsPanel({ agent }: { agent: AgentState }) {
 					: null;
 	const story = storyLines(agent.bond, now);
 
+	async function forget(id: number) {
+		const removed = did?.find((r) => r.id === id);
+		setConfirming(null);
+		setDid((cur) => (cur ? cur.filter((r) => r.id !== id) : cur));
+		const { error: failed } = await supabase.from("actions").delete().eq("id", id);
+		if (failed) {
+			if (removed) setDid((cur) => (cur && !cur.some((r) => r.id === id) ? [...cur, removed].sort((a, b) => b.at.localeCompare(a.at)) : cur));
+			setDidError(FORGET_FAILED);
+		} else setDidError(null);
+	}
+
+	async function forgetAll() {
+		const removed = did ?? [];
+		setConfirming(null);
+		setDid([]);
+		// RLS limits this to the signed-in user's rows.
+		const { error: failed } = await supabase.from("actions").delete().gt("id", 0);
+		if (failed) {
+			setDid(removed);
+			setDidError(FORGET_FAILED);
+		} else setDidError(null);
+	}
+
 	return (
 		<>
 			<section className={panel.section}>
@@ -102,6 +138,60 @@ export function InsightsPanel({ agent }: { agent: AgentState }) {
 				)}
 				{started && <p className={panel.note}>{started}</p>}
 				{error && <p className={panel.error} role="alert">{error}</p>}
+			</section>
+
+			<section className={panel.section}>
+				<h3 className={panel.sectionTitle}>What I did</h3>
+				{did !== null && did.length === 0 ? (
+					!didError && <p className={panel.note}>Nothing yet.</p>
+				) : (
+					<ul className={styles.did}>
+						{(did ?? []).map((r) => (
+							<li key={r.id} className={panel.line}>
+								<span>{describeAction(r, now)}</span>
+								<div className={panel.actions}>
+									{confirming === r.id ? (
+										<>
+											<button type="button" className={panel.action} autoFocus onClick={() => void forget(r.id)}>
+												Forget this
+											</button>
+											<button type="button" className={panel.action} onClick={() => setConfirming(null)}>
+												Keep
+											</button>
+										</>
+									) : (
+										<button type="button" className={panel.action} aria-label={`Forget: ${describeAction(r, now)}`}
+											onClick={() => setConfirming(r.id)}>
+											Forget
+										</button>
+									)}
+								</div>
+							</li>
+						))}
+					</ul>
+				)}
+				{did !== null && did.length > 0 && (
+					<>
+						<div className={panel.actions}>
+							{confirming === "all" ? (
+								<>
+									<button type="button" className={panel.action} autoFocus onClick={() => void forgetAll()}>
+										Forget all of it
+									</button>
+									<button type="button" className={panel.action} onClick={() => setConfirming(null)}>
+										Keep
+									</button>
+								</>
+							) : (
+								<button type="button" className={panel.action} onClick={() => setConfirming("all")}>
+									Forget all
+								</button>
+							)}
+						</div>
+						<p className={panel.note}>Forgetting a line does not undo what was done.</p>
+					</>
+				)}
+				{didError && <p className={panel.error} role="alert">{didError}</p>}
 			</section>
 
 			<section className={panel.section}>
