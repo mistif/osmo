@@ -5,6 +5,8 @@ import type { Def } from "../actions/types";
 
 const NO_ZONE = "I do not know your time zone yet. Open Osmo's room once on a device, then ask again.";
 const NONE_FOUND = "I could not find one like that.";
+const LISTED = 10; // reminders read out
+const SCAN = 500; // pending reminders read for a cancel match
 
 type Reminder = { id: string; text: string; due_at: string };
 
@@ -55,13 +57,16 @@ export const reminderList: Def = {
 	describe: () => "List your reminders",
 	logLine: () => "Read your reminders",
 	async run(_a, c) {
-		const { data, error } = await c.db.from("reminders").select("id,text,due_at").eq("status", "pending").order("due_at", { ascending: true }).limit(10);
+		const { data, error } = await c.db.from("reminders").select("id,text,due_at").eq("status", "pending").order("due_at", { ascending: true }).limit(LISTED);
 		if (error || !Array.isArray(data)) return { ok: false, say: "I could not read your reminders just now." };
 		const rows = data as unknown as Reminder[];
 		if (rows.length === 0) return { ok: true, say: "You have no reminders waiting.", result: null };
+		// The true number waiting (a head count, no rows); if it cannot be read, the rows in hand are all that is said.
+		const head = await c.db.from("reminders").select("id", { count: "exact", head: true }).eq("status", "pending"),
+			total = head.error || typeof head.count !== "number" ? rows.length : Math.max(head.count, rows.length);
 		const tz = c.timezone ?? "UTC",
 			list = rows.map((r) => `${speak(Date.parse(r.due_at), tz)}: ${r.text}.`).join(" "),
-			say = `You have ${rows.length} ${rows.length === 1 ? "reminder" : "reminders"} waiting. ${list}`;
+			say = total > rows.length ? `You have ${total} reminders waiting; here are the next ${rows.length}. ${list}` : `You have ${total} ${total === 1 ? "reminder" : "reminders"} waiting. ${list}`;
 		return { ok: true, say, result: say };
 	},
 };
@@ -82,7 +87,7 @@ export const reminderCancel: Def = {
 	describe: () => "Cancel a reminder",
 	logLine: () => "Cancelled a reminder",
 	async run(a, c) {
-		const { data, error } = await c.db.from("reminders").select("id,text").eq("status", "pending").order("due_at", { ascending: true }).limit(50);
+		const { data, error } = await c.db.from("reminders").select("id,text").eq("status", "pending").order("due_at", { ascending: true }).limit(SCAN);
 		if (error || !Array.isArray(data)) return { ok: false, say: "I could not read your reminders just now." };
 		const hit = matchOne(data as unknown as Reminder[], (a as { match: string }).match);
 		if (!hit.ok) return { ok: false, say: hit.say };

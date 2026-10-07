@@ -21,7 +21,9 @@ export function localToUtc(local: string, tz: string): number | null {
 	// A date that rolled over (30 February, 24:00, minute 60) is not a time.
 	if (back.getUTCFullYear() !== y || back.getUTCMonth() !== mo - 1 || back.getUTCDate() !== d || back.getUTCHours() !== h || back.getUTCMinutes() !== mi) return null;
 	try {
-		return naive - offsetMs(naive - offsetMs(naive, tz), tz); // two passes settle a DST edge; a bad zone throws
+		const utc = naive - offsetMs(naive - offsetMs(naive, tz), tz); // two passes settle a DST edge; a bad zone throws
+		// A time the clocks skipped (the spring-forward gap) does not exist: it does not read back as itself in the zone.
+		return utc + offsetMs(utc, tz) === naive ? utc : null;
 	} catch {
 		return null;
 	}

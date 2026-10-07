@@ -1,5 +1,6 @@
-// Weather (spec 3.2, 6.3): Open-Meteo's forecast endpoint with the saved place's coordinates and nothing else.
-// No key, no account. Phase 1 knows only the saved place; naming another one is a plain line (geocoding comes later).
+// Weather (spec 3.2, 6.3): Open-Meteo's forecast endpoint with a place's coordinates and nothing else.
+// No key, no account. The saved place is used when none is named or when its own name is; any other name is looked up
+// once through Open-Meteo's geocoding (the name only, never saved) and the forecast then gets its coordinates.
 // The fetch comes in through the run context, so tests never touch the network.
 import { clean, only } from "../actions/match";
 import type { Def, Place, RunCtx } from "../actions/types";
@@ -7,10 +8,10 @@ import type { Def, Place, RunCtx } from "../actions/types";
 const FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
 const CURRENT_FIELDS = "temperature_2m,apparent_temperature,weather_code,wind_speed_10m";
 const DAILY_FIELDS = "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max";
+const GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search";
 const TIMEOUT_MS = 5000;
 
 const NO_PLACE = "Set your place in Settings first.";
-const OTHER_PLACE = "I only know your saved place for now.";
 const UNREACHABLE = "I could not reach the weather service just now.";
 
 // WMO weather interpretation codes, in words. Anything else is "mixed weather".
@@ -64,13 +65,36 @@ const norm = (s: string) =>
 		.replace(/[^a-z0-9]+/g, " ")
 		.trim();
 
-// The saved place, or the plain line that says why not. An empty name means the saved place; so does its own name.
-function resolve(asked: string, place: Place | null): { ok: true; place: Place } | { ok: false; say: string } {
-	if (place === null) return { ok: false, say: NO_PLACE };
-	if (asked === "") return { ok: true, place };
+type Located = { ok: true; place: Place; named: string | null } | { ok: false; say: string };
+
+// The first hit of the geocoder for a name: a place, null for no hit, or undefined when the service failed or answered nonsense.
+async function geocode(c: RunCtx, name: string): Promise<{ label: string; lat: number; lon: number } | null | undefined> {
+	try {
+		const res = await c.fetch(`${GEOCODE_URL}?name=${encodeURIComponent(name)}&count=1&language=en`, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+		if (!res.ok) return undefined;
+		const body = obj(await res.json());
+		if (body === null) return undefined;
+		if (body.results === undefined) return null;
+		if (!Array.isArray(body.results)) return undefined;
+		const hit = obj(body.results[0]);
+		if (hit === null) return null;
+		const label = typeof hit.name === "string" ? clean(hit.name, 60) : "";
+		return label !== "" && num(hit.latitude) && num(hit.longitude) ? { label, lat: hit.latitude, lon: hit.longitude } : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+// Where to look: the saved place for an empty name or its own name, else the geocoded one (named is its name, for the say line).
+async function locate(c: RunCtx, asked: string): Promise<Located> {
+	const saved = c.profile.place;
+	if (asked === "") return saved === null ? { ok: false, say: NO_PLACE } : { ok: true, place: saved, named: null };
 	const want = norm(asked);
-	if (want !== "" && (want === norm(place.label) || want === norm(place.label.split(",")[0]))) return { ok: true, place };
-	return { ok: false, say: OTHER_PLACE };
+	if (saved !== null && want !== "" && (want === norm(saved.label) || want === norm(saved.label.split(",")[0]))) return { ok: true, place: saved, named: null };
+	const hit = await geocode(c, asked);
+	if (hit === undefined) return { ok: false, say: UNREACHABLE };
+	if (hit === null) return { ok: false, say: `I could not find a place called ${asked}.` };
+	return { ok: true, place: hit, named: hit.label };
 }
 
 // One GET, never throws: null for a bad status, a timeout, a network error or a body that is not an object.
@@ -104,13 +128,13 @@ export const weatherNow: Def = {
 	describe: () => "Check the weather",
 	logLine: () => "Checked the weather",
 	async run(a, c) {
-		const where = resolve((a as { place: string }).place, c.profile.place);
+		const where = await locate(c, (a as { place: string }).place);
 		if (!where.ok) return fail(where.say);
 		const body = await get(c, where.place, { current: CURRENT_FIELDS }),
 			cur = obj(body?.current);
 		if (!cur || !num(cur.temperature_2m) || !num(cur.apparent_temperature) || !num(cur.weather_code) || !num(cur.wind_speed_10m)) return fail(UNREACHABLE);
 		const wind = Math.round(cur.wind_speed_10m),
-			say = `Now ${deg(cur.temperature_2m)} degrees, feels like ${deg(cur.apparent_temperature)}, ${words(cur.weather_code)}, wind ${wind} ${wind === 1 ? "kilometre" : "kilometres"} per hour.`;
+			say = `${where.named === null ? "Now" : `In ${where.named} now`} ${deg(cur.temperature_2m)} degrees, feels like ${deg(cur.apparent_temperature)}, ${words(cur.weather_code)}, wind ${wind} ${wind === 1 ? "kilometre" : "kilometres"} per hour.`;
 		return { ok: true, say, result: say };
 	},
 };
@@ -138,7 +162,7 @@ export const weatherForecast: Def = {
 	logLine: () => "Checked the weather",
 	async run(a, c) {
 		const { place, days } = a as { place: string; days: number },
-			where = resolve(place, c.profile.place);
+			where = await locate(c, place);
 		if (!where.ok) return fail(where.say);
 		const body = await get(c, where.place, { daily: DAILY_FIELDS, forecast_days: String(days) }),
 			d = obj(body?.daily);
@@ -159,7 +183,7 @@ export const weatherForecast: Def = {
 			const label = i === 0 ? "Today" : i === 1 ? "Tomorrow" : day;
 			lines.push(`${label}: ${words(c0)}, high ${deg(h)}, low ${deg(l)}${num(r) ? `, ${Math.round(r)} percent chance of rain` : ""}.`);
 		}
-		const say = lines.join(" ");
+		const say = (where.named === null ? "" : `In ${where.named}. `) + lines.join(" ");
 		return { ok: true, say, result: say };
 	},
 };

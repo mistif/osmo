@@ -144,6 +144,17 @@ describe("reminder_list", () => {
 		expect(out.say).toContain("r09");
 		expect(out.say).not.toContain("r10");
 	});
+	it("reports the true count when there are more than ten", async () => {
+		const rows = Array.from({ length: 12 }, (_, i) => ({ id: String(i), text: `r${String(i).padStart(2, "0")}`, due_at: new Date(Date.UTC(2026, 9, 8, i)).toISOString(), status: "pending" }));
+		rows.push({ id: "x", text: "already sent", due_at: "2026-10-01T07:00:00.000Z", status: "sent" });
+		const out = (await reminderList.run({}, rc(fakeDb({ reminders: rows })))) as any;
+		expect(out.say.startsWith("You have 12 reminders waiting; here are the next 10. ")).toBe(true);
+		expect(out.result).toBe(out.say);
+		const ten = (await reminderList.run({}, rc(fakeDb({ reminders: rows.slice(0, 10) })))) as any;
+		expect(ten.say.startsWith("You have 10 reminders waiting. ")).toBe(true);
+		const one = (await reminderList.run({}, rc(fakeDb({ reminders: rows.slice(0, 1) })))) as any;
+		expect(one.say.startsWith("You have 1 reminder waiting. ")).toBe(true);
+	});
 	it("says it could not read them when the database says no", async () => {
 		const db = fakeDb();
 		const chain: any = { eq: () => chain, order: () => chain, limit: () => chain, then: (ok: any) => Promise.resolve({ data: null, error: { message: "x" } }).then(ok) };
@@ -174,6 +185,12 @@ describe("reminder_cancel", () => {
 		const out = await reminderCancel.run({ match: "dad" }, rc(db));
 		expect(out).toEqual({ ok: true, say: "Cancelled the reminder: call Dad about the boat.", result: null });
 		expect(db.tables.reminders.map((r) => r.status)).toEqual(["cancelled", "pending", "cancelled"]);
+	});
+	it("looks through up to 500 pending reminders, not just the first 50", async () => {
+		const rows = Array.from({ length: 300 }, (_, i) => ({ id: String(i), text: i === 250 ? "water the needle plant" : `filler ${i}`, due_at: new Date(Date.UTC(2026, 9, 8) + i * 60_000).toISOString(), status: "pending" }));
+		const db = fakeDb({ reminders: rows });
+		expect(await reminderCancel.run({ match: "needle" }, rc(db))).toEqual({ ok: true, say: "Cancelled the reminder: water the needle plant.", result: null });
+		expect(db.tables.reminders.filter((r) => r.status === "cancelled").map((r) => r.id)).toEqual(["250"]);
 	});
 	it("changes nothing when two match", async () => {
 		const db = seed();

@@ -61,17 +61,10 @@ describe("the arg checks", () => {
 });
 
 describe("the place", () => {
-	it("without a saved place there is no request and a plain line", async () => {
-		for (const place of ["", "Paris"]) {
-			const { rc, fetch } = ctx(ok(CURRENT), null);
-			expect(await weatherNow.run({ place }, rc)).toEqual({ ok: false, say: "Set your place in Settings first." });
-			expect(fetch).not.toHaveBeenCalled();
-		}
-	});
-	it("another place gets the saved-place line and no request, in phase 1", async () => {
-		const { rc, fetch } = ctx(ok(CURRENT));
-		expect(await weatherNow.run({ place: "Paris" }, rc)).toEqual({ ok: false, say: "I only know your saved place for now." });
-		expect(await weatherForecast.run({ place: "Paris", days: 2 }, rc)).toEqual({ ok: false, say: "I only know your saved place for now." });
+	it("without a saved place and no name there is no request and a plain line", async () => {
+		const { rc, fetch } = ctx(ok(CURRENT), null);
+		expect(await weatherNow.run({ place: "" }, rc)).toEqual({ ok: false, say: "Set your place in Settings first." });
+		expect(await weatherForecast.run({ place: "", days: 1 }, rc)).toEqual({ ok: false, say: "Set your place in Settings first." });
 		expect(fetch).not.toHaveBeenCalled();
 	});
 	it("the saved place by name, in any case, with or without accents or its region, is the saved place", async () => {
@@ -87,10 +80,88 @@ describe("the place", () => {
 			expect(fetch).toHaveBeenCalledTimes(1);
 		}
 	});
-	it("part of a name is not the saved place", async () => {
-		const { rc, fetch } = ctx(ok(CURRENT), { ...MALMO, label: "Malmo, Sweden" });
-		expect((await weatherNow.run({ place: "Sweden" }, rc)).ok).toBe(false);
-		expect(fetch).not.toHaveBeenCalled();
+	it("part of a name is not the saved place: it is looked up", async () => {
+		const { rc, fetch } = ctx(route(PARIS_HIT, CURRENT), { ...MALMO, label: "Malmo, Sweden" });
+		await weatherNow.run({ place: "Sweden" }, rc);
+		expect(urlOf(fetch, 0).hostname).toBe("geocoding-api.open-meteo.com");
+	});
+});
+
+// The geocoder answers on its own host; the forecast on its own. Each call is recorded by vi.fn.
+const PARIS_HIT = { results: [{ name: "Paris", latitude: 48.85341, longitude: 2.3488, country: "France" }] };
+const route = (geo: unknown, forecast: unknown) => async (url: string) =>
+	new Response(JSON.stringify(new URL(String(url)).hostname.startsWith("geocoding") ? geo : forecast), { status: 200 });
+
+describe("a named place", () => {
+	it("is looked up by name only, then the forecast gets its coordinates, and nothing is saved", async () => {
+		const { rc, fetch, db } = ctx(route(PARIS_HIT, CURRENT));
+		const out = await weatherNow.run({ place: "Paris" }, rc);
+		expect(out).toEqual({ ok: true, say: "In Paris now 14 degrees, feels like 11.6, light rain, wind 5 kilometres per hour.", result: "In Paris now 14 degrees, feels like 11.6, light rain, wind 5 kilometres per hour." });
+		expect(fetch).toHaveBeenCalledTimes(2);
+		const g = urlOf(fetch, 0);
+		expect(g.origin + g.pathname).toBe("https://geocoding-api.open-meteo.com/v1/search");
+		expect([...g.searchParams.keys()]).toEqual(["name", "count", "language"]);
+		expect(g.searchParams.get("name")).toBe("Paris");
+		expect(g.searchParams.get("count")).toBe("1");
+		expect(g.searchParams.get("language")).toBe("en");
+		const f = urlOf(fetch, 1);
+		expect(f.hostname).toBe("api.open-meteo.com");
+		expect(f.searchParams.get("latitude")).toBe("48.85341");
+		expect(f.searchParams.get("longitude")).toBe("2.3488");
+		expect(f.search).not.toContain("Paris");
+		expect(db.tables.profile ?? []).toEqual([]);
+		expect(rc.profile.place).toEqual(MALMO);
+	});
+	it("encodes the name, and uses a 5 second timeout through the same fetch", async () => {
+		const { rc, fetch } = ctx(route(PARIS_HIT, CURRENT));
+		await weatherNow.run({ place: "New York & Co" }, rc);
+		expect(String(fetch.mock.calls[0][0])).toContain("name=New%20York%20%26%20Co&count=1");
+		expect(fetch.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+	});
+	it("works for the forecast too, and names the place first", async () => {
+		const { rc } = ctx(route(PARIS_HIT, DAILY), null);
+		const out = (await weatherForecast.run({ place: "Paris", days: 1 }, rc)) as any;
+		expect(out.ok).toBe(true);
+		expect(out.say).toBe("In Paris. Today: light rain, high 15.2, low 9, 60 percent chance of rain.");
+	});
+	it("the saved place is used, with no lookup, when the name is empty or its own", async () => {
+		for (const asked of ["", "malmo", "Malmo"]) {
+			const { rc, fetch } = ctx(ok(CURRENT));
+			const out = (await weatherNow.run({ place: asked }, rc)) as any;
+			expect(out.say.startsWith("Now 14 degrees")).toBe(true);
+			expect(fetch).toHaveBeenCalledTimes(1);
+			expect(urlOf(fetch).hostname).toBe("api.open-meteo.com");
+		}
+	});
+	it("no hit says so and asks for no weather", async () => {
+		for (const geo of [{ generationtime_ms: 0.4 }, { results: [] }]) {
+			const { rc, fetch } = ctx(route(geo, CURRENT));
+			expect(await weatherNow.run({ place: "Zzyzx Qwerty" }, rc)).toEqual({ ok: false, say: "I could not find a place called Zzyzx Qwerty." });
+			expect(await weatherForecast.run({ place: "Zzyzx Qwerty", days: 2 }, rc)).toEqual({ ok: false, say: "I could not find a place called Zzyzx Qwerty." });
+			expect(fetch).toHaveBeenCalledTimes(2);
+			for (const i of [0, 1]) expect(urlOf(fetch, i).hostname).toBe("geocoding-api.open-meteo.com");
+		}
+	});
+	it("a failing geocoder is the plain unreachable line and asks for no weather", async () => {
+		const failures: [string, (...a: any[]) => Promise<Response>][] = [
+			["a 500", async () => new Response("no", { status: 500 })],
+			["a 429", async () => new Response("slow down", { status: 429 })],
+			["a throw", async () => Promise.reject(new Error("offline"))],
+			["a timeout", async () => Promise.reject(new DOMException("timed out", "TimeoutError"))],
+			["a body that is not JSON", async () => new Response("<html>", { status: 200 })],
+			["results that are not a list", ok({ results: "x" })],
+			["a hit with no coordinates", ok({ results: [{ name: "Paris" }] })],
+		];
+		for (const [label, impl] of failures) {
+			const { rc, fetch } = ctx(impl);
+			expect(await weatherNow.run({ place: "Paris" }, rc), label).toEqual({ ok: false, say: PLAIN });
+			expect(fetch, label).toHaveBeenCalledTimes(1);
+			expect(urlOf(fetch).hostname, label).toBe("geocoding-api.open-meteo.com");
+		}
+	});
+	it("a place found but a failing forecast is still the plain line", async () => {
+		const { rc } = ctx(async (url: string) => (String(url).includes("geocoding") ? new Response(JSON.stringify(PARIS_HIT), { status: 200 }) : new Response("no", { status: 503 })));
+		expect(await weatherNow.run({ place: "Paris" }, rc)).toEqual({ ok: false, say: PLAIN });
 	});
 });
 

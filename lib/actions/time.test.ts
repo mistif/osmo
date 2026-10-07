@@ -19,6 +19,19 @@ describe("localToUtc", () => {
 		expect(localToUtc("2026-03-29T08:00", STO)).toBe(Date.UTC(2026, 2, 29, 6, 0));
 	});
 
+	it("gives null for a local time the clocks skipped, and keeps the hour after it", () => {
+		expect(localToUtc("2027-03-14T02:30", "America/New_York")).toBeNull(); // 02:00 became 03:00
+		expect(localToUtc("2027-03-28T02:30", STO)).toBeNull(); // 02:00 became 03:00
+		expect(localToUtc("2027-03-14T03:30", "America/New_York")).toBe(Date.UTC(2027, 2, 14, 7, 30)); // EDT, -4
+		expect(localToUtc("2027-03-28T03:30", STO)).toBe(Date.UTC(2027, 2, 28, 1, 30)); // CEST, +2
+		expect(localToUtc("2027-03-14T01:30", "America/New_York")).toBe(Date.UTC(2027, 2, 14, 6, 30)); // EST, -5
+		expect(validDue("2027-03-28T02:30", STO, Date.UTC(2027, 0, 1))).toBeNull();
+	});
+
+	it("still takes the repeated hour when the clocks go back", () => {
+		expect(localToUtc("2026-10-25T02:30", STO)).not.toBeNull();
+	});
+
 	it("gives null for anything that is not a real local time", () => {
 		for (const bad of ["2026-02-30T09:00", "2026-10-08T24:00", "2026-10-08T09:60", "2026-13-01T09:00", "2026-10-08 09:00", "2026-10-08T09:00:00", "tomorrow", "", "2026-10-08"]) {
 			expect(localToUtc(bad, STO), bad).toBeNull();

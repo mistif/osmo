@@ -98,11 +98,23 @@ describe("weather", () => {
 		expect(u.searchParams.get("latitude")).toBe("55.6");
 		expect(db.tables.actions[0]).toMatchObject({ name: "weather_now", status: "done", tier: 1 });
 	});
-	it("names another city: a plain line, no request", async () => {
-		const { deps, fetch } = setup();
+	it("looks up another city by name, then asks for its weather", async () => {
+		const { db, deps, fetch } = setup();
+		fetch.mockImplementationOnce(async () => new Response(JSON.stringify({ results: [{ name: "Paris", latitude: 48.85, longitude: 2.35 }] }), { status: 200 }));
 		const out = await runAction(propose("weather_now", { place: "Paris" }), ctx, deps);
-		expect(out).toEqual({ kind: "failed", line: "I only know your saved place for now." });
-		expect(fetch).not.toHaveBeenCalled();
+		expect(out).toMatchObject({ kind: "done", line: "In Paris now 14 degrees, feels like 12, light rain, wind 5 kilometres per hour." });
+		expect(fetch).toHaveBeenCalledTimes(2);
+		expect(new URL(String((fetch.mock.calls[0] as any[])[0])).hostname).toBe("geocoding-api.open-meteo.com");
+		expect(new URL(String((fetch.mock.calls[1] as any[])[0])).searchParams.get("latitude")).toBe("48.85");
+		expect(db.tables.profile[0]).toMatchObject({ place: "Malmo", lat: 55.6, lon: 13 });
+		expect(db.tables.actions[0]).toMatchObject({ status: "done", summary: "Checked the weather" });
+	});
+	it("an unknown city is a plain line and no weather request", async () => {
+		const { deps, fetch } = setup();
+		fetch.mockImplementationOnce(async () => new Response(JSON.stringify({}), { status: 200 }));
+		const out = await runAction(propose("weather_now", { place: "Zzyzx" }), ctx, deps);
+		expect(out).toEqual({ kind: "failed", line: "I could not find a place called Zzyzx." });
+		expect(fetch).toHaveBeenCalledTimes(1);
 	});
 	it("stops at 100 a day, counting only the last 24 hours", async () => {
 		const { deps, fetch } = setup({ actions: history(100, "weather_forecast", NOW - 3_600_000) });
@@ -314,6 +326,61 @@ describe("note_add and note_search through runAction", () => {
 		expect((await runAction(propose("note_search", { query: "" }), ctx, deps)).kind).toBe("done");
 		expect((await runAction(propose("note_add", { text: "x" }), ctx, deps)).kind).toBe("refused");
 		expect(db.tables.notes).toHaveLength(1);
+	});
+});
+
+describe("reminder_list and reminder_cancel through runAction", () => {
+	const seed = (n: number) => Array.from({ length: n }, (_, i) => ({ user_id: "owner-1", id: String(i), text: `reminder ${i}`, due_at: new Date(NOW + (i + 1) * 3_600_000).toISOString(), status: "pending" }));
+	it("list reads them back for call 2, at the read level too, with the true count", async () => {
+		const { db, deps } = setup({ levels: { reminders: "read", notes: "act", weather: "read" } });
+		db.tables.reminders = seed(12);
+		const out = await runAction(propose("reminder_list", {}), ctx, deps);
+		expect(out).toMatchObject({ kind: "done" });
+		expect((out as any).line.startsWith("You have 12 reminders waiting; here are the next 10. ")).toBe(true);
+		expect((out as any).result).toBe((out as any).line);
+		expect(db.tables.actions[0]).toMatchObject({ name: "reminder_list", status: "done", summary: "Read your reminders" });
+	});
+	it("list with none says so", async () => {
+		const { deps } = setup();
+		expect(await runAction(propose("reminder_list", {}), ctx, deps)).toEqual({ kind: "done", line: "You have no reminders waiting.", result: null });
+	});
+	it("cancel settles exactly the one that matches, and is refused at read", async () => {
+		const { db, deps } = setup();
+		db.tables.reminders = seed(3);
+		expect(await runAction(propose("reminder_cancel", { match: "reminder 1" }), ctx, deps)).toEqual({ kind: "done", line: "Cancelled the reminder: reminder 1.", result: null });
+		expect(db.tables.reminders.map((r) => r.status)).toEqual(["pending", "cancelled", "pending"]);
+		expect(db.tables.actions[0]).toMatchObject({ name: "reminder_cancel", status: "done", summary: "Cancelled a reminder" });
+		const read = setup({ levels: { reminders: "read", notes: "act", weather: "read" } });
+		read.db.tables.reminders = seed(1);
+		expect((await runAction(propose("reminder_cancel", { match: "reminder" }), ctx, read.deps)).kind).toBe("refused");
+		expect(read.db.tables.reminders[0].status).toBe("pending");
+	});
+	it("cancel with two matches or none says why and cancels nothing", async () => {
+		const { db, deps } = setup();
+		db.tables.reminders = seed(2);
+		expect(await runAction(propose("reminder_cancel", { match: "reminder" }), ctx, deps)).toEqual({ kind: "failed", line: "I found 2 like that. Please say a little more." });
+		expect(await runAction(propose("reminder_cancel", { match: "zebra" }), ctx, deps)).toEqual({ kind: "failed", line: "I could not find one like that." });
+		expect(db.tables.reminders.map((r) => r.status)).toEqual(["pending", "pending"]);
+	});
+});
+
+describe("the note_add caps", () => {
+	it("refuses the 101st add of the day with the limit line, and saves nothing", async () => {
+		const { db, deps } = setup({ notes: [], actions: history(100, "note_add", NOW - 3_600_000) });
+		expect(await runAction(propose("note_add", { text: "one too many" }), ctx, deps)).toEqual({ kind: "refused", line: LIMIT_LINE });
+		expect(db.tables.notes).toEqual([]);
+		expect(db.tables.actions.at(-1)).toMatchObject({ name: "note_add", status: "refused", error: "cap", summary: "Add a note" });
+	});
+	it("allows the 100th, and does not count rows 25 hours old", async () => {
+		const ninetyNine = setup({ notes: [], actions: history(99, "note_add", NOW - 3_600_000) });
+		expect((await runAction(propose("note_add", { text: "the hundredth" }), ctx, ninetyNine.deps)).kind).toBe("done");
+		const old = setup({ notes: [], actions: history(100, "note_add", NOW - 25 * 3_600_000) });
+		expect((await runAction(propose("note_add", { text: "fine" }), ctx, old.deps)).kind).toBe("done");
+	});
+	it("stops at 500 notes in all, whatever the day's count", async () => {
+		const { db, deps } = setup({ notes: Array.from({ length: 500 }, (_, i) => `note ${i}`) });
+		expect(await runAction(propose("note_add", { text: "501st" }), ctx, deps)).toEqual({ kind: "failed", line: "You have reached the limit of 500 notes." });
+		expect(db.tables.notes).toHaveLength(500);
 	});
 });
 
