@@ -61,7 +61,8 @@ export function ConnectorsSettings() {
 
 	async function refreshDevices() {
 		const { data, error } = await supabase.from("push_subscriptions").select("id,label,created_at,last_ok_at").order("created_at");
-		if (error) {
+		// A table that is not there yet (PGRST205, before the phase 1 migration) is an empty list, not unreachable memory.
+		if (error && error.code !== "PGRST205") {
 			setDevicesError(UNREACHABLE);
 			setDevices([]);
 		} else {

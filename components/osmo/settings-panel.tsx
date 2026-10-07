@@ -156,13 +156,15 @@ export function SettingsPanel({ voice, aiUsage }: { voice: VoiceControls; aiUsag
 			<ConnectorsSettings />
 			<RemindersNotes />
 
-			{aiUsage?.enabled && (
+			{aiUsage?.enabled ? (
 				<p className={styles.note}>
 					AI conversation: on
 					{aiUsage.usedToday !== null && aiUsage.usable !== null
 						? `, ${aiUsage.usedToday.toLocaleString("en-US")} of ${aiUsage.usable.toLocaleString("en-US")} tokens used today.`
 						: "."}
 				</p>
+			) : (
+				<p className={styles.note}>AI conversation: off.</p>
 			)}
 
 			<section className={styles.section}>

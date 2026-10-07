@@ -7,6 +7,11 @@ import styles from "./panels.module.css";
 
 const UNREACHABLE = "I cannot reach my memory right now. Try again in a moment.";
 const REMOVE_FAILED = "I could not remove that. Try again.";
+// A table that is not there yet (PGRST205, before the phase 1 migration) is an empty list, not unreachable memory.
+const MISSING_TABLE = "PGRST205";
+function hardError(error: { code?: string } | null): boolean {
+	return error !== null && error.code !== MISSING_TABLE;
+}
 
 // Two short lists, each row with a Remove button. The browser may only read and delete these rows (RLS).
 export function RemindersNotes() {
@@ -21,7 +26,7 @@ export function RemindersNotes() {
 			supabase.from("reminders").select("id,text,due_at,status").in("status", ["pending", "missed"]).order("due_at"),
 			supabase.from("notes").select("id,text,created_at").order("created_at", { ascending: false }),
 		]);
-		if (r.error || n.error) {
+		if (hardError(r.error) || hardError(n.error)) {
 			setError(UNREACHABLE);
 			setReminders([]);
 			setNotes([]);
