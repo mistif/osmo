@@ -8,7 +8,8 @@ describe("seal and open", () => {
 	it("round trips", () => {
 		expect(open(seal("tok", KEY, W), KEY, W)).toBe("tok");
 		expect(open(seal("", KEY, W), KEY, W)).toBe("");
-		expect(open(seal("töken", KEY, W), KEY, W)).toBe("töken");
+		const odd = "t" + String.fromCharCode(246) + "ken";
+		expect(open(seal(odd, KEY, W), KEY, W)).toBe(odd);
 	});
 
 	it("two seals of one text differ", () => {
