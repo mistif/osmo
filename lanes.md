@@ -83,6 +83,8 @@ Editing your own part of a shared file needs no OK. Put the file under Now on yo
   - The contract speaking must keep is in `lib/voice/engine.ts`, which main owns. It's under "Interfaces" in `project.md`.
 - **`package.json` and `package-lock.json`:** anyone may add a dependency, but one install at a time. Put "installing X" under Now first, and commit both files with the change that needs it.
 
+- **Connectors (since 2026-10-07, spec `2026-10-07-osmo-connectors-design.md`):** main owns `lib/server/admin.ts`, `lib/connectors/*`, `lib/actions/*`, every migration, `app/api/connect/**`, `act`, `cron/**`, `push/**`, `telegram/**`, `app/manifest.ts`, icons, `public/sw.js`, Settings and Insights parts. Language owns `lib/chat/turn-schema.ts` (`action`, `turnFormat`), `reply-json.ts`, `prompt.ts` (action block, call 2), `handler.ts` (the second call, one reserve-call-settle helper), `types.ts`, `ask.ts`, the probe, and the later shared `run-turn.ts`. Speaking owns the server voice function for Telegram (Ogg/Opus). Seam: `handler.ts` calls main's `runAction(proposal, context)` and `listEnabledActions()` from `lib/actions/` and nothing else; `sendText` gains the yes/no check before the chain.
+
 ## Shared resources
 
 - **The `main` branch:**

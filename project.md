@@ -120,7 +120,7 @@ Keys are lowercase. The Memory panel edits values only.
 - `voiceName` (the name of the voice he speaks with) is shown in Settings.
 
 ### Server auth (owner: speaking; planned `lib/server/auth.ts`)
-It checks `Authorization: Bearer <Supabase access token>` and returns the user, or a 401. `/api/speak` uses it, and `/api/chat` will later. There's no service-role key anywhere.
+It checks `Authorization: Bearer <Supabase access token>` and returns the user, or a 401. `/api/speak` uses it, and `/api/chat` will later. Since 2026-10-07 the server has one service-role client, `lib/server/admin.ts`, owner-filtered, for connectors, Telegram and the reminder timer (see the connectors spec); the room's routes still act as Gur through his token.
 
 ### The AI conversation (owner: language; spec `docs/superpowers/specs/2026-09-29-osmo-ai-conversation-design.md`)
 - **Off until Gur turns it on.**
