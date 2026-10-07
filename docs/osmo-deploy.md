@@ -49,6 +49,19 @@ Until passkeys are turned on (step 1 here), the Devices list in Settings shows "
 8. On your iPhone in Safari, repeat steps 3–5. If Teach again on this device makes him recognize you better on the phone, keep it. If a message you speak with the mic button on the phone is labelled Someone else, Safari isn't sharing the microphone with its recognizer; tell Claude.
 9. Choose **Forget my voice**, then **Forget my voice** again to confirm. Listening turns off, and the button reads "Teach Osmo my voice" again. Teach it once more if you want to keep using voice.
 
+## 6. The installed app (iPhone)
+
+Osmo is now an installable app (it has a manifest and icons). What is on your home screen today is almost certainly a plain bookmark of the website, because no manifest existed before. Notifications on an iPhone only work for an installed app, so install it again:
+
+1. **Delete the old home-screen shortcut.**
+2. Open the live address in Safari.
+3. Tap Share, then **Add to Home Screen**.
+4. Open Osmo from the new icon (not from Safari) and **sign in once**. An installed iPhone app may keep its own storage, so voice settings may start fresh there.
+
+It should open full screen, with no browser bar, and show the heart with three rings as its icon.
+
+Windows Chrome and Edge: choose Install app in the address bar if you want Osmo in its own window. This is optional; notifications work without installing.
+
 ## Your password is the real key
 The email and password path works on every device, so use a long, unique password for it. If your Supabase plan offers leaked-password protection, turn it on.
 

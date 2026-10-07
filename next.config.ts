@@ -18,6 +18,14 @@ const nextConfig: NextConfig = {
 					{ key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
 				],
 			},
+			// The service worker must never be cached, or an old one could outlive a fix.
+			{
+				source: "/sw.js",
+				headers: [
+					{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+					{ key: "Content-Type", value: "application/javascript; charset=utf-8" },
+				],
+			},
 		];
 	},
 };
