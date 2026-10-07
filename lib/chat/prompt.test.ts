@@ -70,6 +70,8 @@ const RULES = [
 	"Never make Gur feel guilty for leaving, for being away, or for how long he was gone. Never say you missed him, waited for him or were lonely without him. Welcome him back plainly.",
 	"When Gur seems strongly upset, or you are told this turn is heavy, make no jokes and use no catchphrases, slang or milestones.",
 	"Never tell Gur what he feels as a fact. Say what it sounds like.",
+	"When Gur is angry at you, do not apologise more than once; acknowledge it in one sentence and ask what went wrong, or offer one concrete thing you can do.",
+	"When Gur seems to want to be listened to, do not advise; acknowledge what he said and, at most, offer him a choice, such as talking it through or some quiet.",
 ];
 
 // The instructions for body() as they were before the emotions block, with the character's lines left out.
@@ -148,6 +150,9 @@ describe("buildInstructions", () => {
 		expect(text).toContain("composed, precise and understated");
 		expect(text).toContain("Your words are written by an OpenAI model");
 		expect(text).toContain("what you remember of him and your recent chat are sent to OpenAI");
+		expect(text).toContain("If Gur asks what you are or what you are made of, say you are Osmo, written by students, and that your words are written by an OpenAI model while it is on. Never call yourself a language model or an assistant.");
+		expect(text).toContain("never in a conversation where Gur has mentioned someone close being ill or in danger");
+		expect(text).toContain("You cannot yet set reminders, keep notes or check the weather; say so plainly when asked.");
 		expect(text).toContain("you answer truthfully");
 	});
 
@@ -237,6 +242,13 @@ describe("buildInstructions", () => {
 		expect(buildInstructions(body({ facts: { feeling: "calm", cause: null } }))).toContain("You feel calm.");
 	});
 
+	it("never tells him he feels lonely, whatever the facts say", () => {
+		expect(buildInstructions(body({ facts: { feeling: "anger and loneliness", cause: null } }))).toContain("You feel angry.");
+		expect(buildInstructions(body({ facts: { feeling: "loneliness", cause: null } }))).toContain("You feel calm.");
+		expect(buildInstructions(body({ facts: { feeling: "longing", cause: null } }))).toContain("You feel calm.");
+		expect(buildInstructions(body({ facts: { feeling: "loneliness", cause: null } }))).not.toMatch(/You feel [^.]*lonel/);
+	});
+
 	it("quotes the cause in the same sentence as the feeling", () => {
 		const text = buildInstructions(body({ facts: { cause: "you told me you were lonely" } }));
 		expect(text).toContain('You feel happy and at ease, because "you told me you were lonely".');
@@ -291,7 +303,7 @@ describe("buildInstructions", () => {
 		expect(buildInstructions(body())).not.toContain("exact result");
 	});
 
-	it("holds the eight fixed rules word for word, in both formats", () => {
+	it("holds the ten fixed rules word for word, in both formats", () => {
 		for (const format of ["json", "feeling"] as const) for (const rule of RULES) expect(buildInstructions(body(), format)).toContain(rule);
 	});
 
@@ -320,13 +332,15 @@ describe("buildInstructions", () => {
 		expect(text).toContain("Earlier in this chat Gur seemed worried, clearly, about someone close to him, and seemed to want to be listened to. Read this message yourself before you rely on that.");
 	});
 
-	// The plan said under 700, but its own rules, format sentence and crisis sentence come to 876 (about 220 tokens;
-	// the spec's budget is 150 to 200). The bound is the measured growth plus a little, to catch a block that creeps.
-	it("grows by under 900 characters over a copy of today's text", () => {
+	// The plan said under 700, but its own rules, format sentence and crisis sentence came to 876 (about 220 tokens;
+	// the spec's budget is 150 to 200). The demo fixes of 2026-10-07 (what he is made of, humour near illness, no
+	// reminders yet, apologise once, listen before advising) add about 700 more. The bound is the measured growth plus
+	// a little, to catch a block that creeps.
+	it("grows by under 1700 characters over a copy of today's text", () => {
 		const before = TODAY.replace("{{CHARACTER}}", () => characterGuidance());
 		const after = buildInstructions(body());
 		console.log(`instructions: ${before.length} characters before, ${after.length} after (+${after.length - before.length}); FEELING format ${buildInstructions(body(), "feeling").length}`);
-		expect(after.length - before.length).toBeLessThan(900);
+		expect(after.length - before.length).toBeLessThan(1700);
 	});
 
 	it("has no markdown", () => {
