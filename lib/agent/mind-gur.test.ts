@@ -18,3 +18,27 @@ describe("prepareTurn and Gur's last tone", () => {
 		expect(facts(999_000, heavy3, { guest: true })).toMatchObject({ gur: null, heavy: false });
 	});
 });
+
+describe("the turns after Gur was strongly upset", () => {
+	it("marks the turn when the read is negative at intensity 3, and not otherwise", () => {
+		expect(rememberGur({ ...newSession(), turns: 5 }, heavy3, 900_000).upset).toEqual({ turn: 5, at: 900_000 });
+		expect(rememberGur({ ...newSession(), turns: 5 }, light, 900_000).upset).toBeNull();
+	});
+
+	it("keeps the next three turns heavy, even once a lighter read has replaced his", () => {
+		let s = rememberGur({ ...newSession(), turns: 5 }, heavy3, 990_000);
+		s = rememberGur(s, light, 995_000);
+		const heavies: boolean[] = [];
+		for (let i = 0; i < 4; i++) {
+			const r = prepareTurn(defaultState(), s, "lol you dont even have hands", ctx());
+			heavies.push(r.facts.heavy);
+			s = r.session;
+		}
+		expect(heavies).toEqual([true, true, true, false]);
+	});
+
+	it("lets the window close after half an hour away", () => {
+		const s = rememberGur({ ...newSession(), turns: 5 }, heavy3, 1_000_000 - GUR_FRESH_MS - 1);
+		expect(prepareTurn(defaultState(), s, "lol you dont even have hands", ctx()).facts.heavy).toBe(false);
+	});
+});

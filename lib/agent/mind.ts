@@ -1,7 +1,7 @@
 import { closeness, mentioned, recordTurn, stageOf, type MilestoneId, type Stage } from "./bond/bond";
 import { closenessReply, isAskCloseness, isAskMet, metReply, milestoneLine } from "./bond/lines";
 import { applyFeedback, decide, explain, parseVerdict, type Decision } from "./brain";
-import { applyCues, applyGap, bondBaseline, missYou } from "./cues";
+import { applyApology, applyCues, applyGap, bondBaseline, GAP_MS, missYou } from "./cues";
 import { CRISIS_CAUSE } from "./crisis-cause";
 import { detectFromText, NEGATIVE_TONES, type GurRead } from "./detection";
 import { DILEMMAS, findDilemma, nextDilemma } from "./dilemmas";
@@ -16,7 +16,7 @@ import {
 	pickEvent,
 	type StoryEvent,
 } from "./events";
-import { dominantEmotions, moodLabel, stepHeart } from "./heart";
+import { blendLabel, dominantEmotions, moodLabel, stepHeart } from "./heart";
 import { withBaseFeelings } from "./lexicon/feelings";
 import { moodTheme, type MoodTheme } from "./mood-theme";
 import { CHARACTER, isAskNewOsmo, NEW_OSMO_REPLY, type Character } from "./character";
@@ -40,6 +40,8 @@ export type Session = {
 	gur: { read: GurRead; at: number } | null;
 	// The `turns` value of the last reply that mentioned his own mood (spec 7), so he does it once every 8 replies at most.
 	lastOwnMention: number | null;
+	// The turn Gur was last read as strongly upset, and when: the next three turns stay heavy (emotions spec 8, rule 7).
+	upset?: { turn: number; at: number } | null;
 };
 
 export type Effect =
@@ -77,6 +79,7 @@ export const newSession = (): Session => ({
 	turns: 0,
 	gur: null,
 	lastOwnMention: null,
+	upset: null,
 });
 
 const STORY_TRIGGER = /\b(tell me a story|give me an experience|feed me an event|experience something)\b/i;
@@ -125,11 +128,11 @@ function startTurn(state: AgentState, session: Session, text: string, ctx: TurnC
 	const close = closeness(state.bond);
 	const awayMs = ctx.lastAt !== null ? ctx.now - ctx.lastAt : 0;
 	let activations = state.activations;
-	if (ctx.lastAt !== null) activations = missYou(applyGap(activations, awayMs), awayMs, close);
-	activations = applyCues(activations, withBaseFeelings(trimmed), p.reactivity);
+	if (ctx.lastAt !== null) activations = missYou(applyGap(activations, awayMs, p.baseline), awayMs, close);
+	activations = applyApology(applyCues(activations, withBaseFeelings(trimmed), p.reactivity), trimmed, p.baseline);
 	let s: AgentState = { ...state, activations: stepHeart(activations, state.coupling, bondBaseline(p.baseline, close)) };
-	// Any message that is not a verdict clears the pending question.
-	const sess: Session = { ...session, pending: null, turns: session.turns + 1 };
+	// Any message that is not a verdict clears the pending question. A cause from before a long silence is stale, so it goes too.
+	const sess: Session = { ...session, pending: null, turns: session.turns + 1, cause: awayMs >= GAP_MS ? null : session.cause };
 
 	// 0. Talk of suicide or self-harm always comes first, whatever else is going on.
 	if (isCrisis(trimmed)) {
@@ -410,7 +413,8 @@ function sensitiveTurn(parts: ReturnType<typeof understand>): boolean {
 }
 
 // An open turn left the way step 6 leaves it once it has answered: the new cause, the milestone that's due marked as
-// said (the model is asked to say it), and a first feeling not thanked for this turn not brought up later.
+// said (the model is asked to say it), and a first feeling not thanked for this turn not brought up later. `heavy` here is
+// the message being sensitive; his own mood never makes a model-written turn heavy (that is Gur's to set).
 function leaveForModel(open: OpenTurn): { result: TurnResult; milestone: MilestoneId | null; heavy: boolean } {
 	const { s, sess, p, awayMs, parts } = open;
 	const effects = [...open.effects];
@@ -428,7 +432,7 @@ function leaveForModel(open: OpenTurn): { result: TurnResult; milestone: Milesto
 	return {
 		result: { state: { ...s, bond: mentioned(said, "firstFeeling") }, session: cause ? { ...sess, cause } : sess, reply: null, effects },
 		milestone,
-		heavy: heavyTurn(tone, sensitive),
+		heavy: sensitive,
 	};
 }
 
@@ -452,7 +456,11 @@ export function prepareTurn(state: AgentState, session: Session, text: string, c
 	const age = ctx.now - (result.session.gur?.at ?? Number.NEGATIVE_INFINITY);
 	const gur = !guest && result.session.gur !== null && age >= 0 && age < GUR_FRESH_MS ? result.session.gur.read : null;
 	const upset = gur !== null && gur.intensity === 3 && gur.tones.some((t) => NEGATIVE_TONES.includes(t));
-	const heavy = (open ? open.heavy : heavyTurn(tone, false)) || upset;
+	// The three turns after Gur was strongly upset stay heavy too, within the same half hour.
+	const marked = result.session.upset ?? null;
+	const since = ctx.now - (marked?.at ?? Number.NEGATIVE_INFINITY);
+	const recentUpset = !guest && marked !== null && result.session.turns - marked.turn <= 3 && since >= 0 && since < GUR_FRESH_MS;
+	const heavy = (open ? open.heavy : heavyTurn(tone, false)) || upset || recentUpset;
 	// His own mood (spec 7): only on an open, model-written turn, and only when it is clearly there, not mentioned lately,
 	// and Gur is not himself down right now.
 	const relaxed = guest ? null : relaxMood(result.state.mood, ctx.now);
@@ -464,7 +472,8 @@ export function prepareTurn(state: AgentState, session: Session, text: string, c
 	const own = open && top && !heavy && due && !gurDown && result.state.activations[top] - baseline[top] >= 0.15 ? feelingWords(top) : null;
 	const words = relaxed ? moodWords(relaxed) : "";
 	const facts: TurnFacts = {
-		feeling: moodLabel(result.state.activations, baseline),
+		// Loneliness stays out of what the model is told (emotions spec rule 6): the aura shows it, his words never do.
+		feeling: blendLabel(dominantEmotions(result.state.activations, 3, baseline).filter((e) => e !== "loneliness")),
 		tone,
 		// What a crisis left behind stays between him and Gur.
 		cause: guest || result.session.cause === CRISIS_CAUSE ? null : ((top ? causeFor(result.state.mood, top, ctx.now) : null) ?? result.session.cause),

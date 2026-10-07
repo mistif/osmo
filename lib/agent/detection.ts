@@ -48,8 +48,11 @@ export function validateDetection(raw: unknown, source: Detection["source"] = "m
 	return { tones, intensity, about, wants, note, source };
 }
 
+// Keeps Gur's last reading and, when he was strongly upset, marks the turn so the next few stay heavy (emotions spec 8, rule 7).
 export function rememberGur(session: Session, detection: Detection | null, now: number): Session {
-	return detection ? { ...session, gur: { read: readOf(detection), at: now } } : session;
+	if (!detection) return session;
+	const strong = detection.intensity === 3 && detection.tones.some((t) => NEGATIVE_TONES.includes(t));
+	return { ...session, gur: { read: readOf(detection), at: now }, ...(strong ? { upset: { turn: session.turns, at: now } } : {}) };
 }
 
 const AM = String.raw`\b(?:i['’]?m|im|i am)\s+(?:feeling\s+)?(so\s+|really\s+|very\s+)?`;

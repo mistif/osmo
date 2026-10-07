@@ -10,6 +10,8 @@ import {
 
 const STEP = 0.1;
 const DECAY = 0.05;
+// Anger cools faster than the rest: one insult should not colour the next fourteen turns.
+const DECAY_OF: Partial<Record<Emotion, number>> = { anger: 0.15 };
 const SALIENCE = 0.1;
 
 export const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
@@ -27,7 +29,7 @@ export function stepHeart(
 			influence += w * (a[source] - baseline[source]);
 		}
 		const coupled = clamp01(a[target] + STEP * influence);
-		next[target] = clamp01(coupled + DECAY * (baseline[target] - coupled));
+		next[target] = clamp01(coupled + (DECAY_OF[target] ?? DECAY) * (baseline[target] - coupled));
 	}
 	return next;
 }
