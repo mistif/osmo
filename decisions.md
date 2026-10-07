@@ -125,3 +125,6 @@ Both get `strict: true` (`d3afca7`). Output stays under the plan's 120-token lim
 
 ## 2026-10-02: the repo is public
 Gur made mistif/osmo public for job applications after main scanned every branch's history (no keys, env values, database refs or emails; his surname replaced in two test fixtures). From now on nothing private goes in the code, the docs or this brain: keys and personal data stay in `.env.local`, Vercel and Supabase.
+
+## 2026-10-07: connectors and surfaces, "like Muse to some extent"
+Gur wants Osmo across his iPhone and Windows: (a) Osmo reaches out through connectors: reminders and notes with push, weather and location, Google Calendar and Gmail (read, summarise, draft), Spotify; (b) Gur reaches Osmo from a Telegram bot (text and voice notes) and later a Windows always-on tray app (separate spec). Permission: act on small things, ask before sending mail or anything costing money or irreversible; every action logged and shown in Insights. Mechanism: an `action` field in the existing JSON turn with a code allowlist and tiers, one follow-up call when he needs the result; not model tool calls (allowance, unverified). Spec being written: `docs/superpowers/specs/2026-10-07-osmo-connectors-design.md`; Gur reviews before any plan.
