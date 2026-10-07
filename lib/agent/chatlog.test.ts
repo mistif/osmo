@@ -10,7 +10,7 @@ const ctx = () => ({ now: 1_000_000, lastAt: null, uuid: () => "id" });
 const say = (text: string, state: AgentState = defaultState(), session: Session = newSession()) =>
 	processTurn(state, session, text, ctx());
 const PET_NAMES = /\b(squirt|kiddo|little one|sweetheart|darling|dear|sir|madam|boss|buddy|mate|dude|champ)\b/i;
-const JUST_MET_GU = "Nice to meet you, Gu! I'll remember that.";
+const JUST_MET_GU = "Good to meet you, Gu.";
 
 describe("the Supabase chat log, replayed", () => {
 	it("never talks down to the user", () => {

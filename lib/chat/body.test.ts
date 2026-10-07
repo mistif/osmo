@@ -10,7 +10,7 @@ import { LIMITS } from "./types";
 const user = (text: string): RoomLine => ({ role: "user", text });
 const agent = (text: string): RoomLine => ({ role: "agent", text });
 const guest = (line: RoomLine): RoomLine => ({ ...line, speaker: "guest" });
-const GREETING = agent("Hello, I'm Osmo. How can I help?");
+const GREETING = agent("Hello. I am Osmo. What is on your mind?");
 const fact = (key: string, value = `value of ${key}`): MemoryFact => ({ key, value });
 
 // This turn's real facts, as the room has them.
@@ -29,7 +29,7 @@ const input = (over: Partial<Parameters<typeof chatBody>[0]> = {}): Parameters<t
 describe("modelHistory", () => {
 	it("keeps Gur's conversation, oldest first, as plain lines", () => {
 		expect(modelHistory([GREETING, user("hi"), agent("Good evening.")])).toEqual([
-			{ role: "agent", text: "Hello, I'm Osmo. How can I help?" },
+			{ role: "agent", text: "Hello. I am Osmo. What is on your mind?" },
 			{ role: "user", text: "hi" },
 			{ role: "agent", text: "Good evening." },
 		]);

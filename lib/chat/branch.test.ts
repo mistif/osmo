@@ -45,7 +45,7 @@ const knownBond = {
 	toMention: ["days7" as const],
 };
 const GUR: SendOptions = { via: "typed", speaker: "you" };
-const GREETING: RoomLine = { role: "agent", text: "Hello, I'm Osmo. How can I help?" };
+const GREETING: RoomLine = { role: "agent", text: "Hello. I am Osmo. What is on your mind?" };
 const NAMED: MemoryFact[] = [{ key: "name", value: "Gur" }];
 
 type Room = {

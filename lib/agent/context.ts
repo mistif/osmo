@@ -71,10 +71,10 @@ export function nameAnswer(text: string, lastAgentText: string | undefined, know
 
 // A name as Osmo says it back: one to four words of letters in any script ("Åsa", "גור"), with no comma or full stop.
 const NAME = String.raw`([\p{L}\p{M}'’-]+(?: [\p{L}\p{M}'’-]+){0,3})`;
-// Code's sentences that say the name. "Nice to meet you, Gu! I'll remember that." and "Your name is Gu." open
-// his reply; "And you're Gu, I remember." ("And you are" in a formal voice) can follow a welcome back.
+// Code's sentences that say the name. "Good to meet you, Gu." (the whole reply) and "Your name is Gu." open
+// his reply; "And you are Gu, I remember." ("And you're" in an older line) can follow a welcome back.
 const SAID_NAME = [
-	new RegExp(String.raw`^Nice to meet you, ${NAME}! I'll remember that\.`, "u"),
+	new RegExp(String.raw`^Good to meet you, ${NAME}\.$`, "u"),
 	new RegExp(String.raw`(?:^|[.!?]\s+)And you(?:'re| are) ${NAME}, I remember\.`, "u"),
 	new RegExp(String.raw`^Your name is ${NAME}\.(?:\s|$)`, "u"),
 ];
@@ -150,7 +150,7 @@ export function taughtMeanings(memory: readonly { key: string; value: string }[]
 	return out;
 }
 
-// After "Could you explain it? I'll remember.", is this message the explanation? A new question
+// After "Could you explain it?", is this message the explanation? A new question
 // ("what does serendipity mean", "why?") is not, so it gets answered instead of being saved as a meaning.
 export function answersPendingLearning(text: string): boolean {
 	return !/\?\s*$/.test(text.trim()) && parseLookup(text) === null;
@@ -165,7 +165,7 @@ export function wantsRecall(text: string): boolean {
 // Quotes the user's last two messages back to them, newest first.
 export function recallReply(history: Line[]): string {
 	const said = history.filter((line) => line.role === "user").slice(-2).reverse();
-	if (said.length === 0) return "You haven't said anything to me yet. What's on your mind?";
+	if (said.length === 0) return "You have not said anything to me yet. What is on your mind?";
 	if (said.length === 1) return `You just said "${said[0].text}".`;
 	return `You just said "${said[0].text}", and before that "${said[1].text}".`;
 }

@@ -63,7 +63,7 @@ const font = Bricolage_Grotesque({ subsets: ["latin"], display: "swap" });
 
 export default function AgentChat() {
 	const [messages, setMessages] = useState<ChatMessage[]>([
-		{ role: "agent", text: "Hello, I'm Osmo. How can I help?" },
+		{ role: "agent", text: "Hello. I am Osmo. What is on your mind?" },
 	]);
 	const router = useRouter();
 	const panels = usePanels();
@@ -434,28 +434,28 @@ export default function AgentChat() {
 				]);
 				setPendingLearning(null);
 				void saveFact(learnedTopic);
-				return `Understood. "${learning}" means ${explanation}. I'll remember that.`;
+				return `Understood. "${learning}" means ${explanation}.`;
 			}
 			if (branch === "correctedName" && correctedName) {
 				rememberName(correctedName);
-				return `My apologies, ${correctedName}. I've corrected that.`;
+				return `My apologies, ${correctedName}. I have corrected that.`;
 			}
 			if (branch === "answeredName" && answeredName) {
 				rememberName(answeredName);
-				return `Nice to meet you, ${answeredName}! I'll remember that.`;
+				return `Good to meet you, ${answeredName}.`;
 			}
 			if (branch === "foundName" && foundName) {
 				rememberName(foundName);
-				return `You're ${foundName}. My apologies, I should have caught that.`;
+				return `You are ${foundName}. My apologies, I should have caught that.`;
 			}
-			if (branch === "lookedBack") return "I looked back but couldn't find it. What's your name?";
+			if (branch === "lookedBack") return "I looked back but could not find it. What is your name?";
 			// Nothing a guest says is kept, so Osmo says so rather than pretending to note it.
 			if (branch === "guestNotes") return GUEST_NO_NOTES;
 			if (branch === "slang" && taughtSlang) {
 				const slangFact = { key: `slang:${taughtSlang.word}`, value: taughtSlang.meaning };
 				setMemory((current) => [...current.filter((fact) => fact.key !== slangFact.key), slangFact]);
 				void saveFact(slangFact);
-				return `Understood. When you say "${taughtSlang.word}", I'll read it as "${taughtSlang.meaning}".`;
+				return `Understood. When you say "${taughtSlang.word}", I will read it as "${taughtSlang.meaning}".`;
 			}
 			if (branch === "fact" && learnedFact) {
 				setMemory((current) => [
@@ -463,7 +463,7 @@ export default function AgentChat() {
 					learnedFact,
 				]);
 				void saveFact(learnedFact);
-				return `Noted. Your ${learnedFact.key} is ${learnedFact.value}.`;
+				return `Understood. Your ${learnedFact.key} is ${learnedFact.value}.`;
 			}
 			// A topic he doesn't know: he asks Gur to explain it, and saves the answer next turn.
 			if (pendingTopic) setPendingLearning(pendingTopic);
@@ -542,7 +542,7 @@ export default function AgentChat() {
 					await work(wait);
 				} catch {
 					// Anything unexpected still ends in one reply, so a spoken turn never leaves the voice waiting.
-					if (!replied && !wait.quiet) deliver(ruleReply ?? "I'm not sure I follow. Could you rephrase that?");
+					if (!replied && !wait.quiet) deliver(ruleReply ?? "I am not sure I follow. Could you rephrase that?");
 				} finally {
 					if (waitingRef.current === wait) waitingRef.current = null;
 					setThinking(false);

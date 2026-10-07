@@ -29,7 +29,7 @@ describe("askedForName", () => {
 			"I'm Osmo. What should I call you?",
 			"I am Osmo. What should I call you?",
 			"Good to see you again. I'm Osmo. What should I call you?",
-			"I looked back but couldn't find it. What's your name?",
+			"I looked back but could not find it. What is your name?",
 			"I looked back but could not find it. What is your name?",
 		]) {
 			expect(askedForName(text), text).toBe(true);
@@ -49,7 +49,7 @@ describe("askedForName", () => {
 describe("nameAnswer", () => {
 	it("reads the answer to code's name question while no name is known", () => {
 		expect(nameAnswer("Green", "I'm Osmo. What should I call you?", null)).toBe("Green");
-		expect(nameAnswer("its gur", "I looked back but couldn't find it. What's your name?", null)).toBe("Gur");
+		expect(nameAnswer("its gur", "I looked back but could not find it. What is your name?", null)).toBe("Gur");
 	});
 
 	it("saves nothing after a model's 'What's yours?'", () => {
@@ -82,15 +82,15 @@ describe("nameFromAnswer", () => {
 describe("justLearnedName", () => {
 	it("reads the name in code's own sentences", () => {
 		const said: [string, string][] = [
-			["Nice to meet you, Gu! I'll remember that.", "Gu"],
+			["Good to meet you, Gu.", "Gu"],
 			["I'm Osmo. And you're Gu, I remember.", "Gu"],
 			["I'm Osmo. And you're Gu, I remember. Slay.", "Gu"],
 			["I am Osmo. And you are Gu, I remember.", "Gu"],
 			["Your name is Gu.", "Gu"],
 			["I'm Osmo. And you're Anna Maria Lopez, I remember.", "Anna Maria Lopez"],
-			["Nice to meet you, Mary-Jane O'Neil! I'll remember that.", "Mary-Jane O'Neil"],
+			["Good to meet you, Mary-Jane O'Neil.", "Mary-Jane O'Neil"],
 			["Your name is José.", "José"],
-			["Nice to meet you, Åsa! I'll remember that.", "Åsa"],
+			["Good to meet you, Åsa.", "Åsa"],
 			["Your name is Åsa.", "Åsa"],
 			["I'm Osmo. And you're Åsa Öberg, I remember.", "Åsa Öberg"],
 			["Your name is גור.", "גור"],
@@ -177,7 +177,7 @@ describe("nameFromHistory", () => {
 			nameFromHistory([
 				{ role: "agent", text: "I'm Osmo. What should I call you?" },
 				{ role: "user", text: "gur" },
-				{ role: "agent", text: "Nice to meet you, Gur! I'll remember that." },
+				{ role: "agent", text: "Good to meet you, Gur." },
 				{ role: "user", text: "my friend is here" },
 				{ role: "agent", text: "Hello to your friend. What's your name?" },
 				{ role: "user", text: "Linda" },
@@ -195,7 +195,7 @@ describe("nameFromHistory", () => {
 	it("still takes a correction or a stated name after it has found one", () => {
 		expect(
 			nameFromHistory([
-				{ role: "agent", text: "Nice to meet you, Gu! I'll remember that." },
+				{ role: "agent", text: "Good to meet you, Gu." },
 				{ role: "user", text: "no its Gur" },
 			]),
 		).toBe("Gur");
@@ -225,7 +225,7 @@ describe("recall", () => {
 			{ role: "user" as const, text: "im in class" },
 		];
 		expect(recallReply(history)).toBe('You just said "im in class", and before that "hi".');
-		expect(recallReply([{ role: "agent", text: "Hi" }])).toMatch(/haven't said anything/);
+		expect(recallReply([{ role: "agent", text: "Hi" }])).toMatch(/have not said anything/);
 	});
 });
 
