@@ -6,6 +6,7 @@ import { cancelAllPending, holdPending } from "./confirm";
 import { execute, logger } from "./execute";
 import { levelOf, loadProfile } from "./profile";
 import { REGISTRY } from "./registry";
+import { todayLine } from "./time";
 import { decide } from "./tiers";
 import type { ActionContext, ActionOutcome, ActionProposal, Deps, EnabledActions, Env, RunCtx } from "./types";
 
@@ -26,16 +27,6 @@ export const realDeps = (): Deps => ({
 });
 
 const sameOwner = (db: OwnerDb, userId: unknown) => typeof userId === "string" && db.owner === userId.trim().toLowerCase();
-
-// The saved time zone decides what "today" is; a missing or unknown zone falls back to UTC.
-function todayLine(now: number, timezone: string | null): string {
-	const format = (timeZone: string) => new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone }).format(now);
-	try {
-		return format(timezone ?? "UTC");
-	} catch {
-		return format("UTC");
-	}
-}
 
 export async function runAction(p: ActionProposal, ctx: ActionContext, deps: Deps = realDeps()): Promise<ActionOutcome> {
 	if (!actionsOn(deps.env)) return { kind: "ignored" };
