@@ -71,8 +71,26 @@ describe("reminder_set check", () => {
 		});
 	});
 	it("describes itself without a long text", () => {
-		expect(reminderSet.describe({ text: "call Dad", due: 1 })).toBe("Set a reminder: call Dad");
-		expect(reminderSet.describe({ text: "x".repeat(200), due: 1 }).length).toBeLessThanOrEqual(120);
+		expect(reminderSet.describe({ text: "call Dad", due: 1 })).toBe("Set a reminder"); // never the text
+		expect(reminderCancel.describe({ match: "dad" })).not.toContain("dad");
+	});
+});
+
+describe("reminder_set prepare and logLine", () => {
+	it("asks with the text, and logs only when", async () => {
+		const p = await reminderSet.prepare!({ text: "call Dad", due: due("2026-10-08T07:00:00Z") }, rc(fakeDb()));
+		expect(p).toEqual({
+			ok: true,
+			args: { text: "call Dad", due: due("2026-10-08T07:00:00Z") },
+			summary: "Set a reminder: call Dad? Say yes to go ahead, or no.",
+			logSummary: "Waiting for your yes to set a reminder for Thursday 8 October at 09:00",
+		});
+	});
+	it("logs lines with no reminder text", () => {
+		const ok = { ok: true as const, say: "x", result: null };
+		expect(reminderSet.logLine!({ text: "call Dad", due: due("2026-10-08T07:00:00Z") }, ok, rc(fakeDb()))).toBe("Set a reminder for Thursday 8 October at 09:00");
+		expect(reminderList.logLine!({}, ok)).toBe("Read your reminders");
+		expect(reminderCancel.logLine!({ match: "dad" }, ok)).toBe("Cancelled a reminder");
 	});
 });
 

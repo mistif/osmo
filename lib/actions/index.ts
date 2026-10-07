@@ -70,12 +70,12 @@ export async function runAction(p: ActionProposal, ctx: ActionContext, deps: Dep
 		}
 		const rc: RunCtx = { now: ctx.now, timezone: profile.timezone, db, profile, fetch: deps.fetch, env: deps.env };
 		if (verdict === "run") return await execute(def, checked.args, rc, log);
-		const prep = def.prepare ? await def.prepare(checked.args, rc) : { ok: true as const, args: checked.args, summary: `${def.describe(checked.args)}? Say yes to go ahead, or no.` };
+		const prep = def.prepare ? await def.prepare(checked.args, rc) : { ok: true as const, args: checked.args, summary: `${def.describe(checked.args)}? Say yes to go ahead, or no.`, logSummary: undefined };
 		if (!prep.ok) {
 			await log("failed", def.describe(checked.args), "prepare");
 			return { kind: "failed", line: prep.say };
 		}
-		const id = await holdPending(db, { def, args: prep.args, summary: prep.summary, surface: ctx.surface, now: ctx.now });
+		const id = await holdPending(db, { def, args: prep.args, summary: prep.summary, logSummary: prep.logSummary, surface: ctx.surface, now: ctx.now });
 		if (id === null) {
 			await log("failed", def.describe(checked.args), "hold");
 			return { kind: "failed", line: "I could not set that up just now." };

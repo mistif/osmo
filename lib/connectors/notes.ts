@@ -34,6 +34,7 @@ export const noteAdd: Def = {
 		return text ? { ok: true, args: { text } } : { ok: false };
 	},
 	describe: () => "Add a note",
+	logLine: () => "Added a note",
 	async run(a, c) {
 		const { count, error } = await c.db.from("notes").select("id", { count: "exact", head: true });
 		if (error || count === null || count === undefined) return { ok: false, say: "I could not save that note just now." };
@@ -56,6 +57,11 @@ export const noteSearch: Def = {
 		return { ok: true, args: { query: clean(a.query, 80) } };
 	},
 	describe: () => "Search the notes",
+	// "Read 3 notes" from the result's own count; the notes themselves never reach the log.
+	logLine(_a, o) {
+		const n = o.ok ? Number(/^(?:I found|Your latest) ([0-9]+) notes?[.]/.exec(o.say)?.[1] ?? 0) : 0;
+		return n === 0 ? "Read no notes" : `Read ${n} ${noun(n)}`;
+	},
 	async run(a, c) {
 		const rows = await latest(c);
 		if (rows === null) return { ok: false, say: READ_FAILED };
@@ -86,9 +92,10 @@ export const noteDelete: Def = {
 		if (rows === null) return { ok: false, say: READ_FAILED };
 		const hit = matchOne(rows as { id: string | number; text: string }[], (a as { match: string }).match);
 		if (!hit.ok) return { ok: false, say: hit.say };
-		return { ok: true, args: { id: hit.row.id }, summary: `Delete this note: "${cut(hit.row.text, QUOTED_CHARS)}"? Say yes to delete it, or no.` };
+		return { ok: true, args: { id: hit.row.id }, summary: `Delete this note: "${cut(hit.row.text, QUOTED_CHARS)}"? Say yes to delete it, or no.`, logSummary: "Waiting for your yes to delete a note" };
 	},
 	describe: () => "Delete a note", // never the note's text
+	logLine: () => "Deleted a note",
 	async run(a, c) {
 		const id = (a as { id?: unknown } | null)?.id;
 		if (typeof id !== "string" && typeof id !== "number") return { ok: false, say: "I could not find that note." };

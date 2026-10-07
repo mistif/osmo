@@ -1,7 +1,7 @@
 // The one waiting confirmation (spec 4.2, 4.3). At most one row is pending; answering it is atomic, and the
 // level and the pause switch are checked again when the yes arrives, not when the action was proposed.
 import type { OwnerDb } from "../server/admin";
-import { execute, logger } from "./execute";
+import { execute, logger, type Logger } from "./execute";
 import { type ActionStatus, resolveLog, writeAction } from "./log";
 import { levelOf, loadProfile } from "./profile";
 import { decide } from "./tiers";
@@ -18,7 +18,7 @@ async function settleLogs(db: OwnerDb, res: { data: unknown }, status: ActionSta
 	for (const r of (res.data ?? []) as { action_id: number | null }[]) if (r.action_id != null) await resolveLog(db, r.action_id, status);
 }
 
-export async function holdPending(db: OwnerDb, h: { def: Def; args: unknown; summary: string; surface: Surface; now: number }): Promise<string | null> {
+export async function holdPending(db: OwnerDb, h: { def: Def; args: unknown; summary: string; logSummary?: string; surface: Surface; now: number }): Promise<string | null> {
 	await settleLogs(db, await db.from("pending_actions").update({ status: "cancelled" }).eq("status", "pending").select("action_id"), "cancelled");
 	const { data, error } = await db
 		.from("pending_actions")
@@ -28,7 +28,7 @@ export async function holdPending(db: OwnerDb, h: { def: Def; args: unknown; sum
 	if (error || !data) return null;
 	const id = (data as { id: string }).id;
 	// The waiting log row and the pending row point at each other (the log row by pending_id, this one by action_id).
-	const actionId = await writeAction(db, { surface: h.surface, connector: h.def.connector, name: h.def.name, tier: h.def.tier, status: "waiting", summary: h.summary, error: null, pending_id: id });
+	const actionId = await writeAction(db, { surface: h.surface, connector: h.def.connector, name: h.def.name, tier: h.def.tier, status: "waiting", summary: h.logSummary ?? h.summary, error: null, pending_id: id });
 	if (actionId !== null) await db.from("pending_actions").update({ action_id: actionId }).eq("id", id);
 	return id;
 }
@@ -66,7 +66,7 @@ export async function answerPending(deps: Deps, decision: "yes" | "no", via: "ty
 	}
 	// Settle the pending row, and the waiting log row with it. The pending update is tried twice; if it still fails
 	// the daily sweep handles it. Never throws.
-	const finish = async (status: "done" | "failed" | "cancelled", error?: string) => {
+	const finish = async (status: "done" | "failed" | "cancelled", error?: string, summary?: string) => {
 		for (let i = 0; i < 2; i++) {
 			try {
 				const res = await db.from("pending_actions").update({ status }).eq("id", row.id);
@@ -75,7 +75,7 @@ export async function answerPending(deps: Deps, decision: "yes" | "no", via: "ty
 				// try once more
 			}
 		}
-		if (row.action_id != null) await resolveLog(db, row.action_id, status, error);
+		if (row.action_id != null) await resolveLog(db, row.action_id, status, error, summary);
 	};
 	try {
 		// The def, and the voice gate, come from the row that was actually claimed.
@@ -90,8 +90,18 @@ export async function answerPending(deps: Deps, decision: "yes" | "no", via: "ty
 			if (def) await logger(db, def, "confirm", row.id)("refused", def.describe(row.args), "level");
 			return { handled: true, reply: DID_NOTHING };
 		}
-		const out = await execute(def, row.args, { now, timezone: profile.timezone, db, profile, fetch: deps.fetch, env: deps.env }, logger(db, def, "confirm", row.id));
-		await finish(out.kind === "done" ? "done" : "failed");
+		// One row per confirmed action: the waiting row is settled with what the run logged. Only when it has no
+		// waiting row (its insert failed) does the run write a row of its own.
+		const ran: { summary?: string; error?: string } = {};
+		const log: Logger =
+			row.action_id != null
+				? async (_status, summary, error) => {
+						ran.summary = summary;
+						ran.error = error ?? undefined;
+					}
+				: logger(db, def, "confirm", row.id);
+		const out = await execute(def, row.args, { now, timezone: profile.timezone, db, profile, fetch: deps.fetch, env: deps.env }, log);
+		await finish(out.kind === "done" ? "done" : "failed", ran.error, ran.summary);
 		return { handled: true, reply: "line" in out ? out.line : DID_NOTHING };
 	} catch {
 		// never leave the row running

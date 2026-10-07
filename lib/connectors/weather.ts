@@ -102,6 +102,7 @@ export const weatherNow: Def = {
 		return place === null ? { ok: false } : { ok: true, args: { place } };
 	},
 	describe: () => "Check the weather",
+	logLine: () => "Checked the weather",
 	async run(a, c) {
 		const where = resolve((a as { place: string }).place, c.profile.place);
 		if (!where.ok) return fail(where.say);
@@ -134,6 +135,7 @@ export const weatherForecast: Def = {
 		return place !== null && typeof a.days === "number" && Number.isInteger(a.days) && a.days >= 1 && a.days <= 3 ? { ok: true, args: { place, days: a.days } } : { ok: false };
 	},
 	describe: () => "Check the forecast",
+	logLine: () => "Checked the weather",
 	async run(a, c) {
 		const { place, days } = a as { place: string; days: number },
 			where = resolve(place, c.profile.place);

@@ -100,9 +100,9 @@ describe("answerPending", () => {
 		expect(r).toEqual({ handled: true, reply: "Deleted." });
 		expect(runs).toEqual([{ id: 7 }]);
 		expect(statuses(db)).toEqual(["done"]);
-		expect(db.tables.actions.map((r) => r.status)).toEqual(["done", "done"]);
-		expect(db.tables.actions[0]).toMatchObject({ summary: "Do it?", error: null });
-		expect(db.tables.actions[1]).toMatchObject({ surface: "confirm", name: "del", status: "done", pending_id: id });
+		// one row: the waiting row, settled to done with what the run logged
+		expect(db.tables.actions).toHaveLength(1);
+		expect(db.tables.actions[0]).toMatchObject({ surface: "room", name: "del", status: "done", summary: "Deleted.", error: null, pending_id: id });
 	});
 
 	it("no cancels and never runs", async () => {
@@ -261,7 +261,27 @@ describe("the waiting log row is resolved", () => {
 		const { db, deps } = setup();
 		await hold(db);
 		await answerPending(deps, "yes", "typed", NOW);
-		expect(db.tables.actions[0]).toMatchObject({ status: "done", summary: "Do it?" });
+		expect(db.tables.actions).toHaveLength(1);
+		expect(db.tables.actions[0]).toMatchObject({ status: "done", summary: "Deleted." });
+	});
+
+	it("to done with the def's logLine, not its say", async () => {
+		const { db, deps } = setup();
+		deps.registry = [{ ...del, logLine: () => "Deleted a thing" }];
+		await hold(db);
+		await answerPending(deps, "yes", "typed", NOW);
+		expect(db.tables.actions).toHaveLength(1);
+		expect(db.tables.actions[0]).toMatchObject({ status: "done", summary: "Deleted a thing" });
+	});
+
+	it("with a new done row on the confirm surface when the pending row has no log row", async () => {
+		const { db, deps } = setup();
+		const id = await hold(db);
+		db.tables.actions.length = 0;
+		db.tables.pending_actions.find((r) => r.id === id)!.action_id = null;
+		await answerPending(deps, "yes", "typed", NOW);
+		expect(db.tables.actions).toHaveLength(1);
+		expect(db.tables.actions[0]).toMatchObject({ status: "done", surface: "confirm", pending_id: id });
 	});
 
 	it("to failed when the run fails", async () => {
@@ -269,7 +289,8 @@ describe("the waiting log row is resolved", () => {
 		deps.registry = [{ ...del, run: async () => ({ ok: false, say: "No luck." }) }];
 		await hold(db);
 		await answerPending(deps, "yes", "typed", NOW);
-		expect(db.tables.actions[0]).toMatchObject({ status: "failed", summary: "Do it?" });
+		expect(db.tables.actions).toHaveLength(1);
+		expect(db.tables.actions[0]).toMatchObject({ status: "failed", summary: "No luck.", error: "run" });
 	});
 
 	it("to cancelled on no", async () => {

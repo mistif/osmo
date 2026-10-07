@@ -138,7 +138,8 @@ describe("note_delete, the first confirmed action", () => {
 		expect(db.tables.notes).toHaveLength(1);
 		expect(db.tables.pending_actions).toHaveLength(1);
 		expect(db.tables.pending_actions[0]).toMatchObject({ name: "note_delete", args: { id: 1 }, status: "pending" });
-		expect(db.tables.actions[0]).toMatchObject({ name: "note_delete", tier: 3, status: "waiting" });
+		expect(db.tables.actions[0]).toMatchObject({ name: "note_delete", tier: 3, status: "waiting", summary: "Waiting for your yes to delete a note" });
+		expect(db.tables.pending_actions[0].summary).toContain("buy milk and eggs"); // server-only, swept
 	});
 	it("holds even at the act level, and also at ask", async () => {
 		for (const level of ["act", "ask"]) {
@@ -159,13 +160,13 @@ describe("note_delete, the first confirmed action", () => {
 		expect(db.tables.actions[0]).toMatchObject({ status: "cancelled" });
 		expect(db.tables.pending_actions[0]).toMatchObject({ status: "cancelled" });
 	});
-	it("yes deletes it and logs done on the confirm surface", async () => {
+	it("yes deletes it and the one waiting log row becomes the one done row", async () => {
 		const { db, deps } = setup();
 		await runAction(deleteMilk, ctx, deps);
 		expect(await answerPending(deps, "yes", "typed", NOW)).toEqual({ handled: true, reply: "Deleted the note." });
 		expect(db.tables.notes).toEqual([]);
-		expect(db.tables.actions.some((r) => r.name === "note_delete" && r.status === "done" && r.surface === "confirm")).toBe(true);
-		expect(db.tables.actions.map((r) => r.status)).not.toContain("waiting");
+		expect(db.tables.actions).toHaveLength(1);
+		expect(db.tables.actions[0]).toMatchObject({ name: "note_delete", status: "done", surface: "room", summary: "Deleted a note", pending_id: db.tables.pending_actions[0].id });
 		expect(db.tables.pending_actions[0]).toMatchObject({ status: "done" });
 	});
 	it("a second proposal replaces the first, and the yes goes to the second", async () => {
@@ -205,7 +206,7 @@ describe("note_delete, the first confirmed action", () => {
 		const both = await Promise.all([answerPending(deps, "yes", "typed", NOW), answerPending(deps, "yes", "typed", NOW)]);
 		expect(both.filter((a) => a.handled)).toEqual([{ handled: true, reply: "Deleted the note." }]);
 		expect(db.tables.notes.map((n) => n.text)).toEqual(["call Dad"]);
-		expect(db.tables.actions.filter((r) => r.name === "note_delete" && r.status === "done" && r.surface === "confirm")).toHaveLength(1);
+		expect(db.tables.actions.map((r) => [r.name, r.status])).toEqual([["note_delete", "done"]]);
 	});
 	it("a spoken yes works, because a note is small", async () => {
 		const { db, deps } = setup();
@@ -226,6 +227,65 @@ describe("note_delete, the first confirmed action", () => {
 		expect(await runAction(propose("note_delete", { match: "pizza" }), ctx, deps)).toEqual({ kind: "failed", line: "I could not find one like that." });
 		expect(db.tables.pending_actions ?? []).toEqual([]);
 		expect(db.tables.notes).toHaveLength(2);
+	});
+});
+
+describe("the log never carries note, reminder or weather text", () => {
+	const rows = (db: { tables: Record<string, any[]> }) => db.tables.actions.map((r) => r.summary as string);
+	it("writes only code-written lines for a search, a delete-hold, a yes, a reminder list and a cancel", async () => {
+		const { db, deps, fetch } = setup({ notes: ["secret pickle plan for Friday", "another note"] });
+		const DAILY = { daily: { time: ["2026-10-07", "2026-10-08"], weather_code: [61, 3], temperature_2m_max: [14, 12], temperature_2m_min: [8, 7], precipitation_probability_max: [60, 10] } };
+		await runAction(propose("reminder_set", { text: "call Dad about the secret pickle plan", at: "2026-10-08T09:00" }), ctx, deps);
+		await runAction(propose("note_add", { text: "secret pickle plan, again" }), ctx, deps);
+		await runAction(propose("note_search", { query: "pickle" }), ctx, deps);
+		await runAction(propose("note_search", { query: "zzz" }), ctx, deps);
+		await runAction(propose("reminder_list", {}), ctx, deps);
+		await runAction(propose("weather_now", { place: "" }), ctx, deps);
+		fetch.mockImplementationOnce(async () => new Response(JSON.stringify(DAILY), { status: 200 }));
+		await runAction(propose("weather_forecast", { place: "", days: 2 }), ctx, deps);
+		await runAction(propose("note_delete", { match: "another" }), ctx, deps);
+		await answerPending(deps, "yes", "typed", NOW);
+		await runAction(propose("reminder_cancel", { match: "dad" }), ctx, deps);
+		expect(rows(db)).toEqual([
+			"Set a reminder for Thursday 8 October at 09:00",
+			"Added a note",
+			"Read 2 notes",
+			"Read no notes",
+			"Read your reminders",
+			"Checked the weather",
+			"Checked the weather",
+			"Deleted a note",
+			"Cancelled a reminder",
+		]);
+		const all = JSON.stringify(db.tables.actions);
+		for (const secret of ["pickle", "another", "call Dad", "Malmo"]) expect(all).not.toContain(secret);
+	});
+	it("keeps text out of the refused rows too", async () => {
+		const read = setup({ levels: { reminders: "read", notes: "act", weather: "read" } });
+		await runAction(propose("reminder_set", { text: "call Dad about the secret pickle plan", at: "2026-10-08T09:00" }), ctx, read.deps);
+		const capped = setup({ actions: history(50, "reminder_set", NOW - 3_600_000) });
+		await runAction(propose("reminder_set", { text: "call Dad about the secret pickle plan", at: "2026-10-08T09:00" }), ctx, capped.deps);
+		expect(read.db.tables.actions).toHaveLength(1);
+		expect(JSON.stringify(read.db.tables.actions)).not.toContain("secret");
+		expect(JSON.stringify(capped.db.tables.actions)).not.toContain("secret");
+	});
+	it("a reminder held at ask is quoted to the user, but the log says only when", async () => {
+		const { db, deps } = setup({ levels: { reminders: "ask", notes: "act", weather: "read" } });
+		const out = await runAction(propose("reminder_set", { text: "call Dad", at: "2026-10-08T09:00" }), ctx, deps);
+		expect(out).toEqual({ kind: "waiting", line: "Set a reminder: call Dad? Say yes to go ahead, or no." });
+		expect(db.tables.actions[0]).toMatchObject({ status: "waiting", summary: "Waiting for your yes to set a reminder for Thursday 8 October at 09:00" });
+		await answerPending(deps, "yes", "typed", NOW);
+		expect(db.tables.actions).toHaveLength(1);
+		expect(db.tables.actions[0]).toMatchObject({ status: "done", summary: "Set a reminder for Thursday 8 October at 09:00" });
+	});
+	it("a delete that fails on the yes still leaves one row, with no text", async () => {
+		const { db, deps } = setup();
+		await runAction(deleteMilk, ctx, deps);
+		db.tables.notes.length = 0;
+		await answerPending(deps, "yes", "typed", NOW);
+		expect(db.tables.actions).toHaveLength(1);
+		expect(db.tables.actions[0]).toMatchObject({ status: "failed", error: "run" });
+		expect(JSON.stringify(db.tables.actions)).not.toContain("milk");
 	});
 });
 

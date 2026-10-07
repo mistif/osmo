@@ -32,8 +32,11 @@ export type Def = {
 	line: string; // the model's one-line description: name, args, tier
 	unclear: string; // said when the args are invalid
 	check(args: unknown, c: CheckCtx): { ok: true; args: unknown } | { ok: false; say?: string };
-	prepare?(args: unknown, c: RunCtx): Promise<{ ok: true; args: unknown; summary: string } | { ok: false; say: string }>; // required for tier 3
-	describe(args: unknown): string; // short, code-written, for log rows of failed or refused actions
+	// required for tier 3. summary is shown to the user and kept in pending_actions (server-only, swept);
+	// logSummary is what the waiting log row says, and it carries no message text.
+	prepare?(args: unknown, c: RunCtx): Promise<{ ok: true; args: unknown; summary: string; logSummary?: string } | { ok: false; say: string }>;
+	describe(args: unknown): string; // short, code-written, never message text, for log rows of failed or refused actions
+	logLine?(args: unknown, outcome: RunResult, c?: RunCtx): string; // the log row of a done run, code-written, never message text (default: the say line)
 	run(args: unknown, c: RunCtx): Promise<RunResult>;
 };
 export type Deps = { env: Env; db(): OwnerDb; fetch: typeof fetch; registry: readonly Def[]; count(event: string): void };

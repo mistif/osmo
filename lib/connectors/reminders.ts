@@ -23,7 +23,18 @@ export const reminderSet: Def = {
 			due = typeof a.at === "string" ? validDue(a.at, c.timezone, c.now) : null;
 		return text && due !== null ? { ok: true, args: { text, due } } : { ok: false };
 	},
-	describe: (a) => `Set a reminder: ${(a as { text: string }).text}`.slice(0, 120),
+	describe: () => "Set a reminder", // never the text: the log keeps no message text
+	// The question quotes the text (it is shown, and kept server-side until swept); the waiting log row says only when.
+	async prepare(a, c) {
+		const { text, due } = a as { text: string; due: number };
+		return {
+			ok: true,
+			args: a,
+			summary: `Set a reminder: ${text}? Say yes to go ahead, or no.`,
+			logSummary: `Waiting for your yes to set a reminder for ${speak(due, c.timezone ?? "UTC")}`,
+		};
+	},
+	logLine: (a, _o, c) => `Set a reminder for ${speak((a as { due: number }).due, c?.timezone ?? "UTC")}`,
 	async run(a, c) {
 		const { text, due } = a as { text: string; due: number },
 			tz = c.timezone ?? "UTC";
@@ -42,6 +53,7 @@ export const reminderList: Def = {
 	unclear: "I could not read your reminders just now.",
 	check: (a) => (only(a, []) ? { ok: true, args: {} } : { ok: false }),
 	describe: () => "List your reminders",
+	logLine: () => "Read your reminders",
 	async run(_a, c) {
 		const { data, error } = await c.db.from("reminders").select("id,text,due_at").eq("status", "pending").order("due_at", { ascending: true }).limit(10);
 		if (error || !Array.isArray(data)) return { ok: false, say: "I could not read your reminders just now." };
@@ -68,6 +80,7 @@ export const reminderCancel: Def = {
 		return match ? { ok: true, args: { match } } : { ok: false };
 	},
 	describe: () => "Cancel a reminder",
+	logLine: () => "Cancelled a reminder",
 	async run(a, c) {
 		const { data, error } = await c.db.from("reminders").select("id,text").eq("status", "pending").order("due_at", { ascending: true }).limit(50);
 		if (error || !Array.isArray(data)) return { ok: false, say: "I could not read your reminders just now." };

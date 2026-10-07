@@ -41,6 +41,7 @@ describe("the weather defs", () => {
 			expect(d.unclear).not.toContain("!");
 			expect(d.line + d.unclear).toMatch(/^[\x20-\x7e]*$/);
 			expect(d.describe({ place: "Paris", days: 2 })).not.toContain("Paris");
+			expect(d.logLine!({ place: "Paris", days: 2 }, { ok: true, say: "In Paris now 14 degrees.", result: null })).toBe("Checked the weather");
 		}
 	});
 });

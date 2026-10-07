@@ -224,6 +224,29 @@ describe("execute", () => {
 		expect(db.tables.actions[0]).toMatchObject({ status: "done", summary: "Noted.", surface: "room", connector: "notes", tier: 2, error: null });
 	});
 
+	it("logs the def's logLine for a done run, and still returns the say", async () => {
+		const db = fakeDb();
+		const seen: unknown[] = [];
+		const d = { ...def(async () => ({ ok: true, say: "Saved: my secret.", result: null })), logLine: (a: unknown, o: unknown) => (seen.push(a, o), "Added a note") } as Def;
+		expect(await execute(d, { text: "my secret" }, rc(db), logger(db, d, "room"))).toEqual({ kind: "done", line: "Saved: my secret.", result: null });
+		expect(db.tables.actions[0]).toMatchObject({ status: "done", summary: "Added a note" });
+		expect(seen).toEqual([{ text: "my secret" }, { ok: true, say: "Saved: my secret.", result: null }]);
+	});
+
+	it("falls back to describe when logLine throws, and keeps the done result", async () => {
+		const db = fakeDb();
+		const d = { ...def(async () => ({ ok: true, say: "Noted.", result: null })), logLine: () => { throw new Error("x"); } } as Def;
+		expect((await execute(d, {}, rc(db), logger(db, d, "room"))).kind).toBe("done");
+		expect(db.tables.actions[0]).toMatchObject({ status: "done", summary: "Add a note." });
+	});
+
+	it("logs the say, not logLine, for a failed run", async () => {
+		const db = fakeDb();
+		const d = { ...def(async () => ({ ok: false as const, say: "No such thing." })), logLine: () => "Added a note" } as Def;
+		await execute(d, {}, rc(db), logger(db, d, "room"));
+		expect(db.tables.actions[0]).toMatchObject({ status: "failed", summary: "No such thing." });
+	});
+
 	it("passes a result on for call 2", async () => {
 		const db = fakeDb();
 		const d = def(async () => ({ ok: true, say: "Two.", result: "a; b" }));

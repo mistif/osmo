@@ -122,7 +122,7 @@ describe("note_delete", () => {
 	it("prepare goes ahead on exactly one match and asks with the note quoted", async () => {
 		const db = fakeDb({ notes: notes("buy milk and eggs", "call Dad") }, "owner-1", () => NOW);
 		const p = await noteDelete.prepare!({ match: "milk" }, rc(db));
-		expect(p).toEqual({ ok: true, args: { id: 1 }, summary: 'Delete this note: "buy milk and eggs"? Say yes to delete it, or no.' });
+		expect(p).toEqual({ ok: true, args: { id: 1 }, summary: 'Delete this note: "buy milk and eggs"? Say yes to delete it, or no.', logSummary: "Waiting for your yes to delete a note" });
 		expect(db.tables.notes).toHaveLength(2);
 	});
 	it("prepare quotes at most the first 80 characters", async () => {
@@ -153,6 +153,14 @@ describe("note_delete", () => {
 		expect(await noteDelete.run({ id: { x: 1 } }, rc(db))).toEqual({ ok: false, say: "I could not find that note." });
 		expect(await noteDelete.run(null, rc(db))).toEqual({ ok: false, say: "I could not find that note." });
 		expect(db.tables.notes).toHaveLength(1);
+	});
+	it("logs lines with no note text", () => {
+		const ok = (say: string) => ({ ok: true as const, say, result: null });
+		expect(noteAdd.logLine!({ text: "secret" }, ok("Saved the note."))).toBe("Added a note");
+		expect(noteDelete.logLine!({ id: 1 }, ok("Deleted the note."))).toBe("Deleted a note");
+		expect(noteSearch.logLine!({ query: "secret" }, ok("I found 1 note. secret."))).toBe("Read 1 note");
+		expect(noteSearch.logLine!({ query: "" }, ok("Your latest 3 notes. a. b. c."))).toBe("Read 3 notes");
+		expect(noteSearch.logLine!({ query: "x" }, ok("I found no notes like that."))).toBe("Read no notes");
 	});
 	it("describes itself without the note's text", () => {
 		expect(noteDelete.describe({ match: "secret words" })).toBe("Delete a note");
