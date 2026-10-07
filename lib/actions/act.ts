@@ -39,6 +39,8 @@ export async function handleAct(request: Request, d: ActDeps): Promise<Response>
 	if (request.method !== "POST") return json(405, { error: "method" });
 	const who = await requireOwner(request, d.deps.env, d.lookup);
 	if (who instanceof Response) return who;
+	const declared = Number(request.headers.get("content-length"));
+	if (Number.isFinite(declared) && declared > MAX_BODY) return bad(); // before reading a byte
 	let text: string;
 	try {
 		text = await request.text();

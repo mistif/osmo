@@ -132,6 +132,19 @@ describe("handleAct", () => {
 		expect((await res.json()).handled).toBe(false);
 	});
 
+	it("refuses a declared oversized body before reading it", async () => {
+		const { deps, dbCalls } = setup();
+		const req = new Request("http://localhost/api/act", {
+			method: "POST",
+			headers: { authorization: "Bearer good", "content-type": "application/json", "content-length": "20000" },
+			body: JSON.stringify({ decision: "yes" }),
+		});
+		const read = vi.spyOn(req, "text");
+		expect((await handleAct(req, deps)).status).toBe(400);
+		expect(read).not.toHaveBeenCalled();
+		expect(dbCalls).not.toHaveBeenCalled();
+	});
+
 	it("refuses an oversized body", async () => {
 		const { deps } = setup();
 		expect((await handleAct(post(JSON.stringify({ decision: "yes", pad: "x".repeat(20_000) })), deps)).status).toBe(400);

@@ -74,6 +74,14 @@ describe("holdPending", () => {
 		expect(new Date(db.tables.pending_actions[1].expires_at).getTime()).toBe(NOW + TTL_MS);
 	});
 
+	it("links the pending row to its waiting log row", async () => {
+		const { db } = setup();
+		const id = await hold(db);
+		const waiting = db.tables.actions.find((r) => r.status === "waiting");
+		expect(waiting).toMatchObject({ name: "del", surface: "room", pending_id: id });
+		expect(db.tables.pending_actions.find((r) => r.id === id)?.action_id).toBe(waiting?.id);
+	});
+
 	it("returns null when the insert fails", async () => {
 		const { db } = setup();
 		const failing = {
@@ -92,8 +100,8 @@ describe("answerPending", () => {
 		expect(r).toEqual({ handled: true, reply: "Deleted." });
 		expect(runs).toEqual([{ id: 7 }]);
 		expect(statuses(db)).toEqual(["done"]);
-		expect(db.tables.actions).toHaveLength(1);
-		expect(db.tables.actions[0]).toMatchObject({ surface: "confirm", name: "del", status: "done", pending_id: id });
+		expect(db.tables.actions.map((r) => r.status)).toEqual(["waiting", "done"]);
+		expect(db.tables.actions[1]).toMatchObject({ surface: "confirm", name: "del", status: "done", pending_id: id });
 	});
 
 	it("no cancels and never runs", async () => {
@@ -147,7 +155,7 @@ describe("answerPending", () => {
 		expect(await answerPending(deps, "yes", "typed", NOW)).toEqual({ handled: true, reply: "I did nothing, because Osmo is paused or that setting changed." });
 		expect(runs).toEqual([]);
 		expect(statuses(db)).toEqual(["cancelled"]);
-		expect(db.tables.actions[0]).toMatchObject({ status: "refused", surface: "confirm" });
+		expect(db.tables.actions.at(-1)).toMatchObject({ status: "refused", surface: "confirm" });
 	});
 
 	it("a yes after the level was lowered does nothing", async () => {
@@ -174,6 +182,63 @@ describe("answerPending", () => {
 		deps.registry = [];
 		expect((await answerPending(deps, "yes", "typed", NOW)).handled).toBe(true);
 		expect(statuses(db)).toEqual(["cancelled"]);
+	});
+});
+
+// The second call on pending_actions is the claim (the first is the peek); swap runs just before it.
+function swapAtClaim(db: FakeDb, swap: () => void): OwnerDb {
+	let n = 0;
+	return {
+		owner: db.owner,
+		from: (t: string) => {
+			if (t === "pending_actions" && ++n === 2) swap();
+			return db.from(t);
+		},
+	} as unknown as OwnerDb;
+}
+
+describe("answerPending between the peek and the claim", () => {
+	it("a swapped-in row is not claimed and nothing runs", async () => {
+		const { db, deps } = setup();
+		const first = await hold(db, del, { id: 1 });
+		deps.db = () =>
+			swapAtClaim(db, () => {
+				db.tables.pending_actions.find((r) => r.id === first)!.status = "cancelled";
+				db.tables.pending_actions.push({ id: 99, user_id: db.owner, name: "mail", args: { draft: 9 }, status: "pending", expires_at: new Date(NOW + 60_000).toISOString() });
+			});
+		expect(await answerPending(deps, "yes", "typed", NOW)).toEqual({ handled: false });
+		expect(runs).toEqual([]);
+		expect(db.tables.pending_actions.find((r) => r.id === 99)?.status).toBe("pending");
+	});
+
+	it("a spoken yes meeting a row that needs typing never runs it", async () => {
+		const { db, deps } = setup();
+		const first = await hold(db, del, { id: 1 });
+		deps.db = () =>
+			swapAtClaim(db, () => {
+				Object.assign(db.tables.pending_actions.find((r) => r.id === first)!, { name: "mail", args: { draft: 9 } });
+			});
+		expect(await answerPending(deps, "yes", "voice", NOW)).toEqual({ handled: true, reply: "For that one I need you to type yes." });
+		expect(runs).toEqual([]);
+		expect(statuses(db)).toEqual(["cancelled"]);
+	});
+});
+
+describe("answerPending when the run path throws", () => {
+	it("marks the row failed and does nothing", async () => {
+		const { db, deps } = setup();
+		await hold(db);
+		deps.db = () =>
+			({
+				owner: db.owner,
+				from: (t: string) => {
+					if (t === "profile") throw new Error("down");
+					return db.from(t);
+				},
+			}) as unknown as OwnerDb;
+		expect(await answerPending(deps, "yes", "typed", NOW)).toEqual({ handled: true, reply: "I did nothing, because Osmo is paused or that setting changed." });
+		expect(runs).toEqual([]);
+		expect(statuses(db)).toEqual(["failed"]);
 	});
 });
 

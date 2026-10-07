@@ -52,10 +52,10 @@ export async function runAction(p: ActionProposal, ctx: ActionContext, deps: Dep
 		return { kind: "ignored" };
 	}
 	if (!sameOwner(db, ctx.userId)) return { kind: "ignored" };
+	const log = logger(db, def, ctx.surface);
 	try {
 		const profile = await loadProfile(db);
 		if (profile.paused) return { kind: "ignored" };
-		const log = logger(db, def, ctx.surface);
 		let raw: unknown;
 		try {
 			raw = p.args.length > MAX_ARGS ? undefined : JSON.parse(p.args);
@@ -85,10 +85,13 @@ export async function runAction(p: ActionProposal, ctx: ActionContext, deps: Dep
 			return { kind: "failed", line: prep.say };
 		}
 		const id = await holdPending(db, { def, args: prep.args, summary: prep.summary, surface: ctx.surface, now: ctx.now });
-		if (id === null) return { kind: "failed", line: "I could not set that up just now." };
-		await logger(db, def, ctx.surface, id)("waiting", prep.summary);
+		if (id === null) {
+			await log("failed", def.describe(checked.args), "hold");
+			return { kind: "failed", line: "I could not set that up just now." };
+		}
 		return { kind: "waiting", line: prep.summary };
 	} catch {
+		await log("failed", `Could not run ${def.name}`, "exception"); // writeAction never throws
 		return { kind: "failed", line: FAILED };
 	}
 }
@@ -115,9 +118,8 @@ export async function listEnabledActions(userId: string, deps: Deps = realDeps()
 	}
 }
 
-// A crisis cancels the waiting confirmation (spec 4.3, 9.1). Never throws.
+// A crisis cancels the waiting confirmation (spec 4.3, 9.1), whether or not OSMO_ACTIONS is on. Never throws.
 export async function cancelWaiting(userId: string, deps: Deps = realDeps()): Promise<void> {
-	if (!actionsOn(deps.env)) return;
 	try {
 		const db = deps.db();
 		if (sameOwner(db, userId)) await cancelAllPending(db);

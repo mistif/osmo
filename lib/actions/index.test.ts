@@ -77,7 +77,6 @@ describe("when actions are off", () => {
 			const { deps, dbCalls } = setup({ env: { OSMO_ACTIONS: value } });
 			expect(await runAction(proposal("make"), ctx, deps)).toEqual({ kind: "ignored" });
 			expect(await listEnabledActions("owner-1", deps)).toBeNull();
-			await cancelWaiting("owner-1", deps);
 			expect(dbCalls).not.toHaveBeenCalled();
 			expect(runs).toEqual([]);
 		});
@@ -201,6 +200,55 @@ describe("runAction gates", () => {
 				from: (t: string) => (t === "pending_actions" ? { ...real(t), insert: () => ({ select: () => ({ single: async () => ({ data: null, error: { message: "x" } }) }) }) } : real(t)),
 			}) as any;
 		expect(await runAction(proposal("wipe"), ctx, deps)).toEqual({ kind: "failed", line: "I could not set that up just now." });
+		expect(db.tables.actions.at(-1)).toMatchObject({ status: "failed", error: "hold", name: "wipe" });
+	});
+
+	it("logs a throwing prepare as an exception", async () => {
+		const { deps, db } = setup();
+		deps.registry = [
+			{
+				...wipe,
+				prepare: async () => {
+					throw new Error("boom");
+				},
+			},
+		];
+		expect(await runAction(proposal("wipe"), ctx, deps)).toEqual({ kind: "failed", line: "That did not work just now." });
+		expect(db.tables.actions.at(-1)).toMatchObject({ status: "failed", error: "exception", name: "wipe" });
+	});
+
+	it("logs a throwing check as an exception", async () => {
+		const { deps, db } = setup();
+		deps.registry = [
+			{
+				...make,
+				check: () => {
+					throw new Error("boom");
+				},
+			},
+		];
+		expect(await runAction(proposal("make"), ctx, deps)).toEqual({ kind: "failed", line: "That did not work just now." });
+		expect(db.tables.actions.at(-1)).toMatchObject({ status: "failed", error: "exception", name: "make" });
+	});
+
+	it("logs a throw after the profile loaded as an exception", async () => {
+		const { deps, db } = setup();
+		const real = db.from.bind(db);
+		deps.db = () =>
+			({
+				owner: db.owner,
+				from: (t: string) =>
+					t === "actions"
+						? {
+								...real(t),
+								select: () => {
+									throw new Error("boom"); // the cap count reads actions first
+								},
+							}
+						: real(t),
+			}) as any;
+		expect(await runAction(proposal("reminder_set"), ctx, deps)).toEqual({ kind: "failed", line: "That did not work just now." });
+		expect(db.tables.actions?.at(-1)).toMatchObject({ status: "failed", error: "exception", name: "reminder_set" });
 	});
 
 	it("refuses at the daily cap and not before", async () => {
@@ -294,6 +342,14 @@ describe("listEnabledActions", () => {
 });
 
 describe("cancelWaiting", () => {
+	it("cancels the waiting row even when actions are off", async () => {
+		const { deps, db } = setup();
+		await runAction(proposal("wipe"), ctx, deps);
+		deps.env = { OSMO_ACTIONS: "off" };
+		await cancelWaiting("owner-1", deps);
+		expect(db.tables.pending_actions[0].status).toBe("cancelled");
+	});
+
 	it("cancels the waiting row", async () => {
 		const { deps, db } = setup();
 		await runAction(proposal("wipe"), ctx, deps);
