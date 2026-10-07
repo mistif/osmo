@@ -83,12 +83,16 @@ describe("handleAct", () => {
 	it("answers handled false with no db call when actions are off", async () => {
 		for (const value of [undefined, "ON", "true"]) {
 			const { deps, dbCalls } = setup({ OSMO_ACTIONS: value });
-			for (const decision of ["yes", "no", "crisis"]) {
+			for (const decision of ["yes", "no"]) {
 				const res = await handleAct(post({ decision }), deps);
 				expect(res.status).toBe(200);
 				expect((await res.json()).handled).toBe(false);
 			}
 			expect(dbCalls).not.toHaveBeenCalled();
+			// A crisis still cancels whatever is waiting, off or not.
+			const crisis = await handleAct(post({ decision: "crisis" }), deps);
+			expect((await crisis.json()).handled).toBe(false);
+			expect(dbCalls).toHaveBeenCalled();
 		}
 	});
 

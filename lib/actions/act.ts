@@ -49,11 +49,12 @@ export async function handleAct(request: Request, d: ActDeps): Promise<Response>
 	}
 	const body = readBody(text);
 	if (body === null) return bad();
-	if (!actionsOn(d.deps.env)) return json(200, { handled: false, reply: null });
+	// A crisis cancels the waiting one even while actions are off: a row may still be waiting from before.
 	if (body.decision === "crisis") {
 		await cancelWaiting(who.id, d.deps);
 		return json(200, { handled: false, reply: null });
 	}
+	if (!actionsOn(d.deps.env)) return json(200, { handled: false, reply: null });
 	try {
 		const answer = await answerPending(d.deps, body.decision, body.via, d.now());
 		return json(200, answer.handled ? answer : { handled: false, reply: null });
