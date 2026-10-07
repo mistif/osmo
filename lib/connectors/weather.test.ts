@@ -76,9 +76,9 @@ describe("the place", () => {
 	it("the saved place by name, in any case, with or without accents or its region, is the saved place", async () => {
 		for (const [label, asked] of [
 			["Malmo", "malmo"],
-			["Malmö", "Malmo"],
+			["Malm\u00f6", "Malmo"],
 			["Malmo, Sweden", "MALMO"],
-			["Malmo", "Malmö"],
+			["Malmo", "Malm\u00f6"],
 			["Malmo, Sweden", "Malmo, Sweden"],
 		]) {
 			const { rc, fetch } = ctx(ok(CURRENT), { ...MALMO, label });
