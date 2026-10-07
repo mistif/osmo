@@ -51,7 +51,7 @@ export function isCrisis(text: string): boolean {
 }
 
 export const CRISIS_REPLY =
-	"I'm really glad you told me, and I'm taking it seriously. I'm only a small program, so I can't keep you safe on my own, but you deserve to talk with a real person right now. " +
-	"If you might act on this, please call your local emergency number (112 in Sweden and Europe, 911 in the US). " +
+	"I am glad you told me, and I am taking it seriously. I am only a small program, so I cannot keep you safe on my own, but you deserve to talk with a real person right now. " +
+	"If you might act on this, please call your local emergency number: 112 in Sweden and Europe, 911 in the US. " +
 	"You can also reach a crisis line any time: Mind Självmordslinjen at 90101 in Sweden, 988 in the US, or find one for your country at findahelpline.com. " +
-	"I'm still here if you want to keep talking.";
+	"I am still here if you want to keep talking.";

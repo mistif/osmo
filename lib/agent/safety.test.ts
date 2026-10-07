@@ -36,4 +36,9 @@ describe("isCrisis", () => {
 		expect(CRISIS_REPLY).toMatch(/988/);
 		expect(CRISIS_REPLY).not.toMatch(/rephrase|another way|teach me/i);
 	});
+
+	it("keeps his register, since it is spoken as written and never runs through flavorTurn", () => {
+		// Full forms, no brackets a voice would read out, no exclamation marks.
+		expect(CRISIS_REPLY).not.toMatch(/'|\(|\)|!/);
+	});
 });

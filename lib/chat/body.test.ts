@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { CHARACTER } from "../agent/character";
 import { CRISIS_CAUSE, newSession, prepareTurn, type TurnFacts } from "../agent/mind";
+import { flavorTurn } from "../agent/personality/flavor";
 import { CRISIS_REPLY } from "../agent/safety";
 import { defaultState } from "../agent/state";
 import type { MemoryFact } from "../facts";
@@ -118,11 +120,26 @@ describe("modelHistory", () => {
 	it("leaves out a line of Osmo's that gives the crisis cause as his reason", () => {
 		const history = modelHistory([
 			user("how are you feeling"),
-			agent(`I'm feeling sad. I believe it's because ${CRISIS_CAUSE}. Thank you for asking.`),
+			agent(`I am feeling sad. I believe it is because ${CRISIS_CAUSE}. Thank you for asking.`),
 			user("ok"),
 			agent("Very well."),
 		]);
 		expect(history.map((line) => line.text)).toEqual(["how are you feeling", "ok", "Very well."]);
+	});
+
+	it("still leaves that line out after flavorTurn has expanded its contractions", () => {
+		// The line as the room delivers it: step 6's words, run through flavorTurn with his formal character.
+		const spoken = flavorTurn(`I'm feeling sad. I believe it's because ${CRISIS_CAUSE}. Thank you for asking.`, {
+			intent: "askWhyFeeling",
+			personality: CHARACTER,
+			turn: 3,
+			tone: "sadness",
+			sensitive: true,
+		}).text;
+		expect(spoken).not.toContain("'");
+		expect(spoken).toContain(CRISIS_CAUSE);
+		const history = modelHistory([user("why do you feel that way"), agent(spoken), user("ok"), agent("Very well.")]);
+		expect(history.map((line) => line.text)).toEqual(["why do you feel that way", "ok", "Very well."]);
 	});
 
 	it("keeps the last 20 lines once the crisis lines are out", () => {

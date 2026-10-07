@@ -296,7 +296,7 @@ describe("checkBody's crisis defence", () => {
 	it("drops a history line that gives the crisis cause as Osmo's reason", () => {
 		const history = [
 			{ role: "user", text: "how are you feeling" },
-			{ role: "agent", text: `I'm feeling sad. I believe it's because ${CRISIS_CAUSE}. Thank you for asking.` },
+			{ role: "agent", text: `I am feeling sad. I believe it is because ${CRISIS_CAUSE}. Thank you for asking.` },
 			{ role: "user", text: "ok" },
 		];
 		const checked = checkBody({ ...valid(), history });
