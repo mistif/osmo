@@ -101,7 +101,7 @@ export async function listEnabledActions(userId: string, deps: Deps = realDeps()
 		if (!sameOwner(db, userId)) return null;
 		const profile = await loadProfile(db);
 		if (profile.paused) return null;
-		const defs = deps.registry.filter((d) => levelOf(profile, d.connector) !== "off");
+		const defs = deps.registry.filter((d) => decide(levelOf(profile, d.connector), d.tier) !== "refuse");
 		if (defs.length === 0) return null;
 		return {
 			names: defs.map((d) => d.name),

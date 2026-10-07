@@ -43,6 +43,22 @@ describe("seal and open", () => {
 		expect(() => open("v1.x", KEY, W)).toThrow("decrypt_failed");
 	});
 
+	it("rejects a body too short to hold the 16-byte tag", () => {
+		const [v, iv] = seal("tok", KEY, W).split(".");
+		for (const n of [0, 10, 15]) {
+			const body = Buffer.alloc(n, 1).toString("base64url");
+			const run = () => open(`${v}.${iv}.${body || "A"}`, KEY, W);
+			expect(run).toThrow("decrypt_failed");
+		}
+	});
+
+	it("does not let a separator in a field move the boundary between fields", () => {
+		const a = { userId: "u1|google", provider: "x", column: "c" };
+		const b = { userId: "u1", provider: "google|x", column: "c" };
+		expect(open(seal("tok", KEY, a), KEY, a)).toBe("tok");
+		expect(() => open(seal("tok", KEY, a), KEY, b)).toThrow("decrypt_failed");
+	});
+
 	it("rejects a key that is not 32 bytes, without echoing it", () => {
 		const short = Buffer.alloc(16, 7).toString("base64");
 		for (const run of [() => seal("tok", short, W), () => open(seal("tok", KEY, W), short, W)]) {

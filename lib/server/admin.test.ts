@@ -8,7 +8,7 @@ function fake() {
 	const calls: string[] = [];
 	const t: any = {
 		select: () => t,
-		update: () => t,
+		update: (v: unknown) => (calls.push("update " + JSON.stringify(v)), t),
 		delete: () => t,
 		insert: (r: unknown) => (calls.push("insert " + JSON.stringify(r)), t),
 		upsert: (r: unknown, o: unknown) => (calls.push("upsert " + JSON.stringify(r) + " " + JSON.stringify(o)), t),
@@ -36,6 +36,14 @@ describe("ownerDb", () => {
 		expect(f.calls[0]).toContain('"user_id":"owner-1"');
 		expect(f.calls[0]).not.toContain("someone-else");
 		expect(f.calls[1]).toContain('"user_id":"owner-1"');
+	});
+
+	it("pins the owner on updates, so a row cannot be handed to someone else", () => {
+		const f = fake();
+		ownerDb(ENV, f.make).from("a").update({ x: 1, user_id: "someone-else" });
+		expect(f.calls[0]).toContain('"user_id":"owner-1"');
+		expect(f.calls[0]).not.toContain("someone-else");
+		expect(f.calls).toContain("eq user_id=owner-1");
 	});
 
 	it("stamps the owner on upserts and passes the conflict column", () => {

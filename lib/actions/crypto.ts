@@ -9,7 +9,7 @@ const keyOf = (b64: string) => {
 	if (k.length !== 32) throw new Error("bad_key");
 	return k;
 };
-const aad = (w: Where) => Buffer.from(`${w.userId}|${w.provider}|${w.column}`);
+const aad = (w: Where) => Buffer.from(JSON.stringify([w.userId, w.provider, w.column]));
 
 export function seal(plain: string, keyB64: string, where: Where): string {
 	const iv = randomBytes(12),
@@ -23,8 +23,9 @@ export function open(sealed: string, keyB64: string, where: Where): string {
 	const [v, iv, body] = sealed.split(".");
 	try {
 		if (v !== "v1" || !iv || !body) throw new Error();
-		const raw = Buffer.from(body, "base64url"),
-			d = createDecipheriv("aes-256-gcm", keyOf(keyB64), Buffer.from(iv, "base64url"));
+		const raw = Buffer.from(body, "base64url");
+		if (raw.length < 16) throw new Error();
+		const d = createDecipheriv("aes-256-gcm", keyOf(keyB64), Buffer.from(iv, "base64url"), { authTagLength: 16 });
 		d.setAAD(aad(where));
 		d.setAuthTag(raw.subarray(raw.length - 16));
 		return Buffer.concat([d.update(raw.subarray(0, raw.length - 16)), d.final()]).toString("utf8");

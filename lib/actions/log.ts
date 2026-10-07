@@ -16,7 +16,16 @@ export type LogRow = {
 // One row per attempt (spec 5). It never throws: a log that fails must not break the turn.
 export async function writeAction(db: OwnerDb, row: LogRow): Promise<number | null> {
 	try {
-		const { data, error } = await db.from("actions").insert({ ...row, summary: row.summary.slice(0, 200) }).select("id").single();
+		const { data, error } = await db.from("actions").insert({
+				surface: row.surface,
+				connector: row.connector,
+				name: row.name,
+				tier: row.tier,
+				status: row.status,
+				summary: row.summary.slice(0, 200),
+				error: row.error === null ? null : String(row.error).slice(0, 200),
+				pending_id: row.pending_id,
+			}).select("id").single();
 		return error ? null : ((data as { id: number }).id ?? null);
 	} catch {
 		return null;

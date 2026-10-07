@@ -125,6 +125,16 @@ describe("capReached", () => {
 	});
 });
 
+describe("fakeDb select", () => {
+	it("returns only the listed columns, and every column for *", async () => {
+		const db = fakeDb({ t: [{ id: 1, a: "x", b: "y" }] });
+		expect((await db.from("t").select("a,id")).data).toEqual([{ a: "x", id: 1 }]);
+		expect((await db.from("t").select(" a , b ")).data).toEqual([{ a: "x", b: "y" }]);
+		expect((await db.from("t").select("*")).data).toEqual([{ id: 1, a: "x", b: "y", user_id: "owner-1" }]);
+		expect((await db.from("t").select("a").maybeSingle()).data).toEqual({ a: "x" });
+	});
+});
+
 describe("writeAction", () => {
 	const row: LogRow = { surface: "room", connector: "notes", name: "note_add", tier: 2, status: "done", summary: "x", error: null, pending_id: null };
 
@@ -139,6 +149,16 @@ describe("writeAction", () => {
 		const db = fakeDb();
 		await writeAction(db, { ...row, summary: "a".repeat(500) });
 		expect(db.tables.actions[0].summary).toHaveLength(200);
+	});
+
+	it("writes only the eight columns, and cuts the error to 200 characters", async () => {
+		const db = fakeDb();
+		await writeAction(db, { ...row, text: "secret words", error: "e".repeat(500) } as LogRow);
+		const got = db.tables.actions[0];
+		expect(got).not.toHaveProperty("text");
+		expect(JSON.stringify(got)).not.toContain("secret words");
+		expect(Object.keys(got).sort()).toEqual(["at", "connector", "created_at", "error", "id", "name", "pending_id", "status", "summary", "surface", "tier", "user_id"]);
+		expect(got.error).toHaveLength(200);
 	});
 
 	it("returns null instead of throwing", async () => {

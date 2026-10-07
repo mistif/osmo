@@ -27,6 +27,19 @@ function sources(): { path: string; text: string }[] {
 			out.push({ path: relative(ROOT, full).split(sep).join("/"), text: readFileSync(full, "utf8") });
 		}
 	}
+	// Files at the repo root, and anything in public/, are served or run too.
+	const extra: string[] = [];
+	for (const name of readdirSync(ROOT)) if (/\.(ts|mjs)$/.test(name)) extra.push(name);
+	const pub = join(ROOT, "public");
+	try {
+		for (const entry of readdirSync(pub, { recursive: true, encoding: "utf8" })) if (/\.js$/.test(entry) && !entry.split(sep).includes("node_modules")) extra.push("public/" + entry.split(sep).join("/"));
+	} catch {
+		// no public directory
+	}
+	for (const path of extra) {
+		const full = join(ROOT, path);
+		if (statSync(full).isFile()) out.push({ path, text: readFileSync(full, "utf8") });
+	}
 	return out;
 }
 
@@ -36,6 +49,9 @@ describe("secret guard", () => {
 	it("scans the source tree", () => {
 		expect(files.length).toBeGreaterThan(50);
 		expect(files.some((f) => f.path === "lib/server/admin.ts")).toBe(true);
+		expect(files.some((f) => f.path === "next.config.ts")).toBe(true);
+		expect(files.some((f) => f.path === "eslint.config.mjs")).toBe(true);
+		expect(files.some((f) => f.path.startsWith("public/") && f.path.endsWith(".js"))).toBe(true);
 	});
 
 	it("names the service-role key only in the admin client and its tests", () => {

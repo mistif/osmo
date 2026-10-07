@@ -15,11 +15,14 @@ export function fakeDb(seed: Record<string, Row[]> = {}, owner = "owner-1", cloc
 		return ++counters[name];
 	};
 
+	// "*" or nothing means every column; otherwise only the listed ones come back, as a real select does.
+	const pick = (cols: string | null): string[] | null => (cols === null || cols.trim() === "*" ? null : cols.split(",").map((c) => c.trim()).filter(Boolean));
 	const table = (name: string) => (tables[name] ??= []);
 
 	function query(name: string, op: "select" | "insert" | "upsert" | "update" | "delete", payload: any, opts: any = {}) {
 		const filters: ((r: Row) => boolean)[] = [];
 		let wantRows = op === "select",
+			columns: string[] | null = op === "select" ? pick(payload) : null,
 			ordering: { col: string; asc: boolean } | null = null,
 			cap: number | null = null,
 			mode: "many" | "single" | "maybe" = "many",
@@ -54,7 +57,7 @@ export function fakeDb(seed: Record<string, Row[]> = {}, owner = "owner-1", cloc
 				}
 			} else if (op === "update") {
 				out = mine();
-				for (const r of out) Object.assign(r, payload);
+				for (const r of out) Object.assign(r, payload, { user_id: owner });
 			} else {
 				out = mine();
 				for (const r of out) rows.splice(rows.indexOf(r), 1);
@@ -64,7 +67,7 @@ export function fakeDb(seed: Record<string, Row[]> = {}, owner = "owner-1", cloc
 				out = [...out].sort((a, b) => (a[col] === b[col] ? 0 : (a[col] > b[col] ? 1 : -1) * (asc ? 1 : -1)));
 			}
 			if (cap !== null) out = out.slice(0, cap);
-			const copies = out.map((r) => ({ ...r }));
+			const copies = out.map((r) => (columns ? Object.fromEntries(columns.map((c) => [c, r[c]])) : { ...r }));
 			if (mode === "many") return { data: wantRows && !opts.head ? copies : null, error: null, ...(count === undefined ? {} : { count }) };
 			if (copies.length === 1) return { data: copies[0], error: null };
 			if (mode === "maybe" && copies.length === 0) return { data: null, error: null };
@@ -93,8 +96,9 @@ export function fakeDb(seed: Record<string, Row[]> = {}, owner = "owner-1", cloc
 				cap = n;
 				return q;
 			},
-			select: () => {
+			select: (c?: string) => {
 				wantRows = true;
+				columns = pick(c ?? null);
 				return q;
 			},
 			single: () => {
@@ -117,7 +121,7 @@ export function fakeDb(seed: Record<string, Row[]> = {}, owner = "owner-1", cloc
 		tables,
 		from: (name: string) =>
 			({
-				select: (_c: string, o?: any) => query(name, "select", null, o ?? {}),
+				select: (c: string, o?: any) => query(name, "select", c, o ?? {}),
 				insert: (r: Row | Row[]) => query(name, "insert", r),
 				upsert: (r: Row | Row[], onConflict: string) => query(name, "upsert", r, { onConflict }),
 				update: (v: Row) => query(name, "update", v),

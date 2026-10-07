@@ -262,6 +262,15 @@ describe("listEnabledActions", () => {
 		expect(got!.place).toBe("Malmo");
 	});
 
+	it("offers only the actions the level allows to run or hold", async () => {
+		const read = setup({ profile: { levels: { weather: "read", reminders: "read", notes: "read" } } });
+		expect((await listEnabledActions("owner-1", read.deps))!.names).toEqual(["peek"]);
+		const ask = setup({ profile: { levels: { weather: "read", reminders: "ask", notes: "ask" } } });
+		expect((await listEnabledActions("owner-1", ask.deps))!.names).toEqual(["peek", "make", "reminder_set", "wipe"]);
+		const none = setup({ profile: { levels: { reminders: "read", notes: "read" } } });
+		expect(await listEnabledActions("owner-1", none.deps)).toBeNull();
+	});
+
 	it("says the time zone is not saved yet and the place is null", async () => {
 		const { deps } = setup({ profile: { timezone: null, place: null, levels: { notes: "act" } } });
 		const got = await listEnabledActions("owner-1", deps);

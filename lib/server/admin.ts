@@ -29,7 +29,7 @@ export function ownerDb(env: Env = process.env, make: typeof createClient = crea
 			select: (c, o) => client.from(table).select(c, o).eq("user_id", owner),
 			insert: (r) => client.from(table).insert(stamp(r)),
 			upsert: (r, onConflict) => client.from(table).upsert(stamp(r), { onConflict }),
-			update: (v) => client.from(table).update(v).eq("user_id", owner),
+			update: (v) => client.from(table).update({ ...v, user_id: owner }).eq("user_id", owner),
 			delete: () => client.from(table).delete().eq("user_id", owner),
 		}),
 	};
