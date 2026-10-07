@@ -13,6 +13,8 @@ import {
 } from "@/lib/shell/passkeys";
 import type { DeviceSource } from "@/lib/shell/devices";
 import type { ChatStatus } from "@/lib/chat/types";
+import { ConnectorsSettings } from "./connectors-settings";
+import { RemindersNotes } from "./reminders-notes";
 import { VoiceSettings } from "./voice-settings";
 import type { VoiceControls } from "./use-voice";
 import styles from "./panels.module.css";
@@ -150,6 +152,9 @@ export function SettingsPanel({ voice, aiUsage }: { voice: VoiceControls; aiUsag
 			</section>
 
 			<VoiceSettings voice={voice} />
+
+			<ConnectorsSettings />
+			<RemindersNotes />
 
 			{aiUsage?.enabled && (
 				<p className={styles.note}>

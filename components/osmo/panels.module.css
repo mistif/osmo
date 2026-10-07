@@ -256,3 +256,26 @@
 	font-size: 1.15rem;
 	line-height: 1.45;
 }
+
+/* Connectors settings: a level picker and a small row of buttons under a line of text. */
+.select {
+	font: inherit;
+	font-size: 0.9rem;
+	color: var(--bone);
+	background: color-mix(in oklab, #0c111b 55%, transparent);
+	border: 1px solid color-mix(in oklab, var(--bone) 28%, transparent);
+	border-radius: 0.6rem;
+	padding: 0.3rem 0.6rem;
+	cursor: pointer;
+}
+.select:focus-visible {
+	outline: 2px solid var(--aura-a);
+	outline-offset: 3px;
+}
+.row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.6rem 1rem;
+	margin-top: 0.5rem;
+}

@@ -6,6 +6,7 @@ import { type CSSProperties, FormEvent, useEffect, useRef, useState } from "reac
 import { Mic, Square } from "lucide-react";
 import styles from "./assistant.module.css";
 import { ensureSession, supabase } from "@/lib/supabase";
+import { ensureTimezone } from "@/lib/shell/profile-client";
 import { loadState, persistTurn } from "@/lib/agent/agent-state";
 import { moodTheme } from "@/lib/agent/mood-theme";
 import { CHARACTER } from "@/lib/agent/character";
@@ -179,6 +180,14 @@ export default function AgentChat() {
 			}
 		})();
 	}, [router]);
+
+	// Once per load, silently: remember this device's time zone for reminders if the profile has none (spec 6.2).
+	useEffect(() => {
+		void (async () => {
+			const signedIn = await ensureSession().catch(() => null);
+			if (signedIn) await ensureTimezone(supabase, signedIn.user.id, Intl.DateTimeFormat().resolvedOptions().timeZone);
+		})();
+	}, []);
 
 	// Locking in another tab, or a session ending, sends this tab to the lock screen too.
 	useEffect(() => {
