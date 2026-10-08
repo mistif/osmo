@@ -9,7 +9,7 @@ import styles from "./panels.module.css";
 
 const UNREACHABLE = "I cannot reach my memory right now. Try again in a moment.";
 const SAVE_FAILED = "I could not save that. Try again.";
-const CONNECTORS = [
+export const CONNECTORS = [
 	{ id: "reminders", name: "Reminders" },
 	{ id: "notes", name: "Notes" },
 	{ id: "weather", name: "Weather" },
@@ -44,7 +44,9 @@ function readPushEnvironment(): { state: PushState; blocked: boolean } {
 	return { state: pushState({ ios, standalone, supported }), blocked: "Notification" in window && Notification.permission === "denied" };
 }
 
-export function ConnectorsSettings() {
+export type ConnectorsPart = "mayDo" | "place" | "notifications";
+
+export function ConnectorsSettings({ parts = ["mayDo", "place", "notifications"] }: { parts?: ConnectorsPart[] }) {
 	// null while loading, "error" when the profile cannot be read.
 	const [row, setRow] = useState<ProfileRow | "error" | null>(null);
 	const [saveError, setSaveError] = useState<string | null>(null);
@@ -181,10 +183,12 @@ export function ConnectorsSettings() {
 		await refreshDevices();
 	}
 
+	// A page that does not show "What I may do" names its own first part while it loads.
+	const firstTitle = parts.includes("mayDo") ? "What I may do" : parts.includes("place") ? "My place" : "Notifications on this device";
 	if (row === null) {
 		return (
 			<section className={styles.section}>
-				<h3 className={styles.sectionTitle}>What I may do</h3>
+				<h3 className={styles.sectionTitle}>{firstTitle}</h3>
 				<p className={styles.note}>Checking your settings...</p>
 			</section>
 		);
@@ -192,7 +196,7 @@ export function ConnectorsSettings() {
 	if (row === "error") {
 		return (
 			<section className={styles.section}>
-				<h3 className={styles.sectionTitle}>What I may do</h3>
+				<h3 className={styles.sectionTitle}>{firstTitle}</h3>
 				<p className={styles.error} role="alert">{UNREACHABLE}</p>
 			</section>
 		);
@@ -200,130 +204,136 @@ export function ConnectorsSettings() {
 
 	return (
 		<>
-			<section className={styles.section}>
-				<h3 className={styles.sectionTitle}>What I may do</h3>
-				<Switch label="Pause everything I can do" on={row.paused} onChange={(paused) => void save({ paused }, (r) => ({ ...r, paused }))} />
-				<p className={styles.note}>
-					{row.paused ? "I am paused. I will not act on anything, and no reminder will be sent, until you turn this off." : "While this is on, I do nothing but talk, and no reminder is sent."}
-				</p>
-				{CONNECTORS.map((c) => {
-					const offered = levelsFor(c.id);
-					// A level this connector does not offer (a held Ask for building) reads as off.
-					const saved: Level = row.levels[c.id] ?? "off";
-					const level: Level = offered.includes(saved) ? saved : "off";
-					return (
-						<div key={c.id}>
-							<div className={styles.line}>
-								<label htmlFor={`level-${c.id}`}>{c.name}</label>
-								<select
-									id={`level-${c.id}`}
-									className={styles.select}
-									value={level}
-									onChange={(e) => {
-										const next = e.target.value as Level;
-										void save({ levels: { ...row.levels, [c.id]: next } }, (r) => ({ ...r, levels: { ...r.levels, [c.id]: next } }));
-									}}
-								>
-									{LEVELS.filter((l) => offered.includes(l.id)).map((l) => (
-										<option key={l.id} value={l.id}>
-											{l.name}
-										</option>
-									))}
-								</select>
+			{parts.includes("mayDo") && (
+				<section className={styles.section}>
+					<h3 className={styles.sectionTitle}>What I may do</h3>
+					<Switch label="Pause everything I can do" on={row.paused} onChange={(paused) => void save({ paused }, (r) => ({ ...r, paused }))} />
+					<p className={styles.note}>
+						{row.paused ? "I am paused. I will not act on anything, and no reminder will be sent, until you turn this off." : "While this is on, I do nothing but talk, and no reminder is sent."}
+					</p>
+					{CONNECTORS.map((c) => {
+						const offered = levelsFor(c.id);
+						// A level this connector does not offer (a held Ask for building) reads as off.
+						const saved: Level = row.levels[c.id] ?? "off";
+						const level: Level = offered.includes(saved) ? saved : "off";
+						return (
+							<div key={c.id}>
+								<div className={styles.line}>
+									<label htmlFor={`level-${c.id}`}>{c.name}</label>
+									<select
+										id={`level-${c.id}`}
+										className={styles.select}
+										value={level}
+										onChange={(e) => {
+											const next = e.target.value as Level;
+											void save({ levels: { ...row.levels, [c.id]: next } }, (r) => ({ ...r, levels: { ...r.levels, [c.id]: next } }));
+										}}
+									>
+										{LEVELS.filter((l) => offered.includes(l.id)).map((l) => (
+											<option key={l.id} value={l.id}>
+												{l.name}
+											</option>
+										))}
+									</select>
+								</div>
+								<p className={styles.note}>{levelDescription(c.id, level)}</p>
+								{c.id === "artifacts" && <p className={styles.note}>{BUILD_PRIVACY}</p>}
 							</div>
-							<p className={styles.note}>{levelDescription(c.id, level)}</p>
-							{c.id === "artifacts" && <p className={styles.note}>{BUILD_PRIVACY}</p>}
-						</div>
-					);
-				})}
-				<p className={styles.note}>When I use reminders, notes or the weather, what they return may be sent to OpenAI to write my answer.</p>
-				{saveError && <p className={styles.error} role="alert">{saveError}</p>}
-			</section>
+						);
+					})}
+					<p className={styles.note}>When I use reminders, notes or the weather, what they return may be sent to OpenAI to write my answer.</p>
+					{saveError && <p className={styles.error} role="alert">{saveError}</p>}
+				</section>
+			)}
 
-			<section className={styles.section}>
-				<h3 className={styles.sectionTitle}>My place</h3>
-				<p className={styles.note}>{row.place ? `Saved: ${row.place}.` : "No place saved yet. I use it for the weather."}</p>
-				<div className={styles.row}>
-					<input
-						className={styles.input}
-						aria-label="City"
-						placeholder="A town or city"
-						value={city}
-						onChange={(e) => setCity(e.target.value)}
-						onKeyDown={(e) => {
-							if (e.key === "Enter" && city.trim() !== "" && !finding) void findCity();
-						}}
-					/>
-					<button type="button" className={styles.action} onClick={() => void findCity()} disabled={finding || city.trim() === ""}>
-						Find
-					</button>
-				</div>
-				<div className={styles.row}>
-					<button type="button" className={styles.action} onClick={useMyLocation}>
-						Use my location
-					</button>
-					{row.place && (
-						<button type="button" className={styles.action} onClick={() => void save({ place: null, lat: null, lon: null }, (r) => ({ ...r, place: null, lat: null, lon: null }))}>
-							Forget my place
-						</button>
-					)}
-				</div>
-				{candidate && (
+			{parts.includes("place") && (
+				<section className={styles.section}>
+					<h3 className={styles.sectionTitle}>My place</h3>
+					<p className={styles.note}>{row.place ? `Saved: ${row.place}.` : "No place saved yet. I use it for the weather."}</p>
 					<div className={styles.row}>
-						<span>
-							{candidate.label} ({candidate.lat}, {candidate.lon})
-						</span>
-						<button type="button" className={styles.action} onClick={() => void savePlace()}>
-							Save as my place
-						</button>
-						<button type="button" className={styles.action} onClick={() => setCandidate(null)}>
-							Cancel
+						<input
+							className={styles.input}
+							aria-label="City"
+							placeholder="A town or city"
+							value={city}
+							onChange={(e) => setCity(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Enter" && city.trim() !== "" && !finding) void findCity();
+							}}
+						/>
+						<button type="button" className={styles.action} onClick={() => void findCity()} disabled={finding || city.trim() === ""}>
+							Find
 						</button>
 					</div>
-				)}
-				{placeNote && <p className={styles.note}>{placeNote}</p>}
-				<p className={styles.note}>Only these coordinates go to Open-Meteo, nothing else. They are rounded to about a kilometre.</p>
-			</section>
-
-			<section className={styles.section}>
-				<h3 className={styles.sectionTitle}>Notifications on this device</h3>
-				{push?.state === "install_first" && <p className={styles.note}>{INSTALL_HINT}</p>}
-				{push?.state === "unsupported" && <p className={styles.note}>This browser cannot show notifications from me.</p>}
-				{push?.state === "ready" && (
-					<>
-						{push.blocked && <p className={styles.note}>Notifications are blocked for Osmo in this browser. Allow them in the site settings first.</p>}
-						<div className={styles.row}>
-							<button type="button" className={styles.action} onClick={() => void turnOnNotifications()} disabled={pushBusy}>
-								Turn on
+					<div className={styles.row}>
+						<button type="button" className={styles.action} onClick={useMyLocation}>
+							Use my location
+						</button>
+						{row.place && (
+							<button type="button" className={styles.action} onClick={() => void save({ place: null, lat: null, lon: null }, (r) => ({ ...r, place: null, lat: null, lon: null }))}>
+								Forget my place
 							</button>
-							<button type="button" className={styles.action} onClick={() => void sendTest()} disabled={pushBusy}>
-								Send me a test
+						)}
+					</div>
+					{candidate && (
+						<div className={styles.row}>
+							<span>
+								{candidate.label} ({candidate.lat}, {candidate.lon})
+							</span>
+							<button type="button" className={styles.action} onClick={() => void savePlace()}>
+								Save as my place
+							</button>
+							<button type="button" className={styles.action} onClick={() => setCandidate(null)}>
+								Cancel
 							</button>
 						</div>
-					</>
-				)}
-				{pushNote && <p className={styles.note} role="status">{pushNote}</p>}
-				{devices?.length === 0 && !devicesError && <p className={styles.note}>No device gets my notifications yet.</p>}
-				{devices?.map((d) => {
-					const r = deviceRow({ id: d.id, friendly_name: d.label ?? undefined, created_at: d.created_at, last_used_at: d.last_ok_at ?? undefined }, now);
-					return (
-						<div key={r.id} className={styles.line}>
-							<div>
-								{r.name}
-								<p className={styles.note}>{r.lastUsed}</p>
-							</div>
-							<div className={styles.actions}>
-								<button type="button" className={styles.action} onClick={() => void removeDevice(r.id)}>
-									Remove
+					)}
+					{placeNote && <p className={styles.note}>{placeNote}</p>}
+					<p className={styles.note}>Only these coordinates go to Open-Meteo, nothing else. They are rounded to about a kilometre.</p>
+				</section>
+			)}
+
+			{parts.includes("notifications") && (
+				<section className={styles.section}>
+					<h3 className={styles.sectionTitle}>Notifications on this device</h3>
+					{push?.state === "install_first" && <p className={styles.note}>{INSTALL_HINT}</p>}
+					{push?.state === "unsupported" && <p className={styles.note}>This browser cannot show notifications from me.</p>}
+					{push?.state === "ready" && (
+						<>
+							{push.blocked && <p className={styles.note}>Notifications are blocked for Osmo in this browser. Allow them in the site settings first.</p>}
+							<div className={styles.row}>
+								<button type="button" className={styles.action} onClick={() => void turnOnNotifications()} disabled={pushBusy}>
+									Turn on
+								</button>
+								<button type="button" className={styles.action} onClick={() => void sendTest()} disabled={pushBusy}>
+									Send me a test
 								</button>
 							</div>
-						</div>
-					);
-				})}
-				{devicesError && <p className={styles.error} role="alert">{devicesError}</p>}
-				<Switch label="Hide reminder text on the lock screen" on={row.hideReminderText} onChange={(on) => void save({ hide_reminder_text: on }, (r) => ({ ...r, hideReminderText: on }))} />
-				<p className={styles.note}>{row.hideReminderText ? "A reminder will only say that it is from Osmo." : "A reminder shows what it is about."}</p>
-			</section>
+						</>
+					)}
+					{pushNote && <p className={styles.note} role="status">{pushNote}</p>}
+					{devices?.length === 0 && !devicesError && <p className={styles.note}>No device gets my notifications yet.</p>}
+					{devices?.map((d) => {
+						const r = deviceRow({ id: d.id, friendly_name: d.label ?? undefined, created_at: d.created_at, last_used_at: d.last_ok_at ?? undefined }, now);
+						return (
+							<div key={r.id} className={styles.line}>
+								<div>
+									{r.name}
+									<p className={styles.note}>{r.lastUsed}</p>
+								</div>
+								<div className={styles.actions}>
+									<button type="button" className={styles.action} onClick={() => void removeDevice(r.id)}>
+										Remove
+									</button>
+								</div>
+							</div>
+						);
+					})}
+					{devicesError && <p className={styles.error} role="alert">{devicesError}</p>}
+					<Switch label="Hide reminder text on the lock screen" on={row.hideReminderText} onChange={(on) => void save({ hide_reminder_text: on }, (r) => ({ ...r, hideReminderText: on }))} />
+					<p className={styles.note}>{row.hideReminderText ? "A reminder will only say that it is from Osmo." : "A reminder shows what it is about."}</p>
+				</section>
+			)}
 		</>
 	);
 }
