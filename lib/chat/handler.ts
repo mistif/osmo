@@ -1,11 +1,12 @@
 // Osmo's AI conversation, server side. The browser sends one everyday turn; this checks who is asking and
-// whether it's switched on, books an upper-bound estimate in ai_calls, asks OpenAI once for the words,
-// settles what was spent, and answers with a speakable reply or a fallback reason. Every failure is a
-// fallback, so the room answers as it does today. Only fixed names, statuses, codes and ids are logged:
-// never a message, a body, the prompt or the key.
+// whether it's switched on, books an upper-bound estimate in ai_calls, asks OpenAI for the words (a second
+// time only when an action's result is needed), settles what was spent, and answers with a speakable reply or a
+// fallback reason. Every failure is a fallback, so the room answers as it does today. Only fixed names, statuses,
+// codes and ids are logged: never a message, a body, the prompt or the key.
 
 import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { cancelWaiting, listEnabledActions, runAction, type ActionContext, type ActionOutcome, type ActionProposal, type EnabledActions } from "../actions";
 import { validateDetection, type Detection } from "../agent/detection";
 import { bearerToken, requireUser, type ServerUser } from "../server/auth";
 import { CALL_CEILING, dayKey, estimateTokens, fits, MAX_OUTPUT_TOKENS, ownerId, readConfig, sameUser, type Env, type ModelEntry } from "./allowance";
@@ -13,9 +14,9 @@ import { dayUse, ledgerKey, reservationRow, settlingRow, supabaseLedger, ZERO, t
 import { callModel, type ModelOutcome, type Parsed } from "./openai";
 import { buildInput, buildInstructions, fitToCeiling } from "./prompt";
 import { checkBody } from "./request";
-import { parseModelOutput } from "./reply-json";
+import { parseModelOutput, type ModelOutput } from "./reply-json";
 import { isCrisisFlag, lastFullSentence, speakable } from "./speakable";
-import { TURN_FORMAT } from "./turn-schema";
+import { turnFormat } from "./turn-schema";
 import type { ChatAnswer, ChatStatus, FallbackReason, InputItem, Usage } from "./types";
 
 export type ChatDeps = {
@@ -29,6 +30,12 @@ export type ChatDeps = {
 	now(): number;
 	// Fixed names, statuses, codes and ids only.
 	log(event: string, fields: Record<string, string | number | null>): void;
+	// The actions seam (lib/actions): what is switched on, running one, and cancelling a confirmation that waits for his yes.
+	actions: {
+		list(userId: string): Promise<EnabledActions | null>;
+		run(p: ActionProposal, ctx: ActionContext): Promise<ActionOutcome>;
+		cancelWaiting(userId: string): Promise<void>;
+	};
 };
 
 export function chatDeps(): ChatDeps {
@@ -36,7 +43,8 @@ export function chatDeps(): ChatDeps {
 		env: () => process.env,
 		user: (request) => requireUser(request),
 		token: (request) => bearerToken(request),
-		// Row-level security applies: the client carries the caller's own token. There is no service-role key.
+		// Row-level security applies: the client carries the caller's own token, so this route still acts as Gur. The
+		// server's one admin client, pinned to the owner, is in lib/server/admin.ts, and only the actions seam uses it.
 		ledger: (token) =>
 			supabaseLedger(
 				createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, {
@@ -47,6 +55,7 @@ export function chatDeps(): ChatDeps {
 		fetch: (...args) => fetch(...args),
 		now: () => Date.now(),
 		log: (event, fields) => console.warn(JSON.stringify({ event, ...fields })),
+		actions: { list: (userId) => listEnabledActions(userId), run: (p, ctx) => runAction(p, ctx), cancelWaiting: (userId) => cancelWaiting(userId) },
 	};
 }
 
@@ -112,29 +121,74 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 	}
 	const checked = checkBody(raw);
 	if (!checked.ok) return fail(400, "bad_request");
-	if (checked.crisis) return fallback("crisis", null);
+	// A crisis, here or flagged by the model, also cancels any confirmation waiting for his yes (spec 4.3, 9.1).
+	const cancel = () => quietly(deps, "cancel", () => deps.actions.cancelWaiting(user.id), undefined);
+	if (checked.crisis) {
+		await cancel();
+		return fallback("crisis", null);
+	}
 
-	// 4. The prompt, trimmed to the per-call ceiling.
-	const body = fitToCeiling(checked.body);
-	const instructions = buildInstructions(body, entry.strict ? "json" : "feeling");
+	// 4. The actions switched on, which only a strict model can set; then the prompt, trimmed to the per-call ceiling.
+	// With none on, the prompt and the format are exactly what they were before actions.
+	const form = entry.strict ? "json" : "feeling";
+	const listed = entry.strict ? await quietly(deps, "list", () => deps.actions.list(user.id), null) : null;
+	const actions = listed !== null && listed.names.length > 0 ? listed : null;
+	const body = fitToCeiling(checked.body, CALL_CEILING, { format: form, actions });
+	const instructions = buildInstructions(body, form, actions);
 	const input = buildInput(body);
+	const format = entry.strict ? turnFormat(actions?.names ?? []) : undefined;
 
 	// 5 to 11, in spend.
 	const ctx: Spend = { deps, user, entry, key: config.key, usable, store: deps.ledger(token) };
-	const spent = await spend(ctx, { instructions, input, format: entry.strict ? TURN_FORMAT : undefined });
+	const spent = await spend(ctx, { instructions, input, format });
 	if (spent.kind === "skip") return fallback(spent.reason, spent.usage);
 	const { outcome, usage } = spent;
 
-	// 12. Check the reply.
-	const result = verdict(outcome.parsed, entry.model);
+	// 12. Check the reply. A crisis drops the turn's action.
+	const result = judge(deps, outcome, entry.model);
 	if ("reason" in result) {
-		if (result.why === "model") deps.log("chat.model", { served: outcome.parsed.model, requestId: outcome.requestId });
-		else if (result.why !== null) deps.log("chat.reply", { why: result.why, requestId: outcome.requestId });
+		if (result.reason === "crisis") await cancel();
 		return fallback(result.reason, usage);
 	}
 
-	// 13. Answer.
-	return answer({ source: "model", reply: result.reply, usage, detection: result.detection });
+	// 13. The action, then the answer (spec 3.5, 3.6). Done with nothing to read: the model's sentence, then the code's
+	// exact line. Waiting, failed or refused: only the code's line. Done with a result: call 2 answers with it, and when
+	// it cannot, the code's line stands. Call 2's own action and tone reading are dropped; its crisis flag still counts.
+	let reply = result.reply,
+		waiting = false,
+		final = usage;
+	const proposal = result.action;
+	if (actions !== null && proposal !== null) {
+		const out = await quietly(deps, "run", () => deps.actions.run(proposal, { userId: user.id, surface: "room", now: deps.now() }), IGNORED);
+		if (out.kind === "waiting") {
+			reply = out.line;
+			waiting = true;
+		} else if (out.kind === "failed" || out.kind === "refused") reply = out.line;
+		else if (out.kind === "done" && out.result === null) reply = `${reply} ${out.line}`;
+		else if (out.kind === "done" && out.result !== null) {
+			const again = await spend(ctx, { instructions: buildInstructions(body, form, actions, { name: proposal.name, text: out.result }), input, format });
+			final = again.usage ?? final;
+			const second = again.kind === "called" ? judge(deps, again.outcome, entry.model) : null;
+			if (second !== null && "reason" in second && second.reason === "crisis") {
+				await cancel();
+				return fallback("crisis", final);
+			}
+			reply = second !== null && !("reason" in second) ? second.reply : out.line;
+		}
+	}
+	return answer({ source: "model", reply, usage: final, detection: result.detection, waiting });
+}
+
+const IGNORED: ActionOutcome = { kind: "ignored" };
+
+// The actions seam never breaks a turn: a throw reads as nothing on, nothing run or nothing cancelled, and only the step is logged.
+async function quietly<T>(deps: ChatDeps, step: "list" | "run" | "cancel", work: () => Promise<T>, otherwise: T): Promise<T> {
+	try {
+		return await work();
+	} catch {
+		deps.log("chat.actions", { step });
+		return otherwise;
+	}
 }
 
 type Spend = { deps: ChatDeps; user: ServerUser; entry: ModelEntry; key: string; usable: number; store: LedgerStore };
@@ -231,8 +285,18 @@ function settlement(outcome: ModelOutcome, reservation: Reservation): { counts: 
 }
 
 type Verdict =
-	| { reply: string; detection: Detection | null }
+	| { reply: string; detection: Detection | null; action: ModelOutput["action"] }
 	| { reason: "error" | "crisis" | "empty"; why: "model" | "refusal" | "content_filter" | "status" | "incomplete" | "format" | null };
+
+// Step 12 for either call: the verdict, with why a reply was refused logged by name.
+function judge(deps: ChatDeps, outcome: Answered, model: string): Verdict {
+	const result = verdict(outcome.parsed, model);
+	if ("reason" in result) {
+		if (result.why === "model") deps.log("chat.model", { served: outcome.parsed.model, requestId: outcome.requestId });
+		else if (result.why !== null) deps.log("chat.reply", { why: result.why, requestId: outcome.requestId });
+	}
+	return result;
+}
 
 // The crisis field as it reads in the raw text, so a JSON the output cap cut off after it still counts.
 const CRISIS_FIELD = /"crisis"\s*:\s*true/;
@@ -241,7 +305,7 @@ const CRISIS_FIELD = /"crisis"\s*:\s*true/;
 // bare word anywhere in the raw text; it stands whichever model wrote it), then the served model (a missing one
 // counts as a mismatch), a refusal or content filter, the status, text that is half a JSON or a fence, a reply cut
 // off by the output cap cut back to its last full sentence, and last whether anything speakable is left. The
-// detection is checked here, so the browser only ever gets a validated one.
+// detection is checked here, so the browser only ever gets a validated one. The action comes with the reply.
 function verdict(parsed: Parsed, model: string): Verdict {
 	const out = parseModelOutput(parsed.text);
 	// A crisis flag stands whichever model wrote it; a mismatch is still logged, and its settling row still stops the day.
@@ -254,5 +318,5 @@ function verdict(parsed: Parsed, model: string): Verdict {
 	if (parsed.status === "incomplete" && parsed.incomplete !== "max_output_tokens") return { reason: "error", why: "incomplete" };
 	if (out === null) return { reason: "error", why: "format" };
 	const reply = speakable(parsed.status === "incomplete" ? lastFullSentence(out.reply) : out.reply);
-	return reply === "" ? { reason: "empty", why: null } : { reply, detection: validateDetection(out.detection, "model") };
+	return reply === "" ? { reason: "empty", why: null } : { reply, detection: validateDetection(out.detection, "model"), action: out.action };
 }

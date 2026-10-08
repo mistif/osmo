@@ -131,6 +131,12 @@ describe("checkBody refuses", () => {
 		}
 	});
 
+	// A guest can neither propose nor confirm an action (spec 4.3, 9.2); any other speaker, or none, is Gur's turn.
+	it("a guest's turn, and still takes Gur's with a speaker or without one", () => {
+		expect(checkBody({ ...valid(), speaker: "guest" })).toEqual({ ok: false });
+		for (const raw of [{ ...valid(), speaker: "you" }, valid()]) expect(checkBody(raw)).toEqual({ ok: true, crisis: false, body: valid() });
+	});
+
 	it("each malformed field", () => {
 		const b = valid();
 		const cases: [string, unknown][] = [
