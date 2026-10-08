@@ -20,12 +20,16 @@ import type { SendOptions } from "../voice/guest";
 import type { AskResult } from "./ask";
 import { answerFromMemory, calculateMath, findUnknownTopic, isBuiltInTopic } from "./answers";
 import type { RoomLine } from "./body";
+import { NOTHING_WAITING_LINE, UNREACHED_LINE, type DecisionAnswer } from "./decision";
 import {
+	decisionEnd,
+	decisionFor,
 	detectionOf,
 	keptTurn,
 	MODEL_BRANCHES,
 	pickBranch,
 	quietEffects,
+	waitingAfter,
 	whileWaiting,
 	writerFor,
 	type Branch,
@@ -405,9 +409,91 @@ describe("detectionOf", () => {
 
 	it("gives the model answer's detection and nothing for any other answer", () => {
 		const detection = { tones: ["sad"] };
-		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection })).toBe(detection);
-		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection: null })).toBeNull();
+		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection, waiting: false })).toBe(detection);
+		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection: null, waiting: false })).toBeNull();
 		const others: (AskResult | null)[] = [{ kind: "crisis", usage }, { kind: "fallback", why: "error", usage, stop: false }, null];
 		for (const answer of others) expect(detectionOf(answer), JSON.stringify(answer)).toBeNull();
+	});
+});
+
+describe("decisionFor", () => {
+	const GUR_WAITING = { guest: false, crisis: false, waiting: true };
+
+	it("reads a bare yes or no from Gur while a confirmation waits", () => {
+		expect(decisionFor({ ...GUR_WAITING, text: "yes" })).toBe("yes");
+		expect(decisionFor({ ...GUR_WAITING, text: "Go ahead." })).toBe("yes");
+		expect(decisionFor({ ...GUR_WAITING, text: "no" })).toBe("no");
+		expect(decisionFor({ ...GUR_WAITING, text: "never mind" })).toBe("no");
+	});
+
+	it("never takes a guest's yes, a yes in a crisis, or one with nothing waiting", () => {
+		expect(decisionFor({ ...GUR_WAITING, guest: true, text: "yes" })).toBeNull();
+		expect(decisionFor({ ...GUR_WAITING, crisis: true, text: "stop" })).toBeNull();
+		expect(decisionFor({ ...GUR_WAITING, waiting: false, text: "yes" })).toBeNull();
+	});
+
+	it("leaves a longer sentence with a yes in it to the conversation", () => {
+		for (const text of ["yes, but tomorrow", "yes please send it to Sam too", "I said no to him", "no idea"]) {
+			expect(decisionFor({ ...GUR_WAITING, text }), text).toBeNull();
+		}
+	});
+});
+
+describe("waitingAfter", () => {
+	const usage = { usedToday: 1, usable: 2 };
+	const model = (waiting: boolean): AskResult => ({ kind: "model", reply: "Delete it? Say yes to go ahead, or no.", usage, detection: null, waiting });
+
+	it("leaves the confirmation waiting through a guest's turn", () => {
+		expect(waitingAfter(true, { on: "guest" })).toBe(true);
+		expect(waitingAfter(false, { on: "guest" })).toBe(false);
+	});
+
+	it("moves past it on any other turn of Gur's, so a yes to Osmo's own question is never taken as one", () => {
+		expect(waitingAfter(true, { on: "turn" })).toBe(false);
+	});
+
+	it("waits again only when a model answer says an action waits", () => {
+		expect(waitingAfter(false, { on: "model", answer: model(true) })).toBe(true);
+		expect(waitingAfter(true, { on: "model", answer: model(false) })).toBe(false);
+		const others: (AskResult | null)[] = [{ kind: "crisis", usage }, { kind: "fallback", why: "timeout", usage: null, stop: false }, null];
+		for (const answer of others) expect(waitingAfter(true, { on: "model", answer }), JSON.stringify(answer)).toBe(false);
+	});
+
+	it("keeps it waiting after a decision only when the server says the row still waits", () => {
+		expect(waitingAfter(true, { on: "decision", answer: { handled: true, reply: "For that one I need you to type yes.", waiting: true, reached: true } })).toBe(true);
+		expect(waitingAfter(true, { on: "decision", answer: { handled: true, reply: "Deleted the note.", waiting: false, reached: true } })).toBe(false);
+		expect(waitingAfter(true, { on: "decision", answer: { handled: false, reply: null, waiting: false, reached: true } })).toBe(false);
+	});
+
+	it("leaves it as it was after a decision that never reached the server, which knows nothing of it", () => {
+		for (const was of [true, false]) expect(waitingAfter(was, { on: "decision", answer: { handled: false, reply: null, waiting: false, reached: false } }), String(was)).toBe(was);
+	});
+});
+
+describe("decisionEnd", () => {
+	const ran: DecisionAnswer = { handled: true, reply: "Deleted the note.", waiting: false, reached: true };
+	const typeIt: DecisionAnswer = { handled: true, reply: "For that one I need you to type yes.", waiting: true, reached: true };
+	const none: DecisionAnswer = { handled: false, reply: null, waiting: false, reached: true };
+	const unreached: DecisionAnswer = { handled: false, reply: null, waiting: false, reached: false };
+	const spoken = { quiet: false, lineSaved: false };
+
+	it("says the server's line, and takes whether one still waits from its answer", () => {
+		expect(decisionEnd({ quiet: false, was: true, answer: ran })).toEqual({ waiting: false, line: "Deleted the note.", ...spoken });
+		expect(decisionEnd({ quiet: false, was: true, answer: typeIt })).toEqual({ waiting: true, line: typeIt.reply, ...spoken });
+	});
+
+	it("says nothing waits only when the server answered so", () => {
+		expect(decisionEnd({ quiet: false, was: true, answer: none })).toEqual({ waiting: false, line: NOTHING_WAITING_LINE, ...spoken });
+	});
+
+	it("keeps the flag as it was and says it did not hear back when no answer came", () => {
+		for (const was of [true, false]) expect(decisionEnd({ quiet: false, was, answer: unreached }), String(was)).toEqual({ waiting: was, line: UNREACHED_LINE, ...spoken });
+	});
+
+	it("never puts the flag back up after a crisis, and shows only a line the server sent, quietly, with his yes already saved", () => {
+		for (const was of [true, false]) {
+			for (const answer of [ran, typeIt]) expect(decisionEnd({ quiet: true, was, answer }), answer.reply ?? "").toEqual({ waiting: false, line: answer.reply, quiet: true, lineSaved: true });
+			for (const answer of [none, unreached]) expect(decisionEnd({ quiet: true, was, answer }), JSON.stringify(answer)).toEqual({ waiting: false, line: null, quiet: true, lineSaved: true });
+		}
 	});
 });

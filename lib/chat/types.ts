@@ -22,8 +22,9 @@ export type ChatBody = {
 };
 export type Usage = { usedToday: number; usable: number };
 export type FallbackReason = "off" | "allowance" | "error" | "empty" | "crisis";
+// waiting: the turn's action is waiting for Gur's yes or no.
 export type ChatAnswer =
-	| { source: "model"; reply: string; usage: Usage; detection: Detection | null }
+	| { source: "model"; reply: string; usage: Usage; detection: Detection | null; waiting: boolean }
 	| { source: "fallback"; reason: FallbackReason; usage: Usage | null };
 // GET /api/chat, and the room's aiUsage.
 export type ChatStatus = { enabled: boolean; usedToday: number | null; usable: number | null };

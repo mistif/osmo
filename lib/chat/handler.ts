@@ -1,22 +1,24 @@
 // Osmo's AI conversation, server side. The browser sends one everyday turn; this checks who is asking and
-// whether it's switched on, books an upper-bound estimate in ai_calls, asks OpenAI once for the words,
-// settles what was spent, and answers with a speakable reply or a fallback reason. Every failure is a
-// fallback, so the room answers as it does today. Only fixed names, statuses, codes and ids are logged:
-// never a message, a body, the prompt or the key.
+// whether it's switched on, books an upper-bound estimate in ai_calls, asks OpenAI for the words (a second
+// time only when an action's result is needed), settles what was spent, and answers with a speakable reply or a
+// fallback reason. Every failure is a fallback, so the room answers as it does today. Only fixed names, statuses,
+// codes and ids are logged: never a message, a body, the prompt or the key.
 
 import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { after } from "next/server";
+import { cancelWaiting, listEnabledActions, runAction, type ActionContext, type ActionOutcome, type ActionProposal, type EnabledActions } from "../actions";
 import { validateDetection, type Detection } from "../agent/detection";
 import { bearerToken, requireUser, type ServerUser } from "../server/auth";
-import { CALL_CEILING, dayKey, estimateTokens, fits, MAX_OUTPUT_TOKENS, ownerId, readConfig, sameUser, type Env } from "./allowance";
+import { CALL_CEILING, dayKey, estimateTokens, fits, MAX_OUTPUT_TOKENS, ownerId, readConfig, sameUser, type Env, type ModelEntry } from "./allowance";
 import { dayUse, ledgerKey, reservationRow, settlingRow, supabaseLedger, ZERO, type Counts, type LedgerStore, type Reservation } from "./ledger";
 import { callModel, type ModelOutcome, type Parsed } from "./openai";
 import { buildInput, buildInstructions, fitToCeiling } from "./prompt";
 import { checkBody } from "./request";
-import { parseModelOutput } from "./reply-json";
-import { isCrisisFlag, lastFullSentence, speakable } from "./speakable";
-import { TURN_FORMAT } from "./turn-schema";
-import type { ChatAnswer, ChatStatus, FallbackReason, Usage } from "./types";
+import { ownWords, parseModelOutput, type ModelOutput } from "./reply-json";
+import { hasCrisisWord, isCrisisFlag, lastFullSentence, saidWhole, speakable, spellsCrisis } from "./speakable";
+import { turnFormat } from "./turn-schema";
+import type { ChatAnswer, ChatStatus, FallbackReason, InputItem, Usage } from "./types";
 
 export type ChatDeps = {
 	// The server's settings, read on every request.
@@ -29,6 +31,15 @@ export type ChatDeps = {
 	now(): number;
 	// Fixed names, statuses, codes and ids only.
 	log(event: string, fields: Record<string, string | number | null>): void;
+	// The actions seam (lib/actions): what is switched on, running one, and cancelling a confirmation that waits for his yes.
+	actions: {
+		list(userId: string): Promise<EnabledActions | null>;
+		run(p: ActionProposal, ctx: ActionContext): Promise<ActionOutcome>;
+		cancelWaiting(userId: string): Promise<void>;
+	};
+	// Work that should not hold up the answer: run once it has been sent where the platform can keep the function alive
+	// for it, and otherwise now, settling once the work is done, so the answer waits for it. Never throws or rejects.
+	later(work: () => Promise<unknown>): Promise<void>;
 };
 
 export function chatDeps(): ChatDeps {
@@ -36,7 +47,8 @@ export function chatDeps(): ChatDeps {
 		env: () => process.env,
 		user: (request) => requireUser(request),
 		token: (request) => bearerToken(request),
-		// Row-level security applies: the client carries the caller's own token. There is no service-role key.
+		// Row-level security applies: the client carries the caller's own token, so this route still acts as Gur. The
+		// server's one admin client, pinned to the owner, is in lib/server/admin.ts, and only the actions seam uses it.
 		ledger: (token) =>
 			supabaseLedger(
 				createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, {
@@ -47,6 +59,23 @@ export function chatDeps(): ChatDeps {
 		fetch: (...args) => fetch(...args),
 		now: () => Date.now(),
 		log: (event, fields) => console.warn(JSON.stringify({ event, ...fields })),
+		actions: { list: (userId) => listEnabledActions(userId), run: (p, ctx) => runAction(p, ctx), cancelWaiting: (userId) => cancelWaiting(userId) },
+		// Next keeps the function alive for it after the response. after() throws before it queues anything outside a request,
+		// and inside one where the platform gives no waitUntil (a host that may freeze the function once the answer is sent):
+		// then the work runs now and the answer waits for it, as before after() was used.
+		later: async (work) => {
+			try {
+				after(work);
+				return;
+			} catch {
+				console.warn(JSON.stringify({ event: "chat.later", step: "after" }));
+			}
+			try {
+				await work();
+			} catch {
+				// The work logs its own failure.
+			}
+		},
 	};
 }
 
@@ -112,37 +141,128 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 	}
 	const checked = checkBody(raw);
 	if (!checked.ok) return fail(400, "bad_request");
-	if (checked.crisis) return fallback("crisis", null);
+	// A crisis, here or flagged by the model, also cancels any confirmation waiting for his yes (spec 4.3, 9.1), even with
+	// actions off (a row may be left from before). Where Next can keep the function alive, it runs after the crisis answer
+	// is sent, so it never holds that answer up; where it cannot, the answer waits for it, so the cancel always lands.
+	const cancel = () => deps.later(() => quietly(deps, "cancel", () => deps.actions.cancelWaiting(user.id), undefined));
+	if (checked.crisis) {
+		await cancel();
+		return fallback("crisis", null);
+	}
 
-	// 4. The prompt, trimmed to the per-call ceiling.
-	const body = fitToCeiling(checked.body);
-	const instructions = buildInstructions(body, entry.strict ? "json" : "feeling");
+	// 4. The actions switched on, which only a strict model can set; then the prompt, trimmed to the per-call ceiling.
+	// With none on, a strict model's prompt and format are exactly what they were before actions. (A model that is not
+	// strict is trimmed by the FEELING prompt it is sent; before actions it was measured with the slightly shorter JSON one.)
+	const form = entry.strict ? "json" : "feeling";
+	const listed = entry.strict ? await quietly(deps, "list", () => deps.actions.list(user.id), null) : null;
+	const actions = offered(listed);
+	const body = fitToCeiling(checked.body, CALL_CEILING, { format: form, actions });
+	const instructions = buildInstructions(body, form, actions);
 	const input = buildInput(body);
-	const estimate = estimateTokens(instructions, input);
+	const format = entry.strict ? turnFormat(actions?.names ?? []) : undefined;
+
+	// 5 to 11, in spend.
+	const ctx: Spend = { deps, user, entry, key: config.key, usable, store: deps.ledger(token) };
+	const spent = await spend(ctx, { instructions, input, format });
+	if (spent.kind === "skip") return fallback(spent.reason, spent.usage);
+	const { outcome, usage } = spent;
+
+	// 12. Check the reply. A crisis drops the turn's action.
+	const result = judge(deps, outcome, entry.model, { args: actions !== null, quoted: null });
+	if ("reason" in result) {
+		if (result.reason === "crisis") await cancel();
+		return fallback(result.reason, usage);
+	}
+
+	// 13. The action, then the answer (spec 3.5, 3.6). Done with nothing to read: the model's sentence, then the code's
+	// exact line. Waiting, failed or refused: only the code's line. Done with a result: call 2 answers with it, its body
+	// fitted again so the result has room, and told to name every item; when it cannot, or its answer is too long to say
+	// whole, the code's line stands. Call 2's own action and tone reading are dropped; its crisis flag still counts.
+	// A turn the room has left (a crisis typed meanwhile aborts it, and cancels at once what waits) runs no action, cancels
+	// again a confirmation it held meanwhile, and makes no call 2. The client is gone, so what it answers is never read.
+	const left = () => request.signal.aborted;
+	let reply = result.reply,
+		waiting = false,
+		final = usage;
+	const proposal = result.action;
+	if (actions !== null && proposal !== null && !left()) {
+		const out = await quietly(deps, "run", () => deps.actions.run(proposal, { userId: user.id, surface: "room", now: deps.now() }), IGNORED);
+		if (out.kind === "waiting" && left()) await cancel();
+		else if (out.kind === "waiting") {
+			reply = out.line;
+			waiting = true;
+		} else if (out.kind === "failed" || out.kind === "refused") reply = out.line;
+		else if (out.kind === "done" && out.result === null) reply = `${reply} ${out.line}`;
+		else if (out.kind === "done" && left()) reply = out.line;
+		else if (out.kind === "done" && out.result !== null) {
+			const read = { name: proposal.name, text: out.result };
+			const fitted = fitToCeiling(body, CALL_CEILING, { format: form, actions, result: read });
+			const again = await spend(ctx, { instructions: buildInstructions(fitted, form, actions, read), input: buildInput(fitted), format });
+			final = again.usage ?? final;
+			const second = again.kind === "called" ? judge(deps, again.outcome, entry.model, { args: true, quoted: out.result }) : null;
+			if (second !== null && "reason" in second && second.reason === "crisis") {
+				await cancel();
+				return fallback("crisis", final);
+			}
+			reply = second !== null && !("reason" in second) && second.whole ? second.reply : out.line;
+		}
+	}
+	return answer({ source: "model", reply, usage: final, detection: result.detection, waiting });
+}
+
+const IGNORED: ActionOutcome = { kind: "ignored" };
+
+// Building things is not offered until the room can start a build from the action's ticket (artifacts, task B8):
+// until then a build would be logged and counted while nothing appears. Null when nothing else is on.
+function offered(listed: EnabledActions | null): EnabledActions | null {
+	if (listed === null) return null;
+	const kept = listed.names.flatMap((name, i) => (name === "build" ? [] : [{ name, line: listed.lines[i] }]));
+	return kept.length === 0 ? null : { ...listed, names: kept.map((k) => k.name), lines: kept.map((k) => k.line) };
+}
+
+// The actions seam never breaks a turn: a throw reads as nothing on, nothing run or nothing cancelled, and only the step is logged.
+async function quietly<T>(deps: ChatDeps, step: "list" | "run" | "cancel", work: () => Promise<T>, otherwise: T): Promise<T> {
+	try {
+		return await work();
+	} catch {
+		deps.log("chat.actions", { step });
+		return otherwise;
+	}
+}
+
+type Spend = { deps: ChatDeps; user: ServerUser; entry: ModelEntry; key: string; usable: number; store: LedgerStore };
+// A skip names the fallback the turn answers with; a call that ran was always answered, since spend logs and skips the rest.
+type Spent = { kind: "skip"; reason: FallbackReason; usage: Usage | null } | { kind: "called"; outcome: Answered; usage: Usage };
+type Answered = Extract<ModelOutcome, { kind: "answered" }>;
+
+// Steps 5 to 11 for one model call, so every call of a turn is booked the same way: read the day, check the
+// budget, reserve, read again, call once, settle.
+export async function spend(s: Spend, call: { instructions: string; input: InputItem[]; format: unknown }): Promise<Spent> {
+	const { deps, user, entry, usable, store } = s;
+	const estimate = estimateTokens(call.instructions, call.input);
 
 	// 5. Today's rows. The clock is read once, so a call that crosses midnight UTC stays on one day.
 	const day = dayKey(deps.now());
-	const key = ledgerKey(config.key);
-	const store = deps.ledger(token);
+	const key = ledgerKey(s.key);
 	const first = await store.readDay(day);
 	if (!first.ok) {
 		deps.log("chat.ledger", { step: "read", code: first.code });
-		return fallback("error", null);
+		return { kind: "skip", reason: "error", usage: null };
 	}
 	const before = dayUse(first.value, entry.pool, user.id, key);
 
 	// 6. A model other than the one asked for was served today: nothing more until 00:00 UTC.
-	if (before.stopped) return fallback("error", { usedToday: before.used, usable });
+	if (before.stopped) return { kind: "skip", reason: "error", usage: { usedToday: before.used, usable } };
 
 	// 7. The budget, before the call and never after. fitToCeiling always gets a valid body under the
 	// ceiling; the check is here so a prompt that somehow doesn't fit is never sent.
-	if (estimate > CALL_CEILING || !fits(before.used, estimate, usable)) return fallback("allowance", { usedToday: before.used, usable });
+	if (estimate > CALL_CEILING || !fits(before.used, estimate, usable)) return { kind: "skip", reason: "allowance", usage: { usedToday: before.used, usable } };
 
 	// 8. Reserve the estimate.
 	const booked = await store.insert(reservationRow({ day, pool: entry.pool, model: entry.model, estimate, maxOutput: MAX_OUTPUT_TOKENS }));
 	if (!booked.ok) {
 		deps.log("chat.ledger", { step: "reserve", code: booked.code });
-		return fallback("error", { usedToday: before.used, usable });
+		return { kind: "skip", reason: "error", usage: { usedToday: before.used, usable } };
 	}
 	const reservation: Reservation = { id: booked.value, day, pool: entry.pool, model: entry.model, estimate };
 	// A settling row that fails to save is logged, and the reservation's estimate stays counted.
@@ -158,17 +278,17 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 	if (!second.ok) {
 		deps.log("chat.ledger", { step: "read", code: second.code });
 		await settle(ZERO, entry.model);
-		return fallback("error", null);
+		return { kind: "skip", reason: "error", usage: null };
 	}
 	const after = dayUse(second.value, entry.pool, user.id, key);
 	if (after.stopped || after.used > usable) {
 		const withdrawn = await settle(ZERO, entry.model);
-		return fallback(after.stopped ? "error" : "allowance", { usedToday: withdrawn ? after.used - estimate : after.used, usable });
+		return { kind: "skip", reason: after.stopped ? "error" : "allowance", usage: { usedToday: withdrawn ? after.used - estimate : after.used, usable } };
 	}
 
 	// 10. The one call, with no retries.
 	const safetyId = createHash("sha256").update(user.id).digest("hex");
-	const outcome = await callModel(deps.fetch, config.key, { entry, instructions, input, safetyId, maxOutput: MAX_OUTPUT_TOKENS, format: entry.strict ? TURN_FORMAT : undefined });
+	const outcome = await callModel(deps.fetch, s.key, { entry, instructions: call.instructions, input: call.input, safetyId, maxOutput: MAX_OUTPUT_TOKENS, format: call.format });
 
 	// 11. Settle. usedToday is the second read's count with this call's estimate replaced by what was settled.
 	let usedToday = after.used;
@@ -182,19 +302,9 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 			type: outcome.kind === "rejected" ? outcome.type : null,
 			requestId: outcome.requestId,
 		});
-		return fallback("error", usage);
+		return { kind: "skip", reason: "error", usage };
 	}
-
-	// 12. Check the reply.
-	const result = verdict(outcome.parsed, entry.model);
-	if ("reason" in result) {
-		if (result.why === "model") deps.log("chat.model", { served: outcome.parsed.model, requestId: outcome.requestId });
-		else if (result.why !== null) deps.log("chat.reply", { why: result.why, requestId: outcome.requestId });
-		return fallback(result.reason, usage);
-	}
-
-	// 13. Answer.
-	return answer({ source: "model", reply: result.reply, usage, detection: result.detection });
+	return { kind: "called", outcome, usage };
 }
 
 // What a call is settled with: OpenAI's own counts when it reported them, and zero for a request it
@@ -213,22 +323,48 @@ function settlement(outcome: ModelOutcome, reservation: Reservation): { counts: 
 	};
 }
 
+// whole: the reply is all the model wrote, with nothing cut by the output cap or dropped to fit what Osmo says.
 type Verdict =
-	| { reply: string; detection: Detection | null }
+	| { reply: string; detection: Detection | null; action: ModelOutput["action"]; whole: boolean }
 	| { reason: "error" | "crisis" | "empty"; why: "model" | "refusal" | "content_filter" | "status" | "incomplete" | "format" | null };
 
-// The crisis field as it reads in the raw text, so a JSON the output cap cut off after it still counts.
+// Step 12 for either call: the verdict, with why a reply was refused logged by name. copies: what the turn may copy (see flagged).
+function judge(deps: ChatDeps, outcome: Answered, model: string, copies: Copies): Verdict {
+	const result = verdict(outcome.parsed, model, copies);
+	if ("reason" in result) {
+		if (result.why === "model") deps.log("chat.model", { served: outcome.parsed.model, requestId: outcome.requestId });
+		else if (result.why !== null) deps.log("chat.reply", { why: result.why, requestId: outcome.requestId });
+	}
+	return result;
+}
+
+// The crisis field as it reads in the raw text, so a JSON the output cap cut off after it, or one that sets it twice,
+// still counts. Quotes inside a string are escaped, so it never matches in an action's args.
 const CRISIS_FIELD = /"crisis"\s*:\s*true/;
 
-// Step 12, in this order: the crisis flag (the JSON field, also in a JSON that was cut off, the reply, or the old
-// bare word anywhere in the raw text; it stands whichever model wrote it), then the served model (a missing one
-// counts as a mismatch), a refusal or content filter, the status, text that is half a JSON or a fence, a reply cut
-// off by the output cap cut back to its last full sentence, and last whether anything speakable is left. The
-// detection is checked here, so the browser only ever gets a validated one.
-function verdict(parsed: Parsed, model: string): Verdict {
+// What a turn may copy of Gur's own words without it flagging a crisis. args: actions were offered, so the args of the
+// action it sets copy his words. quoted: the result call 2 answers with, his data (notes, reminders, later mail).
+type Copies = { args: boolean; quoted: string | null };
+
+// Whether the model flagged a crisis: the field, a reply of the word alone, text whose letters alone spell it (as an
+// object with no reply may), or the old bare word CRISIS anywhere in the model's own words (see ownWords: a whole JSON
+// turn's every key and string but the args it may copy). When the result call 2 answers with holds the word itself, a
+// JSON turn may copy it anywhere: then only the field and a reply of the word alone count.
+function flagged(text: string, out: ModelOutput | null, copies: Copies): boolean {
+	if (out?.crisis || CRISIS_FIELD.test(text) || spellsCrisis(text)) return true;
+	const own = ownWords(text, copies.args);
+	if (own === null) return isCrisisFlag(text);
+	return !(copies.quoted !== null && hasCrisisWord(copies.quoted)) && own.some(hasCrisisWord);
+}
+
+// Step 12, in this order: the crisis flag (see flagged; it stands whichever model wrote it), then the served model (a
+// missing one counts as a mismatch), a refusal or content filter, the status, text that is half a JSON or a fence, a
+// reply cut off by the output cap cut back to its last full sentence, and last whether anything speakable is left. The
+// detection is checked here, so the browser only ever gets a validated one. The action comes with the reply.
+function verdict(parsed: Parsed, model: string, copies: Copies): Verdict {
 	const out = parseModelOutput(parsed.text);
 	// A crisis flag stands whichever model wrote it; a mismatch is still logged, and its settling row still stops the day.
-	if (out?.crisis || isCrisisFlag(parsed.text) || CRISIS_FIELD.test(parsed.text)) return { reason: "crisis", why: parsed.model !== model ? "model" : null };
+	if (flagged(parsed.text, out, copies)) return { reason: "crisis", why: parsed.model !== model ? "model" : null };
 	if (parsed.model !== model) return { reason: "error", why: "model" };
 	if (parsed.refused || (parsed.status === "incomplete" && parsed.incomplete === "content_filter")) {
 		return { reason: "error", why: parsed.refused ? "refusal" : "content_filter" };
@@ -237,5 +373,6 @@ function verdict(parsed: Parsed, model: string): Verdict {
 	if (parsed.status === "incomplete" && parsed.incomplete !== "max_output_tokens") return { reason: "error", why: "incomplete" };
 	if (out === null) return { reason: "error", why: "format" };
 	const reply = speakable(parsed.status === "incomplete" ? lastFullSentence(out.reply) : out.reply);
-	return reply === "" ? { reason: "empty", why: null } : { reply, detection: validateDetection(out.detection, "model") };
+	const whole = parsed.status === "completed" && saidWhole(out.reply);
+	return reply === "" ? { reason: "empty", why: null } : { reply, detection: validateDetection(out.detection, "model"), action: out.action, whole };
 }

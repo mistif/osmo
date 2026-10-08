@@ -1,9 +1,11 @@
 // Who writes a reply: code or the model. sendText (app/assistant.tsx) keeps today's chain of branches in today's
 // order; these pure functions pick the branch and its writer, so the choice is tested with the real helpers.
 
+import { decisionOf } from "../actions/decision-words";
 import { askedForName, justLearnedName } from "../agent/context";
 import { isCrisis } from "../agent/safety";
 import type { AskResult } from "./ask";
+import { NOTHING_WAITING_LINE, UNREACHED_LINE, type DecisionAnswer } from "./decision";
 import { LIMITS } from "./types";
 
 export type Branch =
@@ -113,4 +115,35 @@ export function whileWaiting(text: string): "take" | "drop" {
 export type QuietPlan = { applyPendingTopic: false; startLookup: false; reply: "none" | "noExplain" };
 export function quietEffects(waitingOn: "model" | "lookup"): QuietPlan {
 	return { applyPendingTopic: false, startLookup: false, reply: waitingOn === "model" ? "none" : "noExplain" };
+}
+
+// A bare yes or no answers the waiting confirmation (spec 4.3) only from Gur, never in a crisis, and only while one waits.
+// A longer sentence with a yes in it is the conversation's.
+export function decisionFor(c: { guest: boolean; crisis: boolean; waiting: boolean; text: string }): "yes" | "no" | null {
+	return c.guest || c.crisis || !c.waiting ? null : decisionOf(c.text);
+}
+
+// Whether a bare yes or no still goes to /api/act after this step. A guest's turn leaves it as it was. Any other turn of
+// Gur's moves past the question, code's turns included, so a yes to Osmo's own question ("Do you agree?") is never taken
+// for one; then a model answer, or the decision's own answer, says whether one waits again. A decision that never reached
+// the server leaves it as it was, so his yes said again still goes to /api/act.
+export type WaitingStep = { on: "guest" } | { on: "turn" } | { on: "model"; answer: AskResult | null } | { on: "decision"; answer: DecisionAnswer };
+export function waitingAfter(was: boolean, step: WaitingStep): boolean {
+	if (step.on === "guest") return was;
+	if (step.on === "model") return step.answer?.kind === "model" && step.answer.waiting;
+	if (step.on === "decision") return step.answer.reached ? step.answer.waiting : was;
+	return false;
+}
+
+// How a bare yes or no posted to /api/act ends in the room: whether one waits after it, and the line Osmo delivers, if
+// any, and how. quiet: a crisis was taken while it was posted; that put the flag down and cancelled what waits, so the
+// flag never goes back up, and only a line the server sent is shown, quietly, with his yes already saved by takeCrisis
+// (lineSaved). Otherwise the answer sets the flag (waitingAfter), and Osmo says the server's line, that nothing waits
+// when the server said so, or that he did not hear back.
+export type DecisionEnd = { waiting: boolean; line: string | null; quiet: boolean; lineSaved: boolean };
+export function decisionEnd(c: { quiet: boolean; was: boolean; answer: DecisionAnswer }): DecisionEnd {
+	const { answer } = c;
+	if (c.quiet) return { waiting: false, line: answer.handled && answer.reply ? answer.reply : null, quiet: true, lineSaved: true };
+	const line = answer.reply ?? (answer.reached ? NOTHING_WAITING_LINE : UNREACHED_LINE);
+	return { waiting: waitingAfter(c.was, { on: "decision", answer }), line, quiet: false, lineSaved: false };
 }
