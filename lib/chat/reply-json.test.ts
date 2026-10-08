@@ -13,7 +13,7 @@ describe("parseModelOutput", () => {
 		const good = parseModelOutput('That sounds hard.\nFEELING: {"tone":["sad"],"intensity":2}');
 		expect(good).toMatchObject({ reply: "That sounds hard.", crisis: false });
 		expect(good?.detection).toMatchObject({ tone: ["sad"] });
-		expect(parseModelOutput("That sounds hard.\nFEELING: {oops")).toEqual({ reply: "That sounds hard.", crisis: false, detection: null });
+		expect(parseModelOutput("That sounds hard.\nFEELING: {oops")).toEqual({ reply: "That sounds hard.", crisis: false, detection: null, action: null });
 	});
 	it("finds the FEELING line anywhere, at its last occurrence, not only as the last line", () => {
 		const inline = parseModelOutput('That sounds hard. FEELING: {"tone":["sad"],"intensity":2}');
@@ -37,8 +37,20 @@ describe("parseModelOutput", () => {
 	it.each([["broken JSON", '{"reply":"Hel'], ["a fenced block", "```json\n" + json({}) + "\n```"], ["an object with no reply", '{"tone":["sad"]}']])("gives null for %s", (_n, t) =>
 		expect(parseModelOutput(t)).toBeNull());
 	it("still speaks plain text, including text that is valid JSON by itself", () => {
-		expect(parseModelOutput("Hello there.")).toEqual({ reply: "Hello there.", crisis: false, detection: null });
-		expect(parseModelOutput("56")).toEqual({ reply: "56", crisis: false, detection: null });
+		expect(parseModelOutput("Hello there.")).toEqual({ reply: "Hello there.", crisis: false, detection: null, action: null });
+		expect(parseModelOutput("56")).toEqual({ reply: "56", crisis: false, detection: null, action: null });
 		expect(parseModelOutput("CRISIS")).toMatchObject({ crisis: true });
+	});
+	it("reads the action of a JSON turn", () => {
+		const action = { name: "reminder_set", args: '{"text":"x"}' };
+		expect(parseModelOutput(json({ action }))?.action).toEqual(action);
+	});
+	it.each([["null", json({ action: null })], ["missing", json({})]])("gives no action when it is %s", (_n, t) =>
+		expect(parseModelOutput(t)).toMatchObject({ reply: "I am sorry to hear that.", action: null }));
+	it.each([["args that is not a string", { name: "x", args: { a: 1 } }], ["an empty name", { name: "", args: "{}" }], ["a bare string", "reminder_set"], ["an array", [{ name: "x", args: "{}" }]]])("gives no action for %s", (_n, action) =>
+		expect(parseModelOutput(json({ action }))).toMatchObject({ reply: "I am sorry to hear that.", action: null }));
+	it("never reads an action from the FEELING or plain branches, even when the text mentions one", () => {
+		expect(parseModelOutput('Done, I will remind you. FEELING: {"action":{"name":"reminder_set","args":"{}"}}')).toMatchObject({ reply: "Done, I will remind you.", action: null });
+		expect(parseModelOutput("I will use reminder_set for that.")).toMatchObject({ reply: "I will use reminder_set for that.", action: null });
 	});
 });

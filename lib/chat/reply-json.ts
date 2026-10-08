@@ -1,6 +1,11 @@
 import { isCrisisFlag } from "./speakable";
-export type ModelOutput = { reply: string; crisis: boolean; detection: unknown };
+export type ModelOutput = { reply: string; crisis: boolean; detection: unknown; action: { name: string; args: string } | null };
 const asObject = (v: unknown): Record<string, unknown> | null => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
+// The model's action, only when it is a name and a string of args; whether the name is real and the args are sane is for the action layer (3.3).
+const actionOf = (v: unknown): ModelOutput["action"] => {
+	const o = asObject(v);
+	return o && typeof o.name === "string" && o.name !== "" && typeof o.args === "string" ? { name: o.name, args: o.args } : null;
+};
 const tryParse = (text: string): unknown => { try { return JSON.parse(text); } catch { return undefined; } };
 const FEELING = "FEELING:";
 // A JSON object's start, such as {"reply":. Plain speech has none, so text that holds one is never spoken.
@@ -11,12 +16,12 @@ const EMBEDDED_JSON = /\{\s*"\w+"\s*:/;
 export function parseModelOutput(text: string): ModelOutput | null {
 	const trimmed = text.trim();
 	const whole = asObject(tryParse(trimmed));
-	if (whole) return typeof whole.reply === "string" ? { reply: whole.reply, crisis: whole.crisis === true || isCrisisFlag(whole.reply), detection: whole } : null;
+	if (whole) return typeof whole.reply === "string" ? { reply: whole.reply, crisis: whole.crisis === true || isCrisisFlag(whole.reply), detection: whole, action: actionOf(whole.action) } : null;
 	const at = trimmed.lastIndexOf(FEELING);
 	if (at !== -1) {
 		const reply = trimmed.slice(0, at).trim();
-		return { reply, crisis: isCrisisFlag(reply), detection: asObject(tryParse(trimmed.slice(at + FEELING.length).trim())) };
+		return { reply, crisis: isCrisisFlag(reply), detection: asObject(tryParse(trimmed.slice(at + FEELING.length).trim())), action: null };
 	}
 	if (trimmed.startsWith("{") || trimmed.startsWith("```") || EMBEDDED_JSON.test(trimmed)) return null;
-	return { reply: trimmed, crisis: isCrisisFlag(trimmed), detection: null };
+	return { reply: trimmed, crisis: isCrisisFlag(trimmed), detection: null, action: null };
 }
