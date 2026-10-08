@@ -748,7 +748,7 @@ export default function AgentChat() {
 			{panels.panel && (
 				<Panel id={panels.panel} onClose={panels.close}>
 					{panels.panel === "memory" && <MemoryPanel memory={memory} onChange={setMemory} />}
-					{panels.panel === "insights" && <InsightsPanel agent={agent} />}
+					{panels.panel === "insights" && <InsightsPanel agent={agent} onOpenThing={(id, title, source) => { build.show(id, title, source); panels.close(); }} />}
 					{panels.panel === "settings" && <SettingsPanel voice={voice} aiUsage={aiUsage} />}
 				</Panel>
 			)}

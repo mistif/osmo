@@ -8,6 +8,7 @@ import { spokenDate } from "@/lib/agent/bond/lines";
 import { dayName, sanitizeMoodDay, strongestPhrase, weekSeries, type MoodDay } from "@/lib/agent/mood-days";
 import type { AgentState } from "@/lib/agent/state";
 import { storyLines } from "@/lib/shell/story";
+import { ThingsMade } from "./things-made";
 import { describeAction, sanitizeActionRow, type ActionRow } from "@/lib/shell/what-i-did";
 import panel from "./panels.module.css";
 import styles from "./insights.module.css";
@@ -15,7 +16,7 @@ import styles from "./insights.module.css";
 const UNREACHABLE = "I cannot reach my memory right now. Try again in a moment.";
 const FORGET_FAILED = "I could not forget that. Try again.";
 
-export function InsightsPanel({ agent }: { agent: AgentState }) {
+export function InsightsPanel({ agent, onOpenThing }: { agent: AgentState; onOpenThing(id: string, title: string, source: string): void }) {
 	const [rows, setRows] = useState<MoodDay[] | null>(null);
 	const [firstDay, setFirstDay] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -193,6 +194,8 @@ export function InsightsPanel({ agent }: { agent: AgentState }) {
 				)}
 				{didError && <p className={panel.error} role="alert">{didError}</p>}
 			</section>
+
+			<ThingsMade onOpen={onOpenThing} />
 
 			<section className={panel.section}>
 				<h3 className={panel.sectionTitle}>Our story</h3>
