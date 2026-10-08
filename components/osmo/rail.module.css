@@ -1,0 +1,61 @@
+.rail { --ease: cubic-bezier(0.2, 0.8, 0.2, 1); position: absolute; inset: 0 auto 0 0; width: var(--rail-w); z-index: 6; display: flex; flex-direction: column; align-items: center; padding: 1.25rem 0; background: var(--rail-ground); }
+.list { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; flex: 1; width: 100%; }
+.pinned { margin-top: auto; }
+.link { position: relative; display: grid; place-items: center; width: 3rem; height: 3rem; border-radius: 0.9rem; color: color-mix(in oklab, var(--bone) 62%, transparent); }
+.link:is(:hover, :focus-visible, [data-play]) { color: var(--bone); }
+.link[aria-current="page"] { color: color-mix(in oklab, var(--aura-a) 85%, white); }
+.link[aria-current="page"] .icon { filter: drop-shadow(0 0 6px color-mix(in oklab, var(--aura-a) 60%, transparent)); }
+.link:focus-visible { outline: 2px solid var(--aura-a); outline-offset: 3px; }
+.icon { position: relative; display: grid; place-items: center; width: 1.5rem; height: 1.5rem; }
+.icon svg { width: 100%; height: 100%; overflow: visible; }
+.label { position: absolute; left: calc(100% + 0.1rem); top: 50%; translate: 0 -50%; padding: 0.3rem 0.6rem; border-radius: 0.5rem; font-size: 0.78rem; font-weight: 500; white-space: nowrap; color: var(--bone); background: color-mix(in oklab, var(--rail-ground) 92%, transparent); opacity: 0; pointer-events: none; transition: opacity 120ms; }
+.link:is(:hover, :focus-visible) .label { opacity: 1; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.link[data-dot] .icon::after { content: ""; position: absolute; top: -0.15rem; right: -0.2rem; width: 0.4rem; height: 0.4rem; border-radius: 50%; background: var(--aura-b); animation: dot-in 300ms ease both; }
+
+/* Talk: his heart, the same blob as the old header heart. */
+.heart { width: 1.25rem; height: 1.25rem; border-radius: var(--r1, 60% 40% 30% 70% / 60% 30% 70% 40%); background: radial-gradient(circle at 40% 35%, color-mix(in oklab, var(--aura-a) 80%, white), var(--aura-a) 70%); transform: scale(calc(1 + var(--voice) * 0.9)); box-shadow: 0 0 calc(0.3rem + var(--voice) * 1.1rem) color-mix(in oklab, var(--aura-a) 75%, transparent); transition: transform 90ms ease-out, box-shadow 90ms ease-out, border-radius 420ms cubic-bezier(0.4, 0.1, 0.3, 1); animation: idle-heart var(--pulse) ease-in-out infinite; }
+:global([data-speaking]) .heart { animation: none; }
+@keyframes idle-heart { 0%, 100% { scale: 1; } 50% { scale: 1.14; } }
+
+/* The others rest in their settled state and play once to it. */
+.ray, .trace { stroke-dasharray: 1; stroke-dashoffset: 0; }
+.arc { stroke-dasharray: 100 100; stroke-dashoffset: calc(100 - var(--fill, 70)); rotate: -90deg; transform-box: fill-box; transform-origin: center; }
+.core, .lens, .dial { transform-box: fill-box; transform-origin: center; }
+.dial { transition: rotate 500ms var(--ease); }
+.link:is(:hover, :focus-visible, [aria-current="page"], [data-play]) .dial { rotate: 90deg; }
+.link:is(:hover, :focus-visible, [aria-current="page"], [data-play]) .ray { animation: draw 420ms var(--ease) both; animation-delay: calc(var(--i) * 60ms); }
+.link:is(:hover, :focus-visible, [aria-current="page"], [data-play]) .core { animation: flare 560ms var(--ease); }
+.link:is(:hover, :focus-visible, [aria-current="page"], [data-play]) .arc { animation: ring 650ms var(--ease) both; }
+.link:is(:hover, :focus-visible, [aria-current="page"], [data-play]) .shelf { animation: drawer 600ms var(--ease) both; animation-delay: calc(var(--n, 0) * 80ms); }
+.shelf:nth-of-type(2) { --n: 1; } .shelf:nth-of-type(3) { --n: 2; }
+.link:is(:hover, :focus-visible, [aria-current="page"], [data-play]) .trace { animation: draw 700ms var(--ease) both; }
+.link:is(:hover, :focus-visible, [aria-current="page"], [data-play]) .land { animation: land 200ms ease 560ms both; }
+.link:is(:hover, :focus-visible, [aria-current="page"], [data-play]) .lens { animation: focus-flat 600ms var(--ease) both; }
+@supports not (-webkit-hyphens: none) { .link:is(:hover, :focus-visible, [aria-current="page"], [data-play]) .lens { animation-name: focus-blur; } }
+.land { transform-box: fill-box; transform-origin: center; }
+@keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes flare { 40% { scale: 1.35; } }
+@keyframes ring { from { stroke-dashoffset: 100; } to { stroke-dashoffset: calc(100 - var(--fill, 70)); } }
+@keyframes drawer { 50% { translate: calc(2.5px * var(--dir, 1)) 0; } }
+@keyframes land { from { opacity: 0; scale: 0.4; } to { opacity: 1; scale: 1; } }
+@keyframes focus-flat { from { scale: 1.18; } to { scale: 1; } }
+@keyframes focus-blur { from { scale: 1.18; filter: blur(1.4px); } to { scale: 1; filter: blur(0); } }
+@keyframes dot-in { from { opacity: 0; } }
+
+:global([data-typing]) .rail { display: none; }
+@media (max-width: 40rem) {
+	.rail { position: fixed; inset: auto 0 0 0; width: auto; height: calc(var(--bar-h) + env(safe-area-inset-bottom)); padding: 0 0 env(safe-area-inset-bottom); flex-direction: row; }
+	.list { flex-direction: row; justify-content: space-around; gap: 0; }
+	.list li { flex: 1; display: grid; place-items: center; }
+	.pinned { margin-top: 0; }
+	.link { width: 100%; height: var(--bar-h); gap: 0.1rem; align-content: center; }
+	.label { position: absolute; left: 0; right: 0; top: auto; bottom: 0.15rem; translate: 0; padding: 0; background: none; text-align: center; font-size: 0.7rem; }
+	.link[aria-current="page"] .label { opacity: 1; }
+	.link:not([aria-current="page"]) .label { opacity: 0; }
+	.link { padding-bottom: 0.7rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.rail *, .rail *::before, .rail *::after { animation: none !important; transition: color 120ms, opacity 120ms !important; }
+	.heart { transform: none; }
+}
