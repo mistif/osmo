@@ -48,6 +48,9 @@ import { SPEECH_CHAR_MS } from "@/lib/voice/voices";
 import { useVoice } from "@/components/osmo/use-voice";
 import { useHeartMotion } from "@/components/osmo/use-heart-motion";
 import { Figure } from "@/components/osmo/figure";
+import { useBuild } from "@/components/osmo/use-build";
+import { ThingPanel } from "@/components/osmo/thing-panel";
+import type { BuildTicket } from "@/lib/actions/types";
 
 type ChatMessage = {
 	role: "user" | "agent";
@@ -106,6 +109,13 @@ export default function AgentChat() {
 	const reduceMotionRef = useRef(false);
 	const [speaking, setSpeaking] = useState<{ index: number; chars: number } | null>(null);
 	const heart = useHeartMotion(stageRef);
+	// The thing he builds beside the conversation. buildRef is how sendText hands over a ticket (language, task B8);
+	// until a ticket arrives nothing renders. Locking unmounts the room, and the hook cancels a running build then.
+	const build = useBuild();
+	const buildRef = useRef<{ start(t: BuildTicket): void; cancel(): void } | null>(null);
+	useEffect(() => {
+		buildRef.current = build;
+	});
 	// How the typed-out reply keeps time: its own timer, his spoken words, or speaking pace when the device gives no word timing.
 	const paceRef = useRef<"timer" | "words" | "stretched">("timer");
 	// Which reply his voice is saying. Only that one follows his words; any other reply keeps the timer.
@@ -632,6 +642,8 @@ export default function AgentChat() {
 		"--base": theme.base,
 		"--pulse": `${theme.pulseSeconds.toFixed(2)}s`,
 		"--strength": theme.strength.toFixed(2),
+		// Written only while a thing builds (at most 30 times a second: the controller coalesces); 1 once it has rendered.
+		...(build.view?.phase === "building" ? { "--build-progress": build.view.progress.toFixed(3) } : build.view?.phase === "ready" && build.built ? { "--build-progress": "1" } : {}),
 	} as CSSProperties;
 
 	return (
@@ -639,6 +651,8 @@ export default function AgentChat() {
 			data-tone={theme.tone}
 			data-speaking={speaking ? "" : undefined}
 			data-panel={panels.panel ?? undefined}
+			data-building={build.view?.phase === "building" ? "" : undefined}
+			data-built={build.built ? "" : undefined}
 			data-listening={voice.mode === "awake" || voice.mode === "followup" ? "" : undefined}
 			data-chat={voiceOnly ? undefined : ""}
 			data-fade={voice.fadeSaid ? "" : undefined}
@@ -691,6 +705,8 @@ export default function AgentChat() {
 				<li ref={latestMessageRef} className={styles.end} aria-hidden="true" />
 				</ol>
 				)}
+
+				<ThingPanel build={build} aura={{ a: theme.colorA, b: theme.colorB, bg: theme.base, ink: "#f3efe8" }} hidden={panels.panel !== null} />
 
 				<form onSubmit={sendMessage} className={styles.composer}>
 					<input

@@ -12,6 +12,7 @@ export const LINES = {
 	off: "My building is switched off in Settings.",
 	full: "You have as many things as I can keep. Please delete one first.",
 	saveFailed: "I built it, but I could not keep it.",
+	deleteFailed: "I could not delete that. Try again.",
 } as const;
 
 export function lineFor(code: BuildError): string {

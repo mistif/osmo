@@ -37,7 +37,7 @@
 	overflow: visible;
 	transform: scale(calc(var(--r) * (1 + var(--voice, 0) * 0.06)));
 	transition: transform 160ms ease-out;
-	animation: spin calc(var(--dur) / var(--turn) / var(--flow, 1)) linear infinite;
+	animation: spin calc(var(--dur) / var(--turn) / var(--flow, 1) / var(--quicken, 1)) linear infinite;
 	animation-direction: var(--dir, normal);
 }
 
@@ -164,6 +164,19 @@
 	opacity: 0;
 	transition: opacity 1.2s ease 1.4s;
 }
+/* A thing has just rendered (data-built, 1.6 s): one deeper beat, then the idle breath resumes. Speaking below still wins. */
+[data-built] .heart {
+	animation: deepbeat var(--pulse, 5s) ease-in-out 1;
+}
+@keyframes deepbeat {
+	0%,
+	100% {
+		scale: 1;
+	}
+	45% {
+		scale: 1.18;
+	}
+}
 /* While speaking the room drives the heart; the idle breath and drift stop so they never fight. */
 [data-speaking] .heart,
 [data-speaking] .heart i {
@@ -239,6 +252,7 @@
 	.ring svg,
 	.heart,
 	.heart i,
+	[data-built] .heart,
 	[data-tone="fear"] .rings {
 		animation: none;
 	}

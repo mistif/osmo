@@ -17,6 +17,13 @@
 	initial-value: hsl(172 30% 12%);
 }
 
+/* 1 at rest, 1.3 while a thing is being built: the rings turn faster, and ease back (figure.module.css divides their spin by it). */
+@property --quicken {
+	syntax: "<number>";
+	inherits: true;
+	initial-value: 1;
+}
+
 .stage {
 	--bone: #f3efe8;
 	--ink: #0c111b;
@@ -25,6 +32,9 @@
 	--strength: 0.35;
 	/* 0 at rest; assistant.tsx raises it character by character while Osmo speaks. */
 	--voice: 0;
+	/* 0 to 1, written by assistant.tsx while a thing is being built; the thing panel reads it. */
+	--build-progress: 0;
+	--quicken: 1;
 	/* Chat shape and motion per emotion, overridden by the data-tone rules below. */
 	--radius: 1.25rem;
 	--enter: rise 0.5s ease-out both;
@@ -40,7 +50,12 @@
 	transition:
 		--aura-a 1.8s ease,
 		--aura-b 1.8s ease,
-		--base 1.8s ease;
+		--base 1.8s ease,
+		--quicken 800ms ease;
+}
+
+.stage[data-building] {
+	--quicken: 1.3;
 }
 
 /* ---------- The room: two breathing auras, and Osmo himself (components/osmo/figure.tsx) ---------- */

@@ -6,8 +6,8 @@ describe("LINES", () => {
 	it("has no exclamation mark and no emoji", () => {
 		for (const v of Object.values(LINES)) expect(/[!\p{Extended_Pictographic}]/u.test(v)).toBe(false);
 	});
-	it("has the ten lines of the spec", () => {
-		expect(Object.keys(LINES).sort()).toEqual(["allowance", "busy", "cap", "compile", "failed", "full", "off", "runtime", "saveFailed", "tooBig"]);
+	it("has the ten lines of the spec and the room's delete line", () => {
+		expect(Object.keys(LINES).sort()).toEqual(["allowance", "busy", "cap", "compile", "deleteFailed", "failed", "full", "off", "runtime", "saveFailed", "tooBig"]);
 	});
 });
 describe("lineFor", () => {
