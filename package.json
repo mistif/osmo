@@ -17,6 +17,7 @@
     "onnxruntime-web": "1.30.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "sucrase": "^3.35.1",
     "web-push": "^3.6.7"
   },
   "devDependencies": {
