@@ -34,6 +34,7 @@ import {
 	writerFor,
 	type Branch,
 	type ChainValues,
+	type Waiting,
 	type WriterCheck,
 } from "./branch";
 
@@ -409,8 +410,8 @@ describe("detectionOf", () => {
 
 	it("gives the model answer's detection and nothing for any other answer", () => {
 		const detection = { tones: ["sad"] };
-		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection, waiting: false })).toBe(detection);
-		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection: null, waiting: false })).toBeNull();
+		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection, waiting: false, pendingId: null })).toBe(detection);
+		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection: null, waiting: false, pendingId: null })).toBeNull();
 		const others: (AskResult | null)[] = [{ kind: "crisis", usage }, { kind: "fallback", why: "error", usage, stop: false }, null];
 		for (const answer of others) expect(detectionOf(answer), JSON.stringify(answer)).toBeNull();
 	});
@@ -441,59 +442,70 @@ describe("decisionFor", () => {
 
 describe("waitingAfter", () => {
 	const usage = { usedToday: 1, usable: 2 };
-	const model = (waiting: boolean): AskResult => ({ kind: "model", reply: "Delete it? Say yes to go ahead, or no.", usage, detection: null, waiting });
+	const ID = "7c0e5a2b-3d41-4f8e-9b6a-1e2d3c4b5a69";
+	const HELD: Waiting = { pendingId: ID };
+	const model = (waiting: boolean, pendingId: string | null = null): AskResult => ({ kind: "model", reply: "Delete it? Say yes to go ahead, or no.", usage, detection: null, waiting, pendingId });
 
-	it("leaves the confirmation waiting through a guest's turn", () => {
-		expect(waitingAfter(true, { on: "guest" })).toBe(true);
-		expect(waitingAfter(false, { on: "guest" })).toBe(false);
+	it("leaves the confirmation waiting through a guest's turn, for the same row", () => {
+		expect(waitingAfter(HELD, { on: "guest" })).toEqual(HELD);
+		expect(waitingAfter({ pendingId: null }, { on: "guest" })).toEqual({ pendingId: null });
+		expect(waitingAfter(null, { on: "guest" })).toBeNull();
 	});
 
 	it("moves past it on any other turn of Gur's, so a yes to Osmo's own question is never taken as one", () => {
-		expect(waitingAfter(true, { on: "turn" })).toBe(false);
+		expect(waitingAfter(HELD, { on: "turn" })).toBeNull();
+		expect(waitingAfter({ pendingId: null }, { on: "turn" })).toBeNull();
 	});
 
-	it("waits again only when a model answer says an action waits", () => {
-		expect(waitingAfter(false, { on: "model", answer: model(true) })).toBe(true);
-		expect(waitingAfter(true, { on: "model", answer: model(false) })).toBe(false);
+	it("waits again only when a model answer says an action waits, for the row that answer names", () => {
+		expect(waitingAfter(null, { on: "model", answer: model(true, ID) })).toEqual(HELD);
+		expect(waitingAfter({ pendingId: "an-older-row" }, { on: "model", answer: model(true, ID) })).toEqual(HELD);
+		// An older server names no row: one still waits, and his yes goes without an id, as before.
+		expect(waitingAfter(HELD, { on: "model", answer: model(true) })).toEqual({ pendingId: null });
+		expect(waitingAfter(HELD, { on: "model", answer: model(false) })).toBeNull();
 		const others: (AskResult | null)[] = [{ kind: "crisis", usage }, { kind: "fallback", why: "timeout", usage: null, stop: false }, null];
-		for (const answer of others) expect(waitingAfter(true, { on: "model", answer }), JSON.stringify(answer)).toBe(false);
+		for (const answer of others) expect(waitingAfter(HELD, { on: "model", answer }), JSON.stringify(answer)).toBeNull();
 	});
 
-	it("keeps it waiting after a decision only when the server says the row still waits", () => {
-		expect(waitingAfter(true, { on: "decision", answer: { handled: true, reply: "For that one I need you to type yes.", waiting: true, reached: true } })).toBe(true);
-		expect(waitingAfter(true, { on: "decision", answer: { handled: true, reply: "Deleted the note.", waiting: false, reached: true } })).toBe(false);
-		expect(waitingAfter(true, { on: "decision", answer: { handled: false, reply: null, waiting: false, reached: true } })).toBe(false);
+	it("keeps the same row, with its id, after a decision only when the server says the row still waits", () => {
+		const typeIt: DecisionAnswer = { handled: true, reply: "For that one I need you to type yes.", waiting: true, reached: true };
+		expect(waitingAfter(HELD, { on: "decision", answer: typeIt })).toEqual(HELD);
+		expect(waitingAfter({ pendingId: null }, { on: "decision", answer: typeIt })).toEqual({ pendingId: null });
+		expect(waitingAfter(HELD, { on: "decision", answer: { handled: true, reply: "Deleted the note.", waiting: false, reached: true } })).toBeNull();
+		expect(waitingAfter(HELD, { on: "decision", answer: { handled: false, reply: null, waiting: false, reached: true } })).toBeNull();
 	});
 
 	it("leaves it as it was after a decision that never reached the server, which knows nothing of it", () => {
-		for (const was of [true, false]) expect(waitingAfter(was, { on: "decision", answer: { handled: false, reply: null, waiting: false, reached: false } }), String(was)).toBe(was);
+		const unreached: DecisionAnswer = { handled: false, reply: null, waiting: false, reached: false };
+		for (const was of [HELD, { pendingId: null }, null]) expect(waitingAfter(was, { on: "decision", answer: unreached }), JSON.stringify(was)).toEqual(was);
 	});
 });
 
 describe("decisionEnd", () => {
+	const HELD: Waiting = { pendingId: "7c0e5a2b-3d41-4f8e-9b6a-1e2d3c4b5a69" };
 	const ran: DecisionAnswer = { handled: true, reply: "Deleted the note.", waiting: false, reached: true };
 	const typeIt: DecisionAnswer = { handled: true, reply: "For that one I need you to type yes.", waiting: true, reached: true };
 	const none: DecisionAnswer = { handled: false, reply: null, waiting: false, reached: true };
 	const unreached: DecisionAnswer = { handled: false, reply: null, waiting: false, reached: false };
 	const spoken = { quiet: false, lineSaved: false };
 
-	it("says the server's line, and takes whether one still waits from its answer", () => {
-		expect(decisionEnd({ quiet: false, was: true, answer: ran })).toEqual({ waiting: false, line: "Deleted the note.", ...spoken });
-		expect(decisionEnd({ quiet: false, was: true, answer: typeIt })).toEqual({ waiting: true, line: typeIt.reply, ...spoken });
+	it("says the server's line, and takes whether the same row still waits from its answer", () => {
+		expect(decisionEnd({ quiet: false, was: HELD, answer: ran })).toEqual({ waiting: null, line: "Deleted the note.", ...spoken });
+		expect(decisionEnd({ quiet: false, was: HELD, answer: typeIt })).toEqual({ waiting: HELD, line: typeIt.reply, ...spoken });
 	});
 
 	it("says nothing waits only when the server answered so", () => {
-		expect(decisionEnd({ quiet: false, was: true, answer: none })).toEqual({ waiting: false, line: NOTHING_WAITING_LINE, ...spoken });
+		expect(decisionEnd({ quiet: false, was: HELD, answer: none })).toEqual({ waiting: null, line: NOTHING_WAITING_LINE, ...spoken });
 	});
 
-	it("keeps the flag as it was and says it did not hear back when no answer came", () => {
-		for (const was of [true, false]) expect(decisionEnd({ quiet: false, was, answer: unreached }), String(was)).toEqual({ waiting: was, line: UNREACHED_LINE, ...spoken });
+	it("keeps the flag and its row as they were and says it did not hear back when no answer came", () => {
+		for (const was of [HELD, null]) expect(decisionEnd({ quiet: false, was, answer: unreached }), JSON.stringify(was)).toEqual({ waiting: was, line: UNREACHED_LINE, ...spoken });
 	});
 
 	it("never puts the flag back up after a crisis, and shows only a line the server sent, quietly, with his yes already saved", () => {
-		for (const was of [true, false]) {
-			for (const answer of [ran, typeIt]) expect(decisionEnd({ quiet: true, was, answer }), answer.reply ?? "").toEqual({ waiting: false, line: answer.reply, quiet: true, lineSaved: true });
-			for (const answer of [none, unreached]) expect(decisionEnd({ quiet: true, was, answer }), JSON.stringify(answer)).toEqual({ waiting: false, line: null, quiet: true, lineSaved: true });
+		for (const was of [HELD, null]) {
+			for (const answer of [ran, typeIt]) expect(decisionEnd({ quiet: true, was, answer }), answer.reply ?? "").toEqual({ waiting: null, line: answer.reply, quiet: true, lineSaved: true });
+			for (const answer of [none, unreached]) expect(decisionEnd({ quiet: true, was, answer }), JSON.stringify(answer)).toEqual({ waiting: null, line: null, quiet: true, lineSaved: true });
 		}
 	});
 });

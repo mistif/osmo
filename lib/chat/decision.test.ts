@@ -35,6 +35,23 @@ describe("sendDecision", () => {
 		expect(init.signal).toBeInstanceOf(AbortSignal);
 	});
 
+	it("names the row his yes or no is for, when the room knows it, so a row held from another tab is never answered", async () => {
+		const id = "7c0e5a2b-3d41-4f8e-9b6a-1e2d3c4b5a69";
+		const { fetcher, fetchFn } = answering(() => json({ handled: true, reply: "Deleted the note." }));
+		await sendDecision(fetchFn, "t", "yes", "typed", undefined, id);
+		expect(JSON.parse(String((fetcher.mock.calls[0] as unknown as [string, RequestInit])[1].body))).toEqual({ decision: "yes", via: "typed", pendingId: id });
+	});
+
+	it("sends no row id when it has none, as from an older server, so /api/act answers whichever row waits", async () => {
+		for (const pendingId of [undefined, null]) {
+			const { fetcher, fetchFn } = answering(() => json({ handled: true, reply: "Cancelled." }));
+			await sendDecision(fetchFn, "t", "no", "voice", undefined, pendingId);
+			const sent = JSON.parse(String((fetcher.mock.calls[0] as unknown as [string, RequestInit])[1].body)) as Record<string, unknown>;
+			expect(sent, String(pendingId)).toEqual({ decision: "no", via: "voice" });
+			expect("pendingId" in sent, String(pendingId)).toBe(false);
+		}
+	});
+
 	it("passes a handled answer and its reply line through", async () => {
 		const { fetchFn } = answering(() => json({ handled: true, reply: "Cancelled." }));
 		expect(await sendDecision(fetchFn, "t", "no", "typed")).toEqual({ handled: true, reply: "Cancelled.", waiting: false, reached: true });
