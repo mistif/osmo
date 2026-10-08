@@ -116,9 +116,9 @@ describe("reminder_list", () => {
 		expect(check(reminderList, { x: 1 })).toEqual({ ok: false });
 		expect(check(reminderList, null)).toEqual({ ok: false });
 	});
-	it("says there are none, with no result for call 2", async () => {
+	it("says there are none, and returns that as the result so call 2 can word it", async () => {
 		const out = await reminderList.run({}, rc(fakeDb({ reminders: [{ id: "1", text: "old", due_at: "2026-10-01T07:00:00.000Z", status: "sent" }] })));
-		expect(out).toEqual({ ok: true, say: "You have no reminders waiting.", result: null });
+		expect(out).toEqual({ ok: true, say: "You have no reminders waiting.", result: "You have no reminders waiting." });
 	});
 	it("lists pending ones in time order and returns the same text as the result", async () => {
 		const db = fakeDb({

@@ -4,7 +4,7 @@ import { ownerDb, type OwnerDb } from "../server/admin";
 import { capReached } from "./caps";
 import { cancelAllPending, holdPending } from "./confirm";
 import { execute, logger } from "./execute";
-import { levelOf, loadProfile } from "./profile";
+import { levelOf, loadProfile, markCrisis } from "./profile";
 import { REGISTRY } from "./registry";
 import { todayLine } from "./time";
 import { decide } from "./tiers";
@@ -83,7 +83,7 @@ export async function runAction(p: ActionProposal, ctx: ActionContext, deps: Dep
 			await log("failed", def.describe(checked.args), "hold");
 			return { kind: "failed", line: "I could not set that up just now." };
 		}
-		return { kind: "waiting", line: prep.summary };
+		return { kind: "waiting", line: prep.summary, pendingId: id };
 	} catch {
 		await log("failed", `Could not run ${def.name}`, "exception"); // writeAction never throws
 		return { kind: "failed", line: FAILED };
@@ -126,11 +126,23 @@ export async function listEnabledActions(userId: string, deps: Deps = realDeps()
 	}
 }
 
-// A crisis cancels the waiting confirmation (spec 4.3, 9.1), whether or not OSMO_ACTIONS is on. Never throws.
-export async function cancelWaiting(userId: string, deps: Deps = realDeps()): Promise<void> {
+// A crisis cancels the waiting confirmation (spec 4.3, 9.1), whether or not OSMO_ACTIONS is on, and records a crisis
+// marker (profile.levels._crisis_at) so a run that began before it does not go on to run or to hand out a result. Never throws.
+export async function cancelWaiting(userId: string, deps: Deps = realDeps(), now: number = Date.now()): Promise<void> {
+	let db: OwnerDb;
 	try {
-		const db = deps.db();
-		if (sameOwner(db, userId)) await cancelAllPending(db);
+		db = deps.db();
+		if (!sameOwner(db, userId)) return;
+	} catch {
+		return;
+	}
+	try {
+		await markCrisis(db, now); // first, so a run that is just finishing sees it
+	} catch {
+		// a marker that did not save must not stop the cancel
+	}
+	try {
+		await cancelAllPending(db);
 	} catch {
 		// nothing to do: a failed cancel leaves the row to expire after ten minutes
 	}

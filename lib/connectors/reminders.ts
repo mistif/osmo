@@ -67,7 +67,7 @@ export const reminderList: Def = {
 		const missed = gone.length === 0 ? "" : `${gone.length === 1 ? "One reminder was" : `${gone.length} reminders were`} missed: ${gone.map((r) => `${speak(Date.parse(r.due_at), tz)}: ${r.text}.`).join(" ")} `;
 		if (rows.length === 0) {
 			const say = `${missed}You have no reminders waiting.`;
-			return { ok: true, say, result: missed ? say : null };
+			return { ok: true, say, result: say };
 		}
 		// The true number waiting (a head count, no rows); if it cannot be read, the rows in hand are all that is said.
 		const head = await c.db.from("reminders").select("id", { count: "exact", head: true }).eq("status", "pending"),

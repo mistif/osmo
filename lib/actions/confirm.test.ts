@@ -135,7 +135,7 @@ describe("answerPending", () => {
 	it("a spoken yes does not send mail, a typed one does", async () => {
 		const { db, deps } = setup();
 		await hold(db, mail, { draft: 1 });
-		expect(await answerPending(deps, "yes", "voice", NOW)).toEqual({ handled: true, reply: "For that one I need you to type yes." });
+		expect(await answerPending(deps, "yes", "voice", NOW)).toEqual({ handled: true, waiting: true, reply: "For that one I need you to type yes." });
 		expect(statuses(db)).toEqual(["pending"]);
 		expect(runs).toEqual([]);
 		expect(await answerPending(deps, "yes", "typed", NOW)).toEqual({ handled: true, reply: "Sent." });
@@ -219,6 +219,7 @@ describe("answerPending between the peek and the claim", () => {
 			swapAtClaim(db, () => {
 				Object.assign(db.tables.pending_actions.find((r) => r.id === first)!, { name: "mail", args: { draft: 9 } });
 			});
+		// the row was cancelled, so nothing is waiting any more: no waiting flag
 		expect(await answerPending(deps, "yes", "voice", NOW)).toEqual({ handled: true, reply: "For that one I need you to type yes." });
 		expect(runs).toEqual([]);
 		expect(statuses(db)).toEqual(["cancelled"]);
@@ -386,5 +387,65 @@ describe("finish when the pending update fails", () => {
 		await answerPending(deps, "yes", "typed", NOW);
 		expect(n).toBe(2);
 		expect(statuses(db)).toEqual(["done"]);
+	});
+});
+
+describe("answering one named row", () => {
+	// The fake db numbers its rows; the real ids are uuids, strings, which is what the room sends back.
+	const hold = async (db: FakeDb, def: Def = del, args: unknown = { id: 7 }) => {
+		const id = (await holdPending(db, { def, args, summary: "Do it?", surface: "room", now: NOW }))!;
+		const row = db.tables.pending_actions.find((r) => r.id === id)!;
+		row.id = `00000000-0000-4000-8000-${String(id).padStart(12, "0")}`;
+		return row.id as string;
+	};
+	it("holdPending's id answers its own row", async () => {
+		const { db, deps } = setup();
+		const id = await hold(db);
+		expect(await answerPending(deps, "yes", "typed", NOW, id)).toEqual({ handled: true, reply: "Deleted." });
+		expect(statuses(db)).toEqual(["done"]);
+	});
+
+	it("a different id answers handled false and changes nothing, for yes and for no", async () => {
+		const { db, deps } = setup();
+		await hold(db);
+		for (const decision of ["yes", "no"] as const) {
+			expect(await answerPending(deps, decision, "typed", NOW, "some-other-row")).toEqual({ handled: false });
+		}
+		expect(statuses(db)).toEqual(["pending"]);
+		expect(runs).toEqual([]);
+		expect(db.tables.actions.map((r) => r.status)).toEqual(["waiting"]);
+	});
+
+	it("an id for a row that has been replaced does not answer the new one", async () => {
+		const { db, deps } = setup();
+		const first = await hold(db, del, { id: 1 });
+		await hold(db, del, { id: 2 });
+		expect(await answerPending(deps, "yes", "typed", NOW, first)).toEqual({ handled: false });
+		expect(runs).toEqual([]);
+		expect(statuses(db)).toEqual(["cancelled", "pending"]);
+	});
+
+	it("no id answers whichever row is pending, as before", async () => {
+		const { db, deps } = setup();
+		await hold(db);
+		expect(await answerPending(deps, "yes", "typed", NOW)).toEqual({ handled: true, reply: "Deleted." });
+	});
+
+	it("a spoken yes for a typing-only row, named by id, keeps it waiting; another id does not even say that", async () => {
+		const { db, deps } = setup();
+		const id = await hold(db, mail, { draft: 1 });
+		expect(await answerPending(deps, "yes", "voice", NOW, "other")).toEqual({ handled: false });
+		expect(await answerPending(deps, "yes", "voice", NOW, id)).toEqual({ handled: true, waiting: true, reply: "For that one I need you to type yes." });
+		expect(statuses(db)).toEqual(["pending"]);
+	});
+
+	it("an expired row is said only for its own id, and another id leaves it alone", async () => {
+		const { db, deps } = setup();
+		const id = await hold(db);
+		const late = NOW + TTL_MS + 1000;
+		expect(await answerPending(deps, "yes", "typed", late, "other")).toEqual({ handled: false });
+		expect(statuses(db)).toEqual(["pending"]);
+		expect(await answerPending(deps, "yes", "typed", late, id)).toEqual({ handled: true, reply: "That request has expired. Ask me again if you still want it." });
+		expect(statuses(db)).toEqual(["expired"]);
 	});
 });

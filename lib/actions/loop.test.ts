@@ -78,7 +78,7 @@ describe("a reminder at each level", () => {
 	it("ask: waiting, and a yes runs it", async () => {
 		const { db, deps } = setup({ levels: { reminders: "ask", notes: "act", weather: "read" } });
 		const out = await runAction(setReminder, ctx, deps);
-		expect(out).toEqual({ kind: "waiting", line: "Set a reminder: call Dad? Say yes to go ahead, or no." });
+		expect(out).toEqual({ kind: "waiting", line: "Set a reminder: call Dad? Say yes to go ahead, or no.", pendingId: db.tables.pending_actions[0].id });
 		expect(db.tables.reminders ?? []).toEqual([]);
 		expect(await answerPending(deps, "yes", "typed", NOW)).toEqual({ handled: true, reply: "Reminder set for Thursday 8 October at 09:00: call Dad." });
 		expect(db.tables.reminders).toHaveLength(1);
@@ -149,7 +149,7 @@ describe("note_delete, the first confirmed action", () => {
 	it("holds for a yes with the note quoted, and deletes nothing yet", async () => {
 		const { db, deps } = setup();
 		const out = await runAction(deleteMilk, ctx, deps);
-		expect(out).toEqual({ kind: "waiting", line: 'Delete this note: "buy milk and eggs"? Say yes to delete it, or no.' });
+		expect(out).toEqual({ kind: "waiting", line: 'Delete this note: "buy milk and eggs"? Say yes to delete it, or no.', pendingId: db.tables.pending_actions[0].id });
 		expect(db.tables.notes).toHaveLength(1);
 		expect(db.tables.pending_actions).toHaveLength(1);
 		expect(db.tables.pending_actions[0]).toMatchObject({ name: "note_delete", args: { id: 1 }, status: "pending" });
@@ -287,7 +287,7 @@ describe("the log never carries note, reminder or weather text", () => {
 	it("a reminder held at ask is quoted to the user, but the log says only when", async () => {
 		const { db, deps } = setup({ levels: { reminders: "ask", notes: "act", weather: "read" } });
 		const out = await runAction(propose("reminder_set", { text: "call Dad", at: "2026-10-08T09:00" }), ctx, deps);
-		expect(out).toEqual({ kind: "waiting", line: "Set a reminder: call Dad? Say yes to go ahead, or no." });
+		expect(out).toEqual({ kind: "waiting", line: "Set a reminder: call Dad? Say yes to go ahead, or no.", pendingId: db.tables.pending_actions[0].id });
 		expect(db.tables.actions[0]).toMatchObject({ status: "waiting", summary: "Waiting for your yes to set a reminder for Thursday 8 October at 09:00" });
 		await answerPending(deps, "yes", "typed", NOW);
 		expect(db.tables.actions).toHaveLength(1);
@@ -345,7 +345,7 @@ describe("reminder_list and reminder_cancel through runAction", () => {
 	});
 	it("list with none says so", async () => {
 		const { deps } = setup();
-		expect(await runAction(propose("reminder_list", {}), ctx, deps)).toEqual({ kind: "done", line: "You have no reminders waiting.", result: null });
+		expect(await runAction(propose("reminder_list", {}), ctx, deps)).toEqual({ kind: "done", line: "You have no reminders waiting.", result: "You have no reminders waiting." });
 	});
 	it("cancel settles exactly the one that matches, and is refused at read", async () => {
 		const { db, deps } = setup();

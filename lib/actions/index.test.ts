@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cancelWaiting, listEnabledActions, runAction } from "./index";
 import { fakeDb, type FakeDb } from "./fake-db";
+import { loadProfile } from "./profile";
 import type { ActionContext, Def, Deps } from "./types";
 
 const NOW = Date.parse("2026-10-07T12:00:00Z"); // a Wednesday
@@ -167,7 +168,7 @@ describe("runAction gates", () => {
 	it("holds a tier 2 action at ask level", async () => {
 		const { deps, db } = setup({ profile: { levels: { reminders: "ask" } } });
 		const out = await runAction(proposal("make", { text: "later" }), ctx, deps);
-		expect(out).toEqual({ kind: "waiting", line: "Do later? Say yes to go ahead, or no." });
+		expect(out).toEqual({ kind: "waiting", line: "Do later? Say yes to go ahead, or no.", pendingId: db.tables.pending_actions[0].id });
 		expect(runs).toEqual([]);
 		expect(db.tables.pending_actions).toHaveLength(1);
 		expect(db.tables.pending_actions[0]).toMatchObject({ name: "make", status: "pending", args: { text: "later" } });
@@ -176,7 +177,7 @@ describe("runAction gates", () => {
 	it("holds a tier 3 action even at act level, with prepare's summary", async () => {
 		const { deps, db } = setup();
 		const out = await runAction(proposal("wipe"), ctx, deps);
-		expect(out).toEqual({ kind: "waiting", line: "Delete that note? Say yes to go ahead, or no." });
+		expect(out).toEqual({ kind: "waiting", line: "Delete that note? Say yes to go ahead, or no.", pendingId: db.tables.pending_actions[0].id });
 		expect(runs).toEqual([]);
 		const pending = db.tables.pending_actions[0];
 		expect(pending.status).toBe("pending");
@@ -355,6 +356,35 @@ describe("cancelWaiting", () => {
 		await runAction(proposal("wipe"), ctx, deps);
 		expect(db.tables.pending_actions[0].status).toBe("pending");
 		await cancelWaiting("owner-1", deps);
+		expect(db.tables.pending_actions[0].status).toBe("cancelled");
+	});
+
+	it("records a crisis marker in profile.levels, keeping the levels, and loadProfile does not see it as a level", async () => {
+		const { deps, db } = setup();
+		await cancelWaiting("owner-1", deps, NOW + 5);
+		expect(db.tables.profile).toHaveLength(1);
+		expect(db.tables.profile[0].levels).toEqual({ weather: "act", reminders: "act", notes: "act", _crisis_at: NOW + 5 });
+		expect(db.tables.profile[0]).toMatchObject({ timezone: "Europe/Stockholm", place: "Malmo" });
+		expect((await loadProfile(db)).levels).toEqual({ weather: "act", reminders: "act", notes: "act" });
+	});
+
+	it("makes the profile row when there is none, and marks even when actions are off", async () => {
+		const { deps, db } = setup({ profile: null, env: { OSMO_ACTIONS: "off" } });
+		await cancelWaiting("owner-1", deps, NOW + 5);
+		expect(db.tables.profile.map((r) => r.levels)).toEqual([{ _crisis_at: NOW + 5 }]);
+	});
+
+	it("marks nothing for a stranger, and still cancels when the marker cannot be written", async () => {
+		const { deps, db } = setup();
+		await cancelWaiting("someone-else", deps, NOW + 5);
+		expect(db.tables.profile[0].levels).not.toHaveProperty("_crisis_at");
+		await runAction(proposal("wipe"), ctx, deps);
+		const real = db.from.bind(db);
+		const boom = () => {
+			throw new Error("x");
+		};
+		deps.db = () => ({ ...db, from: (t: string) => (t === "profile" ? ({ select: boom, upsert: boom } as any) : real(t)) });
+		await cancelWaiting("owner-1", deps, NOW + 6);
 		expect(db.tables.pending_actions[0].status).toBe("cancelled");
 	});
 

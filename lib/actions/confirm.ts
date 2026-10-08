@@ -8,7 +8,8 @@ import { decide } from "./tiers";
 import type { Def, Deps, Surface } from "./types";
 
 export const TTL_MS = 10 * 60_000;
-export type Answer = { handled: false } | { handled: true; reply: string };
+// waiting: true means the row is still pending after this answer (a spoken yes on a typing-only action), so the room keeps its flag.
+export type Answer = { handled: false } | { handled: true; reply: string; waiting?: true };
 export const EXPIRED = "That request has expired. Ask me again if you still want it.";
 export const NEEDS_TYPING = "For that one I need you to type yes.";
 export const DID_NOTHING = "I did nothing, because Osmo is paused or that setting changed.";
@@ -37,18 +38,21 @@ export const cancelAllPending = async (db: OwnerDb) => {
 	await settleLogs(db, await db.from("pending_actions").update({ status: "cancelled" }).eq("status", "pending").select("action_id"), "cancelled");
 };
 
-export async function answerPending(deps: Deps, decision: "yes" | "no", via: "typed" | "voice", now: number): Promise<Answer> {
+// pendingId, when given, names the row the answer is for (the id runAction returned): any other row is left alone and not handled.
+export async function answerPending(deps: Deps, decision: "yes" | "no", via: "typed" | "voice", now: number, pendingId?: string): Promise<Answer> {
 	const db = deps.db(),
 		iso = new Date(now).toISOString();
 	const peek = await db.from("pending_actions").select("id,name").eq("status", "pending").gt("expires_at", iso).maybeSingle();
 	if (!peek.data) {
-		const gone = await db.from("pending_actions").update({ status: "expired" }).eq("status", "pending").lte("expires_at", iso).select("id,action_id");
+		const sweep = db.from("pending_actions").update({ status: "expired" }).eq("status", "pending").lte("expires_at", iso);
+		const gone = await (pendingId === undefined ? sweep : sweep.eq("id", pendingId)).select("id,action_id");
 		await settleLogs(db, gone, "expired");
 		return (gone.data as unknown[] | null)?.length ? { handled: true, reply: EXPIRED } : { handled: false };
 	}
 	const seen = peek.data as { id: unknown; name: string };
+	if (pendingId !== undefined && String(seen.id) !== pendingId) return { handled: false }; // the room means another row: change nothing
 	const peeked = deps.registry.find((d) => d.name === seen.name);
-	if (decision === "yes" && via === "voice" && peeked && !peeked.voiceOk) return { handled: true, reply: NEEDS_TYPING };
+	if (decision === "yes" && via === "voice" && peeked && !peeked.voiceOk) return { handled: true, waiting: true, reply: NEEDS_TYPING };
 	// Claim the very row that was peeked: if it was cancelled and another one held in between, this finds nothing.
 	const claim = await db
 		.from("pending_actions")

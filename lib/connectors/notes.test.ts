@@ -101,12 +101,12 @@ describe("note_search", () => {
 	it("only reads the latest 200 notes", async () => {
 		const rows = notes("old needle", ...Array.from({ length: 200 }, (_, i) => `filler ${i}`));
 		const db = fakeDb({ notes: rows }, "owner-1", () => NOW);
-		expect(await noteSearch.run({ query: "needle" }, rc(db))).toEqual({ ok: true, say: "I found no notes like that.", result: null });
+		expect(await noteSearch.run({ query: "needle" }, rc(db))).toEqual({ ok: true, say: "I found no notes like that.", result: "I found no notes like that." });
 	});
 	it("says so when nothing matches, with no result for call 2", async () => {
 		const db = fakeDb({ notes: notes("call Dad") }, "owner-1", () => NOW);
-		expect(await noteSearch.run({ query: "milk" }, rc(db))).toEqual({ ok: true, say: "I found no notes like that.", result: null });
-		expect(await noteSearch.run({ query: "" }, rc(fakeDb({}, "owner-1", () => NOW)))).toEqual({ ok: true, say: "I found no notes like that.", result: null });
+		expect(await noteSearch.run({ query: "milk" }, rc(db))).toEqual({ ok: true, say: "I found no notes like that.", result: "I found no notes like that." });
+		expect(await noteSearch.run({ query: "" }, rc(fakeDb({}, "owner-1", () => NOW)))).toEqual({ ok: true, say: "I found no notes like that.", result: "I found no notes like that." });
 	});
 	it("says a plain line when the read fails", async () => {
 		expect(await noteSearch.run({ query: "a" }, rc(unreadable()))).toEqual({ ok: false, say: "I could not read your notes just now." });

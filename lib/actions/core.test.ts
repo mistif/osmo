@@ -276,6 +276,50 @@ describe("execute", () => {
 	});
 });
 
+describe("execute and a crisis marker", () => {
+	const rc = (db: OwnerDb, now = NOW) => ({ db, now, timezone: null, profile: {}, fetch, env: {} }) as unknown as RunCtx;
+	const marked = (at: unknown) => fakeDb({ profile: [{ levels: { notes: "act", _crisis_at: at } }] }, "owner-1", () => NOW);
+
+	it("does not run when a crisis came after the run's start, and logs it cancelled", async () => {
+		const db = marked(NOW + 1);
+		const run = vi.fn(async () => ({ ok: true as const, say: "Noted.", result: null }));
+		const d = def(run);
+		const out = await execute(d, {}, rc(db), logger(db, d, "room"));
+		expect(run).not.toHaveBeenCalled();
+		expect(out.kind).toBe("failed");
+		expect(db.tables.actions).toHaveLength(1);
+		expect(db.tables.actions[0]).toMatchObject({ status: "cancelled", error: "crisis", summary: "Add a note." });
+	});
+
+	it("runs when the crisis was before the run's start, or the marker is junk, or missing", async () => {
+		for (const at of [NOW - 1, NOW, "soon", null]) {
+			const db = marked(at);
+			const d = def(async () => ({ ok: true, say: "Noted.", result: null }));
+			expect(await execute(d, {}, rc(db), logger(db, d, "room"))).toEqual({ kind: "done", line: "Noted.", result: null });
+		}
+		const bare = fakeDb();
+		const d = def(async () => ({ ok: true, say: "Noted.", result: null }));
+		expect((await execute(d, {}, rc(bare), logger(bare, d, "room"))).kind).toBe("done");
+	});
+
+	it("a crisis that lands while the run is going drops its result and build ticket, and the log stays true", async () => {
+		const db = fakeDb({ profile: [{ levels: { notes: "act" } }] }, "owner-1", () => NOW);
+		const d = def(async () => {
+			db.tables.profile[0].levels._crisis_at = NOW + 1;
+			return { ok: true, say: "Two.", result: "a; b", ticket: { brief: "a thing" } };
+		});
+		const out = await execute(d, {}, rc(db), logger(db, d, "room"));
+		expect(out).toEqual({ kind: "done", line: "Two.", result: null });
+		expect(db.tables.actions[0]).toMatchObject({ status: "done" });
+	});
+
+	it("a profile that cannot be read does not stop the run", async () => {
+		const d = def(async () => ({ ok: true, say: "Noted.", result: null }));
+		expect((await execute(d, {}, rc(broken()), async () => null)).kind).toBe("done");
+		expect((await execute(d, {}, rc(throwing()), async () => null)).kind).toBe("done");
+	});
+});
+
 describe("registry", () => {
 	it("keeps its invariants", () => {
 		const names = REGISTRY.map((d) => d.name);

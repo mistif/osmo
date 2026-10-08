@@ -12,13 +12,14 @@ export type ActDeps = { deps: Deps; lookup: UserLookup; now(): number };
 export const actDeps = (): ActDeps => ({ deps: realDeps(), lookup: supabaseUser, now: () => Date.now() });
 
 const MAX_BODY = 4000;
+const MAX_ID = 100; // a uuid is 36
 const json = (status: number, body: unknown) =>
 	new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 const bad = () => json(400, { error: "bad_request" });
 
-type Body = { decision: "yes" | "no" | "crisis"; via: "typed" | "voice" };
+type Body = { decision: "yes" | "no" | "crisis"; via: "typed" | "voice"; pendingId?: string };
 
-// The body is a small object: decision, optional via, optional speaker. A guest is refused outright.
+// The body is a small object: decision, optional via, optional pendingId (the row the room means), optional speaker. A guest is refused outright.
 function readBody(text: string): Body | null {
 	if (text.length > MAX_BODY) return null;
 	let raw: unknown;
@@ -32,7 +33,8 @@ function readBody(text: string): Body | null {
 	if (o.decision !== "yes" && o.decision !== "no" && o.decision !== "crisis") return null;
 	if (o.via !== undefined && o.via !== "typed" && o.via !== "voice") return null;
 	if (o.speaker !== undefined && (typeof o.speaker !== "string" || o.speaker.trim().toLowerCase() === "guest")) return null;
-	return { decision: o.decision, via: o.via ?? "typed" };
+	if (o.pendingId !== undefined && (typeof o.pendingId !== "string" || o.pendingId.length === 0 || o.pendingId.length > MAX_ID)) return null;
+	return { decision: o.decision, via: o.via ?? "typed", ...(o.pendingId === undefined ? {} : { pendingId: o.pendingId }) };
 }
 
 export async function handleAct(request: Request, d: ActDeps): Promise<Response> {
@@ -51,12 +53,12 @@ export async function handleAct(request: Request, d: ActDeps): Promise<Response>
 	if (body === null) return bad();
 	// A crisis cancels the waiting one even while actions are off: a row may still be waiting from before.
 	if (body.decision === "crisis") {
-		await cancelWaiting(who.id, d.deps);
+		await cancelWaiting(who.id, d.deps, d.now());
 		return json(200, { handled: false, reply: null });
 	}
 	if (!actionsOn(d.deps.env)) return json(200, { handled: false, reply: null });
 	try {
-		const answer = await answerPending(d.deps, body.decision, body.via, d.now());
+		const answer = await answerPending(d.deps, body.decision, body.via, d.now(), body.pendingId);
 		return json(200, answer.handled ? answer : { handled: false, reply: null });
 	} catch {
 		return json(200, { handled: false, reply: null });

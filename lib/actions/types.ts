@@ -11,7 +11,7 @@ export type ActionContext = { userId: string; surface: Surface; now: number };
 export type ActionOutcome =
 	| { kind: "ignored" }
 	| { kind: "done"; line: string; result: string | null; ticket?: BuildTicket } // result non-null means "call 2 follows"; a ticket means the room starts a build
-	| { kind: "waiting"; line: string }
+	| { kind: "waiting"; line: string; pendingId?: string } // runAction always sets pendingId (the held row); optional so callers building a waiting outcome (tests, the room) need not
 	| { kind: "failed" | "refused"; line: string };
 export type EnabledActions = { names: string[]; lines: string[]; today: string; timezone: string; place: string | null };
 export type Place = { label: string; lat: number; lon: number };

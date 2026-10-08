@@ -5,6 +5,8 @@ import { fakeDb } from "./fake-db";
 import { requireOwner } from "./owner";
 import type { Def } from "./types";
 
+const typed: Def = { ...({} as Def), name: "send", connector: "notes", tier: 3, needsResult: false, voiceOk: false, line: "send", unclear: "", check: (a) => ({ ok: true, args: a }), describe: () => "Send it", prepare: async (a) => ({ ok: true, args: a, summary: "Send it?" }), run: async () => ({ ok: true, say: "Sent.", result: null }) };
+
 const NOW = Date.parse("2026-10-07T12:00:00Z");
 const TOKENS: Record<string, string> = { good: "owner-1", other: "someone-else" };
 const del: Def = {
@@ -119,6 +121,37 @@ describe("handleAct", () => {
 		await hold(db);
 		expect(await (await handleAct(post({ decision: "no", via: "voice", speaker: "owner" }), deps)).json()).toEqual({ handled: true, reply: "Cancelled." });
 		expect(db.tables.pending_actions[0].status).toBe("cancelled");
+	});
+
+	it("a spoken yes on a typing-only action answers waiting: true, and the row stays pending", async () => {
+		const { deps, db } = setup();
+		deps.deps.registry = [del, typed];
+		await db.from("pending_actions").insert({ name: "send", args: {}, summary: "Send it?", surface: "room", status: "pending", expires_at: new Date(NOW + 60_000).toISOString() });
+		const res = await handleAct(post({ decision: "yes", via: "voice" }), deps);
+		expect(await res.json()).toEqual({ handled: true, waiting: true, reply: "For that one I need you to type yes." });
+		expect(db.tables.pending_actions[0].status).toBe("pending");
+		// typed, it goes through, and the answer carries no waiting flag
+		expect(await (await handleAct(post({ decision: "yes", via: "typed" }), deps)).json()).toEqual({ handled: true, reply: "Sent." });
+	});
+
+	it("answers only the named row: a matching pendingId answers, another is handled false and changes nothing, none still works", async () => {
+		const { deps, db } = setup();
+		await hold(db);
+		const id = "00000000-0000-4000-8000-000000000001"; // the real ids are uuids, strings
+		db.tables.pending_actions[0].id = id;
+		expect(await (await handleAct(post({ decision: "yes", pendingId: "not-it" }), deps)).json()).toEqual({ handled: false, reply: null });
+		expect(await (await handleAct(post({ decision: "no", pendingId: "not-it" }), deps)).json()).toEqual({ handled: false, reply: null });
+		expect(db.tables.pending_actions[0].status).toBe("pending");
+		expect(await (await handleAct(post({ decision: "yes", pendingId: id }), deps)).json()).toEqual({ handled: true, reply: "Deleted the note." });
+		expect(db.tables.pending_actions[0].status).toBe("done");
+		await hold(db);
+		expect(await (await handleAct(post({ decision: "no" }), deps)).json()).toEqual({ handled: true, reply: "Cancelled." });
+	});
+
+	it("400 for a pendingId that is not a short string", async () => {
+		const { deps, dbCalls } = setup();
+		for (const pendingId of [1, null, {}, "", "x".repeat(101)]) expect((await handleAct(post({ decision: "yes", pendingId }), deps)).status).toBe(400);
+		expect(dbCalls).not.toHaveBeenCalled();
 	});
 
 	it("nothing waiting is handled false", async () => {

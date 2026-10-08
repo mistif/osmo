@@ -67,7 +67,10 @@ export const noteSearch: Def = {
 		if (rows === null) return { ok: false, say: READ_FAILED };
 		const words = (a as { query: string }).query.toLowerCase().split(" ").filter(Boolean),
 			hits = rows.filter((r) => words.every((w) => r.text.toLowerCase().includes(w))).slice(0, SHOWN);
-		if (hits.length === 0) return { ok: true, say: "I found no notes like that.", result: null };
+		if (hits.length === 0) {
+			const say = "I found no notes like that.";
+			return { ok: true, say, result: say }; // an empty read still gives call 2 something to word
+		}
 		const list = hits.map((r) => `${cut(r.text, SHOWN_CHARS).replace(/[.!?]+$/, "")}.`).join(" "),
 			say = `${words.length === 0 ? "Your latest" : "I found"} ${hits.length} ${noun(hits.length)}. ${list}`;
 		return { ok: true, say, result: say };
