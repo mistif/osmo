@@ -38,7 +38,7 @@ import { answerFromMemory, calculateMath, findUnknownTopic, isBuiltInTopic } fro
 import { askForReply, askStatus, nextUsage } from "@/lib/chat/ask";
 import { chatBody } from "@/lib/chat/body";
 import { sendDecision, UNREACHED } from "@/lib/chat/decision";
-import { decisionEnd, decisionFor, detectionOf, keptTurn, pickBranch, quietEffects, waitingAfter, whileWaiting, writerFor, type QuietPlan } from "@/lib/chat/branch";
+import { decisionEnd, decisionFor, detectionOf, keptTurn, pickBranch, quietEffects, waitingAfter, whileWaiting, writerFor, type QuietPlan, type Waiting as Confirming } from "@/lib/chat/branch";
 import type { ChatStatus } from "@/lib/chat/types";
 import { newId } from "@/lib/uuid";
 import { Panel, PanelLinks, usePanels } from "@/components/osmo/panel";
@@ -85,9 +85,10 @@ export default function AgentChat() {
 	const [aiUsage, setAiUsage] = useState<ChatStatus | null>(null);
 	const aiEnabledRef = useRef(false);
 	const aiStoppedRef = useRef(false);
-	// Whether the last answer left an action waiting for Gur's yes or no (spec 4.3). Only then does a bare yes or no go
-	// to /api/act instead of the conversation. Its rules are waitingAfter's and decisionEnd's (lib/chat/branch.ts).
-	const confirmWaitingRef = useRef(false);
+	// Whether the last answer left an action waiting for Gur's yes or no (spec 4.3), and which row: null when none waits.
+	// Only then does a bare yes or no go to /api/act instead of the conversation, with that row's id, so a row held from
+	// another tab is never answered by it. Its rules are waitingAfter's and decisionEnd's (lib/chat/branch.ts).
+	const confirmWaitingRef = useRef<Confirming>(null);
 	const waitingRef = useRef<Waiting | null>(null);
 	// Read in handlers only, never while rendering.
 	const aiOn = () => aiEnabledRef.current && !aiStoppedRef.current;
@@ -290,7 +291,7 @@ export default function AgentChat() {
 	// the flag says: a confirmation may still wait from before a reload, from another tab, or after a later answer
 	// cleared the flag. A crisis is rare, and the server's cancel is cheap.
 	function cancelConfirmation() {
-		confirmWaitingRef.current = false;
+		confirmWaitingRef.current = null;
 		void ensureSession().catch(() => null).then((s) => s && sendDecision(fetch, s.access_token, "crisis", "typed"));
 	}
 
@@ -584,8 +585,10 @@ export default function AgentChat() {
 		// A bare yes or no, while an action waits for it, answers that action and nothing else (spec 4.3, 9.1): code
 		// matches the words, the server completes or cancels it, and its line is the reply. Never a guest's, never
 		// in a crisis. His heart doesn't step for it.
-		const decision = decisionFor({ guest, crisis, waiting: confirmWaitingRef.current, text });
+		const decision = decisionFor({ guest, crisis, waiting: confirmWaitingRef.current !== null, text });
 		if (decision) {
+			// The row his yes or no is for, read now: only a crisis changes the flag before it is posted, and then nothing is.
+			const pendingId = confirmWaitingRef.current?.pendingId ?? null;
 			if (via === "typed") setInput("");
 			setMessages((current) => [...current, userMessage]);
 			startWait("model", null, async (wait) => {
@@ -596,7 +599,7 @@ export default function AgentChat() {
 				]);
 				// A crisis message taken while the session was read has already cut this turn short: nothing is posted. No
 				// session means the decision never reached the server.
-				const answer = signedIn && !wait.quiet ? await sendDecision(fetch, signedIn.access_token, decision, via) : UNREACHED;
+				const answer = signedIn && !wait.quiet ? await sendDecision(fetch, signedIn.access_token, decision, via, undefined, pendingId) : UNREACHED;
 				// After a crisis taken while it was posted, the flag stays down and what the server did is still shown and saved,
 				// quietly, so a deletion that ran stays on record. One no answer came back for never says nothing waits, and the
 				// flag stays as it was (decisionEnd).

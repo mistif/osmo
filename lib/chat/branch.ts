@@ -123,16 +123,20 @@ export function decisionFor(c: { guest: boolean; crisis: boolean; waiting: boole
 	return c.guest || c.crisis || !c.waiting ? null : decisionOf(c.text);
 }
 
-// Whether a bare yes or no still goes to /api/act after this step. A guest's turn leaves it as it was. Any other turn of
-// Gur's moves past the question, code's turns included, so a yes to Osmo's own question ("Do you agree?") is never taken
-// for one; then a model answer, or the decision's own answer, says whether one waits again. A decision that never reached
-// the server leaves it as it was, so his yes said again still goes to /api/act.
+// Whether a bare yes or no still goes to /api/act after this step, and for which row: null when none waits, else the
+// waiting row's id, sent with his yes or no so it answers that row only, never one held meanwhile from another tab (an
+// older server names none: then the id is null, and /api/act answers whichever row waits). A guest's turn leaves it as it
+// was. Any other turn of Gur's moves past the question, code's turns included, so a yes to Osmo's own question ("Do you
+// agree?") is never taken for one; then a model answer says whether one waits again, and for which row, and the decision's
+// own answer whether the same row still waits. A decision that never reached the server leaves it as it was, so his yes
+// said again still goes to /api/act, for the same row.
+export type Waiting = { pendingId: string | null } | null;
 export type WaitingStep = { on: "guest" } | { on: "turn" } | { on: "model"; answer: AskResult | null } | { on: "decision"; answer: DecisionAnswer };
-export function waitingAfter(was: boolean, step: WaitingStep): boolean {
+export function waitingAfter(was: Waiting, step: WaitingStep): Waiting {
 	if (step.on === "guest") return was;
-	if (step.on === "model") return step.answer?.kind === "model" && step.answer.waiting;
-	if (step.on === "decision") return step.answer.reached ? step.answer.waiting : was;
-	return false;
+	if (step.on === "model") return step.answer?.kind === "model" && step.answer.waiting ? { pendingId: step.answer.pendingId } : null;
+	if (step.on === "decision") return step.answer.reached && !step.answer.waiting ? null : was;
+	return null;
 }
 
 // How a bare yes or no posted to /api/act ends in the room: whether one waits after it, and the line Osmo delivers, if
@@ -140,10 +144,10 @@ export function waitingAfter(was: boolean, step: WaitingStep): boolean {
 // flag never goes back up, and only a line the server sent is shown, quietly, with his yes already saved by takeCrisis
 // (lineSaved). Otherwise the answer sets the flag (waitingAfter), and Osmo says the server's line, that nothing waits
 // when the server said so, or that he did not hear back.
-export type DecisionEnd = { waiting: boolean; line: string | null; quiet: boolean; lineSaved: boolean };
-export function decisionEnd(c: { quiet: boolean; was: boolean; answer: DecisionAnswer }): DecisionEnd {
+export type DecisionEnd = { waiting: Waiting; line: string | null; quiet: boolean; lineSaved: boolean };
+export function decisionEnd(c: { quiet: boolean; was: Waiting; answer: DecisionAnswer }): DecisionEnd {
 	const { answer } = c;
-	if (c.quiet) return { waiting: false, line: answer.handled && answer.reply ? answer.reply : null, quiet: true, lineSaved: true };
+	if (c.quiet) return { waiting: null, line: answer.handled && answer.reply ? answer.reply : null, quiet: true, lineSaved: true };
 	const line = answer.reply ?? (answer.reached ? NOTHING_WAITING_LINE : UNREACHED_LINE);
 	return { waiting: waitingAfter(c.was, { on: "decision", answer }), line, quiet: false, lineSaved: false };
 }

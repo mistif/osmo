@@ -11,7 +11,7 @@ export const ASK_TIMEOUT_MS = 25_000;
 const CHAT_URL = "/api/chat";
 
 export type AskResult =
-	| { kind: "model"; reply: string; usage: Usage; detection: unknown; waiting: boolean }
+	| { kind: "model"; reply: string; usage: Usage; detection: unknown; waiting: boolean; pendingId: string | null }
 	| { kind: "crisis"; usage: Usage | null }
 	| { kind: "fallback"; why: FallbackReason | "http" | "network" | "timeout" | "aborted" | "bad_answer"; usage: Usage | null; stop: boolean };
 
@@ -19,6 +19,8 @@ type Why = Extract<AskResult, { kind: "fallback" }>["why"];
 type Halt = "timeout" | "aborted";
 
 const REASONS: readonly FallbackReason[] = ["off", "allowance", "error", "empty", "crisis"];
+// The longest row id /api/act takes back (a uuid is 36).
+const MAX_PENDING_ID = 100;
 
 const failed = (why: Why, stop = false): AskResult => ({ kind: "fallback", why, usage: null, stop });
 
@@ -72,13 +74,17 @@ function answerOf(json: unknown): AskResult {
 		const reply = answer.reply;
 		if (typeof reply !== "string" || reply.trim() === "" || usage === null) return failed("bad_answer");
 		// Passed on unchecked (this file imports nothing); the room validates it. A missing one is null, never a bad answer: an older server still works.
-		// waiting: only a true counts, so an older server that sends none reads as not waiting.
+		// waiting: only a true counts, so an older server that sends none reads as not waiting. pendingId: the waiting row's
+		// id, kept only with a true waiting and only as /api/act would take it back; anything else is none, never a bad answer.
+		const waiting = answer.waiting === true;
+		const id = answer.pendingId;
 		return {
 			kind: "model",
 			reply,
 			usage,
 			detection: typeof answer.detection === "object" && answer.detection !== null ? answer.detection : null,
-			waiting: answer.waiting === true,
+			waiting,
+			pendingId: waiting && typeof id === "string" && id.length > 0 && id.length <= MAX_PENDING_ID ? id : null,
 		};
 	}
 	const reason = answer.source === "fallback" ? REASONS.find((known) => known === answer.reason) : undefined;

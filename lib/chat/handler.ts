@@ -7,7 +7,7 @@
 import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { after } from "next/server";
-import { cancelWaiting, listEnabledActions, runAction, type ActionContext, type ActionOutcome, type ActionProposal, type EnabledActions } from "../actions";
+import { cancelWaiting, listEnabledActions, realDeps, runAction, type ActionContext, type ActionOutcome, type ActionProposal, type EnabledActions } from "../actions";
 import { validateDetection, type Detection } from "../agent/detection";
 import { bearerToken, requireUser, type ServerUser } from "../server/auth";
 import { CALL_CEILING, dayKey, estimateTokens, fits, MAX_OUTPUT_TOKENS, ownerId, readConfig, sameUser, type Env, type ModelEntry } from "./allowance";
@@ -32,10 +32,11 @@ export type ChatDeps = {
 	// Fixed names, statuses, codes and ids only.
 	log(event: string, fields: Record<string, string | number | null>): void;
 	// The actions seam (lib/actions): what is switched on, running one, and cancelling a confirmation that waits for his yes.
+	// now: when the cancel is made, on this clock (the one a run's ctx.now is read from), for the crisis marker.
 	actions: {
 		list(userId: string): Promise<EnabledActions | null>;
 		run(p: ActionProposal, ctx: ActionContext): Promise<ActionOutcome>;
-		cancelWaiting(userId: string): Promise<void>;
+		cancelWaiting(userId: string, now: number): Promise<void>;
 	};
 	// Work that should not hold up the answer: run once it has been sent where the platform can keep the function alive
 	// for it, and otherwise now, settling once the work is done, so the answer waits for it. Never throws or rejects.
@@ -59,7 +60,7 @@ export function chatDeps(): ChatDeps {
 		fetch: (...args) => fetch(...args),
 		now: () => Date.now(),
 		log: (event, fields) => console.warn(JSON.stringify({ event, ...fields })),
-		actions: { list: (userId) => listEnabledActions(userId), run: (p, ctx) => runAction(p, ctx), cancelWaiting: (userId) => cancelWaiting(userId) },
+		actions: { list: (userId) => listEnabledActions(userId), run: (p, ctx) => runAction(p, ctx), cancelWaiting: (userId, now) => cancelWaiting(userId, realDeps(), now) },
 		// Next keeps the function alive for it after the response. after() throws before it queues anything outside a request,
 		// and inside one where the platform gives no waitUntil (a host that may freeze the function once the answer is sent):
 		// then the work runs now and the answer waits for it, as before after() was used.
@@ -144,7 +145,7 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 	// A crisis, here or flagged by the model, also cancels any confirmation waiting for his yes (spec 4.3, 9.1), even with
 	// actions off (a row may be left from before). Where Next can keep the function alive, it runs after the crisis answer
 	// is sent, so it never holds that answer up; where it cannot, the answer waits for it, so the cancel always lands.
-	const cancel = () => deps.later(() => quietly(deps, "cancel", () => deps.actions.cancelWaiting(user.id), undefined));
+	const cancel = () => deps.later(() => quietly(deps, "cancel", () => deps.actions.cancelWaiting(user.id, deps.now()), undefined));
 	if (checked.crisis) {
 		await cancel();
 		return fallback("crisis", null);
@@ -183,6 +184,7 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 	const left = () => request.signal.aborted;
 	let reply = result.reply,
 		waiting = false,
+		pendingId: string | null = null,
 		final = usage;
 	const proposal = result.action;
 	if (actions !== null && proposal !== null && !left()) {
@@ -191,6 +193,7 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 		else if (out.kind === "waiting") {
 			reply = out.line;
 			waiting = true;
+			pendingId = out.pendingId ?? null;
 		} else if (out.kind === "failed" || out.kind === "refused") reply = out.line;
 		else if (out.kind === "done" && out.result === null) reply = `${reply} ${out.line}`;
 		else if (out.kind === "done" && left()) reply = out.line;
@@ -207,7 +210,7 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 			reply = second !== null && !("reason" in second) && second.whole ? second.reply : out.line;
 		}
 	}
-	return answer({ source: "model", reply, usage: final, detection: result.detection, waiting });
+	return answer({ source: "model", reply, usage: final, detection: result.detection, waiting, pendingId });
 }
 
 const IGNORED: ActionOutcome = { kind: "ignored" };

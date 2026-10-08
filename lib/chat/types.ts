@@ -22,9 +22,10 @@ export type ChatBody = {
 };
 export type Usage = { usedToday: number; usable: number };
 export type FallbackReason = "off" | "allowance" | "error" | "empty" | "crisis";
-// waiting: the turn's action is waiting for Gur's yes or no.
+// waiting: the turn's action is waiting for Gur's yes or no. pendingId: the row that waits (null when none does), which
+// the room sends back with his yes or no so it answers that row only, never one held from another tab.
 export type ChatAnswer =
-	| { source: "model"; reply: string; usage: Usage; detection: Detection | null; waiting: boolean }
+	| { source: "model"; reply: string; usage: Usage; detection: Detection | null; waiting: boolean; pendingId: string | null }
 	| { source: "fallback"; reason: FallbackReason; usage: Usage | null };
 // GET /api/chat, and the room's aiUsage.
 export type ChatStatus = { enabled: boolean; usedToday: number | null; usable: number | null };
