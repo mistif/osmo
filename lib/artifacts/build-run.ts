@@ -21,11 +21,17 @@ type Attempt = { ok: true; source: string } | { ok: false; code: BuildError };
 
 const EXPECTED = 4000;
 const REPAIR_ERROR_CHARS = 300;
+// LIMITS.sourceBytes from compile.ts, repeated here because compile.ts imports Sucrase and this file stays in the main chunk (build-run.test.ts pins the two together).
+export const MAX_SOURCE_BYTES = 12_288;
 
-async function attempt(body: object, d: RunDeps, onView: (v: ThingView) => void, signal: AbortSignal, expected: number): Promise<Attempt> {
+// What the panel has shown so far: a repair attempt starts its own count, but the panel never goes backwards.
+type Shown = { progress: number; blocks: number; called: boolean };
+
+async function attempt(body: object, d: RunDeps, onView: (v: ThingView) => void, signal: AbortSignal, expected: number, shown: Shown): Promise<Attempt> {
 	const token = await d.token();
 	if (!token) return { ok: false, code: "failed" };
 	let res: Response;
+	shown.called = true;
 	try {
 		res = await d.fetch("/api/build", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(body), signal });
 	} catch {
@@ -33,23 +39,34 @@ async function attempt(body: object, d: RunDeps, onView: (v: ThingView) => void,
 	}
 	if (!res.ok || !res.body) return { ok: false, code: res.status === 404 ? "off" : "failed" };
 	let source = "",
+		bytes = 0,
 		failure: BuildError | null = null,
 		done = false;
+	const encoder = new TextEncoder();
 	const reader = createLineReader((l) => {
+		if (failure !== null) return;
 		if (l.t === "delta") {
 			source += l.s;
-			onView({ phase: "building", title: partialTitle(source), blocks: sketchBlocks(source), progress: buildProgress(source.length, expected) });
+			bytes += encoder.encode(l.s).length;
+			if (bytes > MAX_SOURCE_BYTES) {
+				failure = "too_big"; // no source this long is ever kept, so stop reading
+				return;
+			}
+			shown.progress = Math.max(shown.progress, buildProgress(source.length, expected));
+			shown.blocks = Math.max(shown.blocks, sketchBlocks(source));
+			onView({ phase: "building", title: partialTitle(source), blocks: shown.blocks, progress: shown.progress });
 		} else if (l.t === "done") done = true;
 		else failure = l.code;
 	});
 	const decoder = new TextDecoder(),
 		stream = res.body.getReader();
 	try {
-		for (;;) {
+		while (failure === null) {
 			const { value, done: end } = await stream.read();
 			if (end) break;
 			reader.push(decoder.decode(value, { stream: true }));
 		}
+		if (failure !== null) await stream.cancel().catch(() => undefined);
 	} catch {
 		return { ok: false, code: "failed" };
 	}
@@ -57,41 +74,49 @@ async function attempt(body: object, d: RunDeps, onView: (v: ThingView) => void,
 }
 
 export async function runBuild(ticket: RunTicket, d: RunDeps, onView: (v: ThingView) => void, signal: AbortSignal): Promise<void> {
-	const post = async (body: object): Promise<Response | null> => {
+	const shown: Shown = { progress: 0, blocks: 0, called: false };
+	const post = async (body: object, sig?: AbortSignal): Promise<Response | null> => {
 		const token = await d.token();
 		if (!token) return null;
 		try {
-			return await d.fetch("/api/artifacts", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(body) });
+			return await d.fetch("/api/artifacts", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(body), ...(sig ? { signal: sig } : {}) });
 		} catch {
 			return null;
 		}
 	};
-	// A failed build settles its log row as failed, so the daily count and the log tell the truth. Never after an abort.
+	const mark = async () => {
+		if (ticket.actionId !== null) await post({ failed: true, actionId: ticket.actionId }); // no signal: it must outlive the abort
+	};
+	// A failed build settles its log row as failed, so the daily count and the log tell the truth.
 	const fail = async (line: string) => {
-		if (signal.aborted) return;
+		if (signal.aborted) return aborted();
 		onView({ phase: "failed", line });
-		if (ticket.actionId !== null) await post({ failed: true, actionId: ticket.actionId });
+		await mark();
+	};
+	// An abort shows nothing, but a build that was called has a "started" row that must not stay open.
+	const aborted = async () => {
+		if (shown.called) await mark();
 	};
 
-	const first = await attempt({ brief: ticket.brief }, d, onView, signal, EXPECTED);
-	if (signal.aborted) return;
+	const first = await attempt({ brief: ticket.brief }, d, onView, signal, EXPECTED, shown);
+	if (signal.aborted) return aborted();
 	if (!first.ok) return fail(lineFor(first.code));
 
 	let source = first.source;
 	let compiled = await d.compile(source);
-	if (signal.aborted) return;
+	if (signal.aborted) return aborted();
 	if (!compiled.ok) {
-		const again = await attempt({ repair: { source, error: compiled.error.slice(0, REPAIR_ERROR_CHARS) } }, d, onView, signal, Math.max(source.length, 1000));
-		if (signal.aborted) return;
+		const again = await attempt({ repair: { source, error: compiled.error.slice(0, REPAIR_ERROR_CHARS) } }, d, onView, signal, Math.max(source.length, 1000), shown);
+		if (signal.aborted) return aborted();
 		if (!again.ok) return fail(lineFor(again.code));
 		source = again.source;
 		compiled = await d.compile(source);
-		if (signal.aborted) return;
+		if (signal.aborted) return aborted();
 		if (!compiled.ok) return fail(LINES.compile);
 	}
 
-	const res = await post({ source, ...(ticket.actionId !== null ? { actionId: ticket.actionId } : {}) });
-	if (signal.aborted) return;
+	const res = await post({ source, ...(ticket.actionId !== null ? { actionId: ticket.actionId } : {}) }, signal);
+	if (signal.aborted) return aborted();
 	if (res === null) return fail(LINES.saveFailed);
 	if (res.status === 409) return fail(LINES.full);
 	if (!res.ok) return fail(LINES.saveFailed);

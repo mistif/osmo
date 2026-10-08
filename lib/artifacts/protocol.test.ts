@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUILD_ERRORS, createLineReader, encodeLine, type BuildLine } from "./protocol";
+import { BUILD_ERRORS, MAX_HELD, createLineReader, encodeLine, type BuildLine } from "./protocol";
 
 function collect() {
 	const got: BuildLine[] = [];
@@ -36,6 +36,26 @@ describe("createLineReader", () => {
 		const { got, reader } = collect();
 		reader.push('{"t":"done","tokens":5}');
 		expect(got).toEqual([]);
+	});
+	it("an oversized line with no newline fails the stream once and drops what follows", () => {
+		const { got, reader } = collect();
+		reader.push("x".repeat(MAX_HELD));
+		expect(got).toEqual([]); // exactly the cap is still held
+		reader.push("x");
+		expect(got).toEqual([{ t: "error", code: "failed" }]);
+		reader.push('more\n{"t":"delta","s":"a"}\n');
+		expect(got).toHaveLength(1);
+	});
+	it("an oversized line arriving in one chunk fails too, and a long line that ends is not held", () => {
+		const a = collect();
+		a.reader.push("y".repeat(MAX_HELD + 1));
+		expect(a.got).toEqual([{ t: "error", code: "failed" }]);
+		const b = collect();
+		b.reader.push("z".repeat(MAX_HELD - 10));
+		b.reader.push('{"t":"delta","s":"a"}\n');
+		expect(b.got).toEqual([]);
+		b.reader.push('{"t":"delta","s":"b"}\n');
+		expect(b.got).toEqual([{ t: "delta", s: "b" }]);
 	});
 	it("handles several lines in one chunk and a CRLF ending", () => {
 		const { got, reader } = collect();

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { runBuild, singleFlight, type RunDeps, type ThingView } from "./build-run";
+import { LIMITS } from "./compile";
+import { MAX_SOURCE_BYTES, runBuild, singleFlight, type RunDeps, type ThingView } from "./build-run";
 import { LINES } from "./lines";
 import { encodeLine, type BuildLine } from "./protocol";
 
@@ -19,13 +20,13 @@ const GOOD = "// title: Tip splitter\nexport default function A() { return <div/
 const BAD = "// title: X\nBAD export default function A() {}\n";
 const stream = (source: string, tokens = 50): BuildLine[] => [{ t: "delta", s: source.slice(0, 22) }, { t: "delta", s: source.slice(22) }, { t: "done", tokens }];
 
-type Call = { url: string; body: Record<string, unknown> };
+type Call = { url: string; body: Record<string, unknown>; signal?: AbortSignal };
 function setup(builds: Array<() => Response>, save: () => Response = () => json(200, { id: "id-1", version: 1, title: "Tip splitter" })) {
 	const calls: Call[] = [];
 	let n = 0;
 	const fetchFn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
 		const u = String(url);
-		calls.push({ url: u, body: JSON.parse(String(init?.body ?? "{}")) });
+		calls.push({ url: u, body: JSON.parse(String(init?.body ?? "{}")), signal: init?.signal ?? undefined });
 		if (u === "/api/build") return (builds[n++] ?? (() => json(500, {})))();
 		return save();
 	});
@@ -121,7 +122,7 @@ describe("runBuild", () => {
 		expect(t.views.at(-1)).toEqual({ phase: "failed", line: LINES.failed });
 		expect(builds(t.calls).length).toBe(0);
 	});
-	it("an abort mid-stream resolves with no failed view and no save", async () => {
+	it("an abort mid-stream shows no failed view, saves nothing, but settles the started row with the failed marker", async () => {
 		const ac = new AbortController();
 		const t = setup([() => ndjson([{ t: "delta", s: "// title: X\n" }], { hold: ac.signal })]);
 		const done = t.run(ac.signal);
@@ -129,7 +130,76 @@ describe("runBuild", () => {
 		ac.abort();
 		await done;
 		expect(t.views.some((v) => v.phase === "failed")).toBe(false);
-		expect(saves(t.calls).length).toBe(0);
+		expect(saves(t.calls).some((c) => "source" in c.body)).toBe(false);
+		expect(saves(t.calls).map((c) => c.body)).toEqual([{ failed: true, actionId: 7 }]);
+		expect(saves(t.calls)[0].signal).toBeUndefined(); // the marker must outlive the abort
+	});
+	it("an abort before any build call sends no marker, and none without an action id", async () => {
+		const ac = new AbortController();
+		const a = setup([() => ndjson(stream(GOOD))]);
+		a.deps.token = async () => (ac.abort(), null);
+		await a.run(ac.signal);
+		expect(builds(a.calls).length).toBe(0);
+		expect(saves(a.calls).length).toBe(0);
+		const ac2 = new AbortController();
+		const b = setup([() => ndjson([{ t: "delta", s: "x" }], { hold: ac2.signal })]);
+		const done = b.run(ac2.signal, { brief: "x", actionId: null });
+		await new Promise((r) => setTimeout(r, 5));
+		ac2.abort();
+		await done;
+		expect(saves(b.calls).length).toBe(0);
+	});
+	it("the save POST carries the abort signal, and an abort during it sends the marker", async () => {
+		const ac = new AbortController();
+		const t = setup([() => ndjson(stream(GOOD))], () => {
+			ac.abort();
+			return json(200, { id: "id-1", version: 1, title: "T" });
+		});
+		await t.run(ac.signal);
+		const s = saves(t.calls);
+		expect(s[0].body).toEqual({ source: GOOD, actionId: 7 });
+		expect(s[0].signal).toBe(ac.signal);
+		expect(s[1].body).toEqual({ failed: true, actionId: 7 });
+		expect(t.views.some((v) => v.phase === "ready" || v.phase === "failed")).toBe(false);
+	});
+	it("stops reading once the source passes the byte limit: too long, no repair, no save, marker sent", async () => {
+		expect(MAX_SOURCE_BYTES).toBe(LIMITS.sourceBytes);
+		for (const piece of ["x".repeat(MAX_SOURCE_BYTES + 1), "é".repeat(MAX_SOURCE_BYTES / 2 + 1)]) {
+			const t = setup([() => ndjson([{ t: "delta", s: "// title: Big\n" }, { t: "delta", s: piece }, { t: "delta", s: "tail" }, { t: "done", tokens: 9 }])]);
+			await t.run();
+			expect(t.views.at(-1)).toEqual({ phase: "failed", line: LINES.tooBig });
+			expect(t.views.filter((v) => v.phase === "building")).toHaveLength(1); // only the title line; the oversized delta is never shown
+			expect(builds(t.calls).length).toBe(1);
+			expect(saves(t.calls).map((c) => c.body)).toEqual([{ failed: true, actionId: 7 }]);
+		}
+		const edge = setup([() => ndjson([{ t: "delta", s: "// title: E\n" }, { t: "delta", s: "x".repeat(MAX_SOURCE_BYTES - 12) }, { t: "done", tokens: 9 }])]);
+		await edge.run();
+		expect(edge.views.at(-1)?.phase).toBe("ready"); // exactly the limit is allowed
+	});
+	it("an oversized unterminated line fails the build instead of buffering without end", async () => {
+		const body = new ReadableStream<Uint8Array>({
+			start(c) {
+				c.enqueue(enc.encode("x".repeat(70_000)));
+				c.close();
+			},
+		});
+		const t = setup([() => new Response(body, { status: 200 })]);
+		await t.run();
+		expect(t.views.at(-1)).toEqual({ phase: "failed", line: LINES.failed });
+		expect(saves(t.calls).some((c) => "source" in c.body)).toBe(false);
+	});
+	it("progress and blocks never go backwards across a repair attempt", async () => {
+		const BIG = "// title: X\nBAD export default function A() { return <div><p><b/></p></div>; }\n//" + "x".repeat(3000) + "\n";
+		const t = setup([() => ndjson(stream(BIG)), () => ndjson(stream(GOOD))]);
+		await t.run();
+		const b = t.views.filter((v): v is Extract<ThingView, { phase: "building" }> => v.phase === "building");
+		expect(builds(t.calls).length).toBe(2);
+		expect(Math.max(...b.map((v) => v.blocks))).toBeGreaterThanOrEqual(3);
+		for (let i = 1; i < b.length; i++) {
+			expect(b[i].progress).toBeGreaterThanOrEqual(b[i - 1].progress);
+			expect(b[i].blocks).toBeGreaterThanOrEqual(b[i - 1].blocks);
+		}
+		expect(t.views.at(-1)?.phase).toBe("ready");
 	});
 	it("a full shelf (409) says so; another save failure says it could not keep it", async () => {
 		const a = setup([() => ndjson(stream(GOOD))], () => json(409, { error: "full" }));

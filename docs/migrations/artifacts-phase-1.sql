@@ -5,7 +5,7 @@
 create table public.artifacts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
-  title text not null check (char_length(title) between 1 and 60),
+  title text not null check (char_length(title) between 1 and 60 and btrim(title) <> ''),
   kind text not null default 'react' check (kind = 'react'),
   source text not null check (octet_length(source) <= 12288),
   version smallint not null default 1 check (version between 1 and 99),
@@ -14,6 +14,7 @@ create table public.artifacts (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now());
 create index artifacts_user_created on public.artifacts (user_id, created_at desc);
+create index artifacts_parent on public.artifacts (parent_id);
 create function public.artifacts_touch() returns trigger language plpgsql set search_path = '' as $$
 begin new.updated_at = now(); return new; end $$;
 create trigger artifacts_touch before update on public.artifacts for each row execute function public.artifacts_touch();

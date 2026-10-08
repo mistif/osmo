@@ -74,6 +74,13 @@ describe("the body", () => {
 		}
 		expect(db.tables.artifacts).toEqual([]);
 	});
+	it("measures the body in bytes: 10,001 two-byte characters is over 20,000 bytes", async () => {
+		const { deps, db } = setup();
+		const text = JSON.stringify({ source: "\u00e9".repeat(10_001) });
+		expect(text.length).toBeLessThan(20_000);
+		expect((await handleArtifacts(post(text), deps)).status).toBe(400);
+		expect(db.tables.artifacts).toEqual([]);
+	});
 });
 describe("saving", () => {
 	it("a source that fails the checks is a 422 and nothing is inserted", async () => {
@@ -155,7 +162,7 @@ describe("the failed marker", () => {
 		const res = await handleArtifacts(post({ failed: true, actionId: 7 }), deps);
 		expect(res.status).toBe(200);
 		expect(await res.json()).toEqual({ ok: true });
-		expect(action(db, 7)).toMatchObject({ status: "failed", summary: STARTED });
+		expect(action(db, 7)).toMatchObject({ status: "failed", summary: STARTED, error: "build_failed" });
 		// a second call changes nothing
 		action(db, 7).error = "marker";
 		await handleArtifacts(post({ failed: true, actionId: 7 }), deps);

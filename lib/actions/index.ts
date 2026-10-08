@@ -8,7 +8,7 @@ import { levelOf, loadProfile } from "./profile";
 import { REGISTRY } from "./registry";
 import { todayLine } from "./time";
 import { decide } from "./tiers";
-import type { ActionContext, ActionOutcome, ActionProposal, Deps, EnabledActions, Env, RunCtx } from "./types";
+import type { ActionContext, ActionOutcome, ActionProposal, Def, Deps, EnabledActions, Env, Level, RunCtx } from "./types";
 
 export type { ActionContext, ActionOutcome, ActionProposal, BuildTicket, EnabledActions } from "./types";
 
@@ -27,6 +27,9 @@ export const realDeps = (): Deps => ({
 });
 
 const sameOwner = (db: OwnerDb, userId: unknown) => typeof userId === "string" && db.owner === userId.trim().toLowerCase();
+
+// decide() unless the Def names the levels it works at (build: act only), in which case any other level refuses.
+const levelVerdict = (def: Def, level: Level) => (def.levels && !def.levels.includes(level) ? "refuse" : decide(level, def.tier));
 
 export async function runAction(p: ActionProposal, ctx: ActionContext, deps: Deps = realDeps()): Promise<ActionOutcome> {
 	if (!actionsOn(deps.env)) return { kind: "ignored" };
@@ -59,10 +62,10 @@ export async function runAction(p: ActionProposal, ctx: ActionContext, deps: Dep
 			return { kind: "failed", line: checked.say ?? def.unclear };
 		}
 		const level = levelOf(profile, def.connector),
-			verdict = decide(level, def.tier);
+			verdict = levelVerdict(def, level);
 		if (verdict === "refuse") {
 			await log("refused", def.describe(checked.args), "level");
-			return { kind: "refused", line: level === "off" ? `Your ${def.connector} setting is off.` : `I can only read your ${def.connector} at the moment.` };
+			return { kind: "refused", line: level === "off" ? `Your ${def.connector} setting is off.` : def.levelSay ?? `I can only read your ${def.connector} at the moment.` };
 		}
 		if (await capReached(db, def.name, ctx.now)) {
 			await log("refused", def.describe(checked.args), "cap");
@@ -109,7 +112,7 @@ export async function listEnabledActions(userId: string, deps: Deps = realDeps()
 		if (!sameOwner(db, userId)) return null;
 		const profile = await loadProfile(db);
 		if (profile.paused) return null;
-		const defs = deps.registry.filter((d) => decide(levelOf(profile, d.connector), d.tier) !== "refuse");
+		const defs = deps.registry.filter((d) => levelVerdict(d, levelOf(profile, d.connector)) !== "refuse");
 		if (defs.length === 0) return null;
 		return {
 			names: defs.map((d) => d.name),

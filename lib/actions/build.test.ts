@@ -131,9 +131,18 @@ describe("runAction with the real registry", () => {
 		const out = await runAction({ name: "build", args: JSON.stringify({ brief: "" }) }, ctx, deps);
 		expect(out).toEqual({ kind: "failed", line: buildDef.unclear });
 	});
-	it("listEnabledActions offers build from level ask (held for a yes) and never at off or read", async () => {
+	it("at level ask it is refused in his register, never held for a yes, and logs a refused row", async () => {
+		for (const level of ["ask", "read"]) {
+			const { db, deps } = setup({ level });
+			expect(await runAction(propose, ctx, deps)).toEqual({ kind: "refused", line: "I can only build things when that is set to act." });
+			expect(db.tables.actions).toHaveLength(1);
+			expect(db.tables.actions[0]).toMatchObject({ status: "refused", error: "level" });
+			expect(db.tables.pending_actions ?? []).toHaveLength(0);
+		}
+	});
+	it("listEnabledActions offers build at level act only, never at ask, read or off", async () => {
 		expect((await listEnabledActions("owner-1", setup({ level: "act" }).deps))?.names).toContain("build");
-		expect((await listEnabledActions("owner-1", setup({ level: "ask" }).deps))?.names).toContain("build");
+		expect((await listEnabledActions("owner-1", setup({ level: "ask" }).deps))?.names ?? []).not.toContain("build");
 		expect((await listEnabledActions("owner-1", setup({ level: "read" }).deps))?.names ?? []).not.toContain("build");
 		expect((await listEnabledActions("owner-1", setup({ level: "off" }).deps))?.names ?? []).not.toContain("build");
 	});

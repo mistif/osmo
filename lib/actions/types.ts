@@ -29,6 +29,10 @@ export type Def = {
 	name: string;
 	connector: string;
 	tier: Tier;
+	// The connector levels at which this action may be offered or run (default: every level the tier allows).
+	// Build is ["act"]: it runs without asking, so level ask refuses it rather than holding it for a yes.
+	levels?: readonly Level[];
+	levelSay?: string; // said when the level is on but not in levels
 	needsResult: boolean;
 	voiceOk: boolean;
 	line: string; // the model's one-line description: name, args, tier

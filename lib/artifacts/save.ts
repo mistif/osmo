@@ -26,7 +26,7 @@ const isId = (v: unknown): v is number => typeof v === "number" && Number.isInte
 
 // A guest, an unknown key or the wrong shape is refused outright.
 function readBody(text: string): Body | null {
-	if (text.length > MAX_BODY) return null;
+	if (new TextEncoder().encode(text).length > MAX_BODY) return null; // bytes, not characters
 	let raw: unknown;
 	try {
 		raw = JSON.parse(text);
@@ -77,7 +77,7 @@ export async function handleArtifacts(request: Request, d: SaveDeps): Promise<Re
 	}
 	try {
 		if (body.kind === "failed") {
-			if (await openBuildRow(db, body.actionId)) await resolveLog(db, body.actionId, "failed", "build");
+			if (await openBuildRow(db, body.actionId)) await resolveLog(db, body.actionId, "failed", "build_failed");
 			return json(200, { ok: true });
 		}
 		const compiled = await compileSource(body.source);

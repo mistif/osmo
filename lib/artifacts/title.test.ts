@@ -8,6 +8,11 @@ describe("partialTitle", () => {
 		expect(partialTitle("")).toBeNull();
 		expect(partialTitle("import x\n")).toBeNull();
 	});
+	it("matches only at the start of the text, not on a later line", () => {
+		expect(partialTitle("import x\n// title: Late\nmore")).toBeNull();
+		expect(partialTitle("// title: A\n// title: B\n")).toBe("A");
+		expect(partialTitle("  // title: Indented\nx")).toBe("Indented");
+	});
 	it("cleans what it finds", () => {
 		expect(partialTitle("// title: <b>Hi</b>\nx")).toBe("b Hi b");
 	});

@@ -9,8 +9,8 @@ export function cleanTitle(raw: string): string | null {
 	return title === "" ? null : title;
 }
 
-// Only a complete line counts: the title is read once its newline has arrived.
+// Only a complete first line counts: the title is read once its newline has arrived, and only at the start of the text (as save.ts reads it).
 export function partialTitle(source: string): string | null {
-	const m = /^[ \t]*\/\/ title:[ \t]*([^\n]*)\n/m.exec(source.slice(0, 400));
+	const m = /^[ \t]*\/\/ title:[ \t]*([^\n]*)\n/.exec(source.slice(0, 400));
 	return m ? cleanTitle(m[1]) : null;
 }

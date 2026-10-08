@@ -20,11 +20,17 @@ function parseLine(text: string): BuildLine | null {
 	return null;
 }
 
+// The most a line with no newline yet may hold. A real line is a delta of a few hundred bytes; past this the stream is broken.
+export const MAX_HELD = 64 * 1024;
+
 // Feed it chunks as they arrive. A line is handed over only when its newline has arrived; a last line with no newline is held (and dropped).
+// If the held text passes MAX_HELD with no newline, it is cleared, one failed error line is handed over, and the reader ignores all that follows.
 export function createLineReader(onLine: (l: BuildLine) => void): { push(chunk: string): void } {
-	let held = "";
+	let held = "",
+		broken = false;
 	return {
 		push(chunk) {
+			if (broken) return;
 			held += chunk;
 			let at: number;
 			while ((at = held.indexOf("\n")) >= 0) {
@@ -33,6 +39,11 @@ export function createLineReader(onLine: (l: BuildLine) => void): { push(chunk: 
 				if (line === "") continue;
 				const parsed = parseLine(line);
 				if (parsed) onLine(parsed);
+			}
+			if (held.length > MAX_HELD) {
+				held = "";
+				broken = true;
+				onLine({ t: "error", code: "failed" });
 			}
 		},
 	};
