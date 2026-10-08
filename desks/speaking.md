@@ -11,6 +11,27 @@ Not holding any shared file open. No uncommitted work of mine in `my-app`.
 
 ## Just landed
 
+- **`82a4177` (2026-10-08, pushed at Gur's request, deploying): Osmo stops rushing.**
+  `TTS_SPEED` 1.15 → **1**, and both tone instructions reworded. Gur picked it by ear from four takes
+  of the same line ([the A/B page](https://claude.ai/artifact/HxUpUN2TumCMVfSLkUajGv)): current,
+  fable@1.0, fable@1.05, onyx@1.0. He chose fable@1.0 with the new wording, so `fable` stands and
+  `onyx` lost a second time.
+  - **Why**: I researched the reference. It is described as "calm, **measured** British delivery" that
+    "never rushes" — and `speed: 1.15` plus "not slow" was us doing the opposite. The 1.15 was a wrong
+    fix for a real problem: the flatness Gur heard on 2026-09-29 came from the *instruction*, not the
+    speed, so hurrying him bought liveliness twice and threw away the pace. Pace and flatness are
+    separate dials.
+  - The composed string is **byte-identical** to the clip Gur approved (checked, not assumed).
+  - "warm and quick-witted" → "quietly warm and dryly witted": over-emoting is specifically what
+    breaks the reference.
+  - `INSTRUCTIONS_VERSION` → 2, so **every cached sentence regenerates once**. First hearing of each
+    line costs the usual ~2 s; after that it is instant again.
+  - Two new tests: both tones must keep a "never flat" cue and the composed one its
+    "variation in pitch and emphasis"; and `TTS_SPEED` must stay ≤ 1.05, so nobody cranks it back up
+    without reading why.
+  - 1686 tests pass, `tsc` clean, lint clean. Only `lib/voice/tts.ts` and its test were staged; main's
+    untracked `docs/osmo-rundown-2026-10-02.md` was left alone.
+
 - **`cdb592f`: merged cloud's PR #3 into `main` and pushed, at Gur's direct request (2026-09-30).**
   Documentation only (cloud's `614e4bb`, two lines in the agent design spec), merged locally rather than with
   GitHub's merge button, per `lanes.md`. GitHub now shows PR #3 as MERGED against `cdb592f`, and
@@ -135,7 +156,29 @@ emphasis - not flat, not slow" with `speed: 1.15`. A test in `tts.test.ts` fails
 `speed` is confirmed to work alongside `instructions` on this model.
 
 **`INSTRUCTIONS_VERSION` is part of the cache key. Bump it with any change to the instructions, the
-voice or the speed**, or cached audio outlives the change.
+voice or the speed**, or cached audio outlives the change. (The voice, speed and model are in the key
+in their own right; the instruction text is not, which is why the bump matters.)
+
+**Second chapter, 2026-10-08: the speed was an over-correction.** Fixing the flatness by *also* raising
+`speed` to 1.15 was wrong, and researching the reference is what showed it — JARVIS "never rushes", and
+his authority comes partly from not hurrying. The variation line is what buys the life; pace is a
+separate dial, and we were paying for liveliness twice. Pace is back to 1, and the same "measured" idea
+is now carried by "unhurried and certain" and "each word gets its weight", which this model does not
+flatten the way it flattens the literal words. A test keeps the speed from creeping back up.
+
+**What is still unlike the reference:** `fable` is the expressive voice, where JARVIS is described as
+calm and *deep*. `onyx` is the deep one but not British, so it would lean entirely on the instruction
+for accent. Gur has now rejected onyx twice by ear. If depth ever matters more than the accent, that is
+the trade to revisit.
+
+**Latency, measured a third time (2026-10-08, Node on Gur's PC):** first byte 1.3–2.4 s, full clip
+2.0–2.8 s. Consistent with main's earlier ~1.25 s / ~2.1 s, so the pause before a new sentence is
+OpenAI's generation time and no wording or setting touches it. Researched the alternative: **ElevenLabs
+Turbo v2.5 is ~250 ms** at ~3.3× the per-minute cost plus a monthly subscription floor, and would need
+a new key and the tone system rewritten from an instruction string to `stability`/`similarity_boost`/
+`style` presets. **Trap for whoever tries it: Flash and Turbo do not support `[tag]` audio tags — only
+v3 does — so a tag would be read out loud.** Gur chose to tune OpenAI first; the switch stays unbuilt
+and unapproved.
 
 ### Delivery: two tones, Gur's call
 
