@@ -11,6 +11,7 @@ export const buildDef: Def = {
 	tier: 2,
 	levels: ["act"],
 	levelSay: "I can only build things when that is set to act.",
+	offSay: "Building things is off in Settings.",
 	needsResult: false,
 	voiceOk: false,
 	line: 'build: make a small working thing for Gur (a calculator, timer, converter or little game) that appears beside you. args {"brief": what to make, plain words, 1 to 500 characters}. Use it only when he asks for something that runs. Tier 2.',

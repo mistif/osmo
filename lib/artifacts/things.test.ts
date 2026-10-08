@@ -23,6 +23,12 @@ describe("sanitizeThing", () => {
 		expect(sanitizeThing({ id: "a", title: "x".repeat(61), version: 1, created_at: "x" })).toBeNull();
 		expect(sanitizeThing({ id: "a", title: "x".repeat(60), version: 1, created_at: "x" })).not.toBeNull();
 	});
+	it("counts a title in characters, not UTF-16 units", () => {
+		const astral = "😀".repeat(60);
+		expect(astral.length).toBe(120);
+		expect(sanitizeThing({ id: "a", title: astral, version: 1, created_at: "x" })).not.toBeNull();
+		expect(sanitizeThing({ id: "a", title: "😀".repeat(61), version: 1, created_at: "x" })).toBeNull();
+	});
 	it("rejects things that are not rows", () => {
 		expect(sanitizeThing(null)).toBeNull();
 		expect(sanitizeThing("row")).toBeNull();

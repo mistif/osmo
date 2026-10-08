@@ -33,6 +33,7 @@ export type Def = {
 	// Build is ["act"]: it runs without asking, so level ask refuses it rather than holding it for a yes.
 	levels?: readonly Level[];
 	levelSay?: string; // said when the level is on but not in levels
+	offSay?: string; // said when the connector is off (default: "Your <connector> setting is off.")
 	needsResult: boolean;
 	voiceOk: boolean;
 	line: string; // the model's one-line description: name, args, tier

@@ -9,7 +9,7 @@ export function sanitizeThing(raw: unknown): ThingRow | null {
 	const r = raw as Record<string, unknown>;
 	if (typeof r.id !== "string" || r.id === "") return null;
 	if (typeof r.version !== "number" || !Number.isFinite(r.version)) return null;
-	if (typeof r.title !== "string" || r.title === "" || r.title.length > TITLE_MAX) return null;
+	if (typeof r.title !== "string" || r.title === "" || Array.from(r.title).length > TITLE_MAX) return null;
 	if (typeof r.created_at !== "string") return null;
 	return { id: r.id, title: r.title, version: r.version, parent_id: typeof r.parent_id === "string" ? r.parent_id : null, created_at: r.created_at };
 }

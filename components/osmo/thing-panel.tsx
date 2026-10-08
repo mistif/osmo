@@ -1,5 +1,5 @@
 "use client";
-import { type CSSProperties, useEffect, useState } from "react";
+import { type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { ArtifactFrame, type FrameEvent } from "./artifact-frame";
 import type { BuildHandle } from "./use-build";
 import type { Aura } from "@/lib/artifacts/frame";
@@ -37,6 +37,8 @@ function Sketch() {
 	);
 }
 
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])';
+
 type Props = {
 	build: BuildHandle;
 	aura: Aura;
@@ -53,13 +55,52 @@ export function ThingPanel({ build, aura, hidden }: Props) {
 
 	const readyId = view?.phase === "ready" ? view.id : null;
 	const full = readyId !== null && fullId === readyId && !hidden;
+	// The full-screen view is a modal: Tab cycles inside it, Escape closes it, and focus goes back to the button that opened it.
+	const overlayRef = useRef<HTMLDivElement>(null);
+	const openerRef = useRef<HTMLElement | null>(null);
+	const openFull = (id: string, e: ReactMouseEvent<HTMLElement>) => {
+		openerRef.current = e.currentTarget;
+		setFullId(id);
+	};
 	useEffect(() => {
 		if (!full) return;
+		const root = overlayRef.current;
+		const focusables = () => (root ? Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)) : []);
 		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "Escape") setFullId(null);
+			if (e.key === "Escape") {
+				setFullId(null);
+				return;
+			}
+			if (e.key !== "Tab" || !root) return;
+			const items = focusables();
+			if (items.length === 0) return;
+			const first = items[0],
+				last = items[items.length - 1],
+				at = document.activeElement;
+			if (!root.contains(at)) {
+				e.preventDefault();
+				first.focus();
+			} else if (e.shiftKey && at === first) {
+				e.preventDefault();
+				last.focus();
+			} else if (!e.shiftKey && at === last) {
+				e.preventDefault();
+				first.focus();
+			}
 		};
-		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
+		// Focus that lands outside (the page behind, after a tab out of the frame) comes back in.
+		const onFocusIn = (e: FocusEvent) => {
+			if (root && e.target instanceof Node && !root.contains(e.target)) focusables()[0]?.focus();
+		};
+		document.addEventListener("keydown", onKey);
+		document.addEventListener("focusin", onFocusIn);
+		return () => {
+			document.removeEventListener("keydown", onKey);
+			document.removeEventListener("focusin", onFocusIn);
+			const opener = openerRef.current;
+			openerRef.current = null;
+			if (opener?.isConnected) opener.focus();
+		};
 	}, [full]);
 
 	// What a screen reader hears, from the start of the build to its end. The region stays mounted so the change is announced.
@@ -70,22 +111,22 @@ export function ThingPanel({ build, aura, hidden }: Props) {
 		</p>
 	);
 
-	if (view === null) {
-		return (
-			<>
-				{status}
-				{notice && <p className={styles.floating}>{notice}</p>}
-			</>
-		);
-	}
+	// The one status node is always the first child, whatever follows it, so it is never remounted and its changes are announced.
+	const wrap = (body: ReactNode) => (
+		<>
+			{status}
+			{body}
+		</>
+	);
+
+	if (view === null) return wrap(notice && <p className={styles.floating}>{notice}</p>);
 
 	const title = view.phase === "building" ? (view.title ?? "Building") : view.phase === "ready" ? view.title : "Not finished";
 	if (hidden) {
-		return (
+		return wrap(
 			<div className={styles.chipSlot} data-thing-state={view.phase}>
-				{status}
 				<span className={styles.chip}>{title}</span>
-			</div>
+			</div>,
 		);
 	}
 
@@ -130,9 +171,8 @@ export function ThingPanel({ build, aura, hidden }: Props) {
 		</div>
 	);
 
-	return (
+	return wrap(
 		<>
-			{status}
 			<section
 				className={styles.panel}
 				data-thing-state={view.phase}
@@ -143,13 +183,18 @@ export function ThingPanel({ build, aura, hidden }: Props) {
 				<div className={styles.head}>
 					<h2 className={styles.title}>{title}</h2>
 					{view.phase === "ready" && !showProblem && (
-						<button type="button" className={styles.tool} aria-label="Open full screen" onClick={() => setFullId(view.id)}>
+						<button type="button" className={styles.tool} aria-label="Open full screen" onClick={(e) => openFull(view.id, e)}>
 							Full screen
 						</button>
 					)}
 					{view.phase !== "building" && (
 						<button type="button" className={styles.tool} onClick={build.close}>
 							Close
+						</button>
+					)}
+					{view.phase === "building" && (
+						<button type="button" className={styles.tool} onClick={build.cancel}>
+							Cancel
 						</button>
 					)}
 				</div>
@@ -169,7 +214,7 @@ export function ThingPanel({ build, aura, hidden }: Props) {
 								<Sketch />
 							</div>
 						)}
-						{!showProblem && <button type="button" className={styles.tap} aria-label="Open full screen" onClick={() => setFullId(view.id)} />}
+						{!showProblem && <button type="button" className={styles.tap} aria-label="Open full screen" onClick={(e) => openFull(view.id, e)} />}
 					</div>
 				)}
 				{actions}
@@ -177,7 +222,7 @@ export function ThingPanel({ build, aura, hidden }: Props) {
 			</section>
 
 			{full && view.phase === "ready" && (
-				<div className={styles.overlay} role="dialog" aria-modal="true" aria-label={view.title}>
+				<div ref={overlayRef} className={styles.overlay} role="dialog" aria-modal="true" aria-label={view.title}>
 					<div className={styles.head}>
 						<h2 className={styles.title}>{view.title}</h2>
 						<button type="button" className={styles.tool} autoFocus onClick={() => setFullId(null)}>
@@ -190,6 +235,6 @@ export function ThingPanel({ build, aura, hidden }: Props) {
 					{actions}
 				</div>
 			)}
-		</>
+		</>,
 	);
 }

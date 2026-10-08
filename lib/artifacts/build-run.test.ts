@@ -45,6 +45,16 @@ const builds = (c: Call[]) => c.filter((x) => x.url === "/api/build");
 const saves = (c: Call[]) => c.filter((x) => x.url === "/api/artifacts");
 
 describe("runBuild", () => {
+	it("shows the server's title cleaned, and a stock title when it is not text", async () => {
+		const messy = setup([() => ndjson(stream(GOOD))], () => json(200, { id: "id-1", version: 1, title: "<b>Tip</b> splitter!!" }));
+		await messy.run();
+		expect(messy.views.at(-1)).toMatchObject({ phase: "ready", title: "b Tip b splitter" });
+		for (const title of ["", "!!!", 7, undefined]) {
+			const t = setup([() => ndjson(stream(GOOD))], () => json(200, { id: "id-1", version: 1, title }));
+			await t.run();
+			expect(t.views.at(-1)).toMatchObject({ phase: "ready", title: "Something small" });
+		}
+	});
 	it("builds, then saves, then is ready; the save body has the source and the action id and no brief", async () => {
 		const t = setup([() => ndjson(stream(GOOD))]);
 		await t.run();

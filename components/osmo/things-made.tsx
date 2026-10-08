@@ -18,7 +18,7 @@ async function fetchRows(): Promise<ThingRow[]> {
 // "Things I made": one row per thing, its newest version, with Open and Delete. The list never asks for the source;
 // Open reads the source of that one row. Until the table exists (or while there is nothing), the section stays hidden,
 // so the feature is invisible while it is dark.
-export function ThingsMade({ onOpen }: { onOpen(id: string, title: string, source: string): void }) {
+export function ThingsMade({ onOpen, onDeleted }: { onOpen(id: string, title: string, source: string): void; onDeleted?(id: string): void }) {
 	const [rows, setRows] = useState<ThingRow[] | null>(null);
 	const [confirming, setConfirming] = useState<string | null>(null);
 	const [problem, setProblem] = useState<string | null>(null);
@@ -41,6 +41,7 @@ export function ThingsMade({ onOpen }: { onOpen(id: string, title: string, sourc
 		const { error } = await supabase.from("artifacts").delete().eq("id", r.id);
 		if (error) return setProblem(LINES.deleteFailed);
 		setProblem(null);
+		onDeleted?.(r.id); // a thing open in the room goes with its row
 		// The version before it, if there is one, takes its place.
 		setRows(await fetchRows());
 	}

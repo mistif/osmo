@@ -7,6 +7,8 @@ import { singleFlight, type RunTicket, type ThingView } from "../artifacts/build
 export const VIEW_GAP_MS = 33;
 // data-built stays on for 1.6 seconds after the thing renders: the settle (spec 6).
 export const BUILT_MS = 1600;
+// A build that has not ended in 90 seconds is stopped through its signal and ends in the failed line.
+export const BUILD_TIMEOUT_MS = 90_000;
 
 export type BuildState = {
 	view: ThingView | null;
@@ -35,6 +37,7 @@ export function createBuildController(deps: ControllerDeps) {
 	let gate: unknown = null;
 	let held: ThingView | null = null;
 	let settle: unknown = null;
+	let limit: unknown = null;
 
 	const set = (next: Partial<BuildState>) => {
 		state = { ...state, ...next };
@@ -46,7 +49,12 @@ export function createBuildController(deps: ControllerDeps) {
 		gate = settle = held = null;
 	};
 	const running = () => release !== null;
+	const stopLimit = () => {
+		if (limit !== null) deps.clearTimer(limit);
+		limit = null;
+	};
 	const finish = () => {
+		stopLimit();
 		release?.();
 		release = null;
 		abort = null;
@@ -63,14 +71,15 @@ export function createBuildController(deps: ControllerDeps) {
 		}
 		if (gate !== null) deps.clearTimer(gate);
 		gate = held = null;
+		stopLimit();
 		if (v.phase === "ready") {
 			if (settle !== null) deps.clearTimer(settle);
-			set({ view: v, origin: "built", built: true });
+			set({ view: v, origin: "built", notice: null, built: true });
 			settle = deps.setTimer(() => {
 				settle = null;
 				set({ built: false });
 			}, BUILT_MS);
-		} else set({ view: v, built: false });
+		} else set({ view: v, notice: null, built: false });
 	}
 	function openGate() {
 		gate = deps.setTimer(() => {
@@ -100,16 +109,33 @@ export function createBuildController(deps: ControllerDeps) {
 			stopTimers();
 			const token = (abort = new AbortController());
 			set({ view: { phase: "building", title: null, blocks: 0, progress: 0 }, origin: "built", notice: null, built: false });
-			deps
-				.run(ticket, (v) => onView(token, v), token.signal)
+			limit = deps.setTimer(() => {
+				limit = null;
+				if (abort !== token) return;
+				token.abort();
+				finish();
+				if (gate !== null) deps.clearTimer(gate);
+				gate = held = null;
+				set({ view: { phase: "failed", line: LINES.failed }, notice: null, built: false });
+			}, BUILD_TIMEOUT_MS);
+			// A throw before the first await is the same failure as a rejection.
+			let ran: Promise<void>;
+			try {
+				ran = deps.run(ticket, (v) => onView(token, v), token.signal);
+			} catch (e) {
+				ran = Promise.reject(e);
+			}
+			ran
 				.catch(() => onView(token, { phase: "failed", line: LINES.failed }))
 				.finally(() => {
 					if (abort === token) finish();
 				});
 			return true;
 		},
-		// A crisis, Lock or leaving the room: stop at once, say nothing, free the next build.
+		// A crisis, Lock or leaving the room: stop a streaming build at once, say nothing, free the next build.
+		// An opened or finished thing stays: the spec only aborts a build in flight.
 		cancel() {
+			if (!running()) return;
 			abort?.abort();
 			finish();
 			stopTimers();
@@ -118,7 +144,13 @@ export function createBuildController(deps: ControllerDeps) {
 		async discard() {
 			const v = state.view;
 			if (!v || v.phase !== "ready") return;
-			if (await deps.remove(v.id)) {
+			let removed = false;
+			try {
+				removed = await deps.remove(v.id);
+			} catch {
+				removed = false;
+			}
+			if (removed) {
 				if (state.view === v) set({ ...REST });
 			} else set({ notice: LINES.deleteFailed });
 		},

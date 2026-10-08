@@ -119,7 +119,7 @@ describe("runAction with the real registry", () => {
 	});
 	it("at level off it is refused", async () => {
 		const { db, deps } = setup({ level: "off" });
-		expect(await runAction(propose, ctx, deps)).toMatchObject({ kind: "refused" });
+		expect(await runAction(propose, ctx, deps)).toEqual({ kind: "refused", line: "Building things is off in Settings." });
 		expect(db.tables.actions[0]).toMatchObject({ status: "refused", error: "level" });
 	});
 	it("at the cap it is refused and says so", async () => {

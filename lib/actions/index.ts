@@ -65,7 +65,7 @@ export async function runAction(p: ActionProposal, ctx: ActionContext, deps: Dep
 			verdict = levelVerdict(def, level);
 		if (verdict === "refuse") {
 			await log("refused", def.describe(checked.args), "level");
-			return { kind: "refused", line: level === "off" ? `Your ${def.connector} setting is off.` : def.levelSay ?? `I can only read your ${def.connector} at the moment.` };
+			return { kind: "refused", line: level === "off" ? def.offSay ?? `Your ${def.connector} setting is off.` : def.levelSay ?? `I can only read your ${def.connector} at the moment.` };
 		}
 		if (await capReached(db, def.name, ctx.now)) {
 			await log("refused", def.describe(checked.args), "cap");

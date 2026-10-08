@@ -2,7 +2,7 @@
 import { buildProgress, sketchBlocks } from "./build-progress";
 import { LINES, lineFor } from "./lines";
 import { createLineReader, type BuildError } from "./protocol";
-import { partialTitle } from "./title";
+import { cleanTitle, partialTitle } from "./title";
 
 export type ThingView =
 	| { phase: "building"; title: string | null; blocks: number; progress: number }
@@ -127,7 +127,7 @@ export async function runBuild(ticket: RunTicket, d: RunDeps, onView: (v: ThingV
 		return fail(LINES.saveFailed);
 	}
 	if (typeof saved.id !== "string") return fail(LINES.saveFailed);
-	onView({ phase: "ready", id: saved.id, title: typeof saved.title === "string" ? saved.title : "Something small", source });
+	onView({ phase: "ready", id: saved.id, title: (typeof saved.title === "string" ? cleanTitle(saved.title) : null) ?? "Something small", source });
 }
 
 // One build at a time (spec 3, "Another build running"). tryStart returns a release function, or null while one is running.

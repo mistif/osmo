@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUILT_MS, createBuildController, VIEW_GAP_MS, type ControllerDeps } from "./build-controller";
+import { BUILT_MS, BUILD_TIMEOUT_MS, createBuildController, VIEW_GAP_MS, type ControllerDeps } from "./build-controller";
 import { LINES } from "../artifacts/lines";
 import type { RunTicket, ThingView } from "../artifacts/build-run";
 
@@ -196,6 +196,87 @@ describe("createBuildController", () => {
 		expect(ctl.getState().view).toEqual({ phase: "failed", line: LINES.failed });
 		ctl.start(TICKET);
 		expect(ctl.getState().view?.phase).toBe("building");
+	});
+
+	it("a refused second ticket's notice clears when the build reaches ready or failed", () => {
+		for (const end of [ready, { phase: "failed", line: LINES.failed } as ThingView]) {
+			const { ctl, runs } = setup();
+			ctl.start(TICKET);
+			ctl.start({ brief: "another", actionId: 8 });
+			expect(ctl.getState().notice).toBe(LINES.busy);
+			runs[0].feed(end);
+			expect(ctl.getState().notice).toBeNull();
+		}
+	});
+
+	it("a run that throws synchronously ends in his failed line instead of escaping start", async () => {
+		const { ctl } = setup({
+			run: () => {
+				throw new Error("boom");
+			},
+		});
+		expect(() => ctl.start(TICKET)).not.toThrow();
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(ctl.getState().view).toEqual({ phase: "failed", line: LINES.failed });
+		ctl.start(TICKET);
+		expect(ctl.getState().view?.phase).toBe("building");
+	});
+
+	it("a remove that throws leaves the thing and says so; discard never rejects", async () => {
+		const { ctl, runs } = setup({
+			remove: async () => {
+				throw new Error("net");
+			},
+		});
+		ctl.start(TICKET);
+		runs[0].feed(ready);
+		await expect(ctl.discard()).resolves.toBeUndefined();
+		expect(ctl.getState().view).toEqual(ready);
+		expect(ctl.getState().notice).toBe(LINES.deleteFailed);
+	});
+
+	it("cancel leaves an opened thing, and a finished one, alone", async () => {
+		const { ctl, runs } = setup();
+		ctl.show("id-9", "Timer", "x");
+		ctl.cancel();
+		expect(ctl.getState().view?.phase).toBe("ready");
+		expect(ctl.getState().origin).toBe("opened");
+		ctl.close();
+		ctl.start(TICKET);
+		runs[0].feed(ready);
+		runs[0].end();
+		await Promise.resolve();
+		await Promise.resolve();
+		ctl.cancel();
+		expect(ctl.getState().view).toEqual(ready);
+	});
+
+	it("a build that runs past the timeout is aborted and ends in his failed line", () => {
+		const { ctl, runs, c } = setup();
+		ctl.start(TICKET);
+		expect(BUILD_TIMEOUT_MS).toBe(90_000);
+		expect(c.pending()).toContain(BUILD_TIMEOUT_MS);
+		runs[0].feed(building(2));
+		c.fire(BUILD_TIMEOUT_MS);
+		expect(runs[0].signal.aborted).toBe(true);
+		expect(ctl.getState().view).toEqual({ phase: "failed", line: LINES.failed });
+		expect(ctl.getState().built).toBe(false);
+		runs[0].feed(ready); // a late view from the aborted run changes nothing
+		expect(ctl.getState().view?.phase).toBe("failed");
+		ctl.start(TICKET);
+		expect(runs.length).toBe(2);
+	});
+
+	it("a build that finishes in time leaves no timeout behind, and cancel clears it", () => {
+		const a = setup();
+		a.ctl.start(TICKET);
+		a.runs[0].feed(ready);
+		expect(a.c.pending()).not.toContain(BUILD_TIMEOUT_MS);
+		const b = setup();
+		b.ctl.start(TICKET);
+		b.ctl.cancel();
+		expect(b.c.pending()).toEqual([]);
 	});
 
 	it("subscribers hear every change and can leave", () => {

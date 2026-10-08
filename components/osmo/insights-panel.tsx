@@ -16,7 +16,7 @@ import styles from "./insights.module.css";
 const UNREACHABLE = "I cannot reach my memory right now. Try again in a moment.";
 const FORGET_FAILED = "I could not forget that. Try again.";
 
-export function InsightsPanel({ agent, onOpenThing }: { agent: AgentState; onOpenThing(id: string, title: string, source: string): void }) {
+export function InsightsPanel({ agent, onOpenThing, onThingDeleted }: { agent: AgentState; onOpenThing(id: string, title: string, source: string): void; onThingDeleted?(id: string): void }) {
 	const [rows, setRows] = useState<MoodDay[] | null>(null);
 	const [firstDay, setFirstDay] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -195,7 +195,7 @@ export function InsightsPanel({ agent, onOpenThing }: { agent: AgentState; onOpe
 				{didError && <p className={panel.error} role="alert">{didError}</p>}
 			</section>
 
-			<ThingsMade onOpen={onOpenThing} />
+			<ThingsMade onOpen={onOpenThing} onDeleted={onThingDeleted} />
 
 			<section className={panel.section}>
 				<h3 className={panel.sectionTitle}>Our story</h3>
