@@ -163,9 +163,15 @@ It checks `Authorization: Bearer <Supabase access token>` and returns the user, 
 
     Anything outside them is a 400, and so is a genome that `sanitizeGenome` would repair. The browser's `chatBody` trims to the limits first.
   - **Emotions phase 1 (2026-10-02):** the model answers in a strict JSON shape (`lib/chat/turn-schema.ts`, `osmo_turn`: reply, crisis, tone, intensity, about, wants, note) on models whose `strict` flag is true (both today), or plain text with a last `FEELING:` line otherwise (`parseModelOutput`). The model answer carries `detection: Detection | null` (validated by `validateDetection`); the body's `facts.gur` carries Gur's last tone (`GurRead | null`, null from a stale tab). The room keeps it in `Session.gur` through `applyTurn` (`rememberGur`).
-  - **The `POST` answer** is `ChatAnswer`: `{ source: "model", reply, usage }` or `{ source: "fallback", reason: "off" | "allowance" | "error" | "empty" | "crisis", usage }`. `usage` is `{ usedToday, usable }` for the pool, including this call, or null when today's rows weren't read.
-  - **What the route writes.** It reads and writes only `ai_calls`, as Gur through row-level security, with no service-role key. The browser keeps saving `messages`, `agent_state`, `mood_days`, facts and vocabulary itself. There's no streaming.
-  - **The browser's side** is `lib/chat/ask.ts`: `askStatus`, `askForReply` (a 15-second limit; it never throws) and `nextUsage`.
+  - **The `POST` answer** is `ChatAnswer`: `{ source: "model", reply, usage, detection, waiting }` or `{ source: "fallback", reason: "off" | "allowance" | "error" | "empty" | "crisis", usage }`. `usage` is `{ usedToday, usable }` for the pool, including every call of this turn, or null when today's rows weren't read. `waiting: true` means an action is waiting for Gur's yes.
+  - **Actions (connectors phase 0, 2026-10-08, dark unless `OSMO_ACTIONS` is exactly `on`):**
+    - `ChatDeps.actions` is `{ list, run, cancelWaiting }`, wired to `listEnabledActions`, `runAction` and `cancelWaiting` from `lib/actions`.
+    - A strict model gets `turnFormat(names)` (an eighth key, `action`), plus the action block in its instructions. A done action with a `result` makes call 2, with the result block.
+    - With no action on, the request is byte-identical to before.
+    - A body with `speaker: "guest"` is a 400.
+    - The route's `maxDuration` is 40 s.
+  - **What the route writes.** It reads and writes `ai_calls` as Gur, through row-level security. It writes nothing else itself: actions go through main's seam, whose admin client is owner-pinned. The browser keeps saving `messages`, `agent_state`, `mood_days`, facts and vocabulary itself. There's no streaming.
+  - **The browser's side** is `lib/chat/ask.ts`: `askStatus`, `askForReply` (a 25-second limit, for two calls; it never throws) and `nextUsage`. A bare yes or no while `waiting` goes to `/api/act` through `lib/chat/decision.ts` (`sendDecision`). The gate and the flag are in `lib/chat/branch.ts` (`decisionFor`, `waitingAfter`, `decisionEnd`).
 
 ### Artifacts (owner: main; `/api/build` is language's; spec `docs/superpowers/specs/2026-10-08-osmo-artifacts-design.md`, plan `docs/superpowers/plans/2026-10-08-osmo-artifacts-phase-a-b.md`)
 - **Dark.** Needs `OSMO_BUILD=on`, `OSMO_CHAT=on`, `OSMO_ACTIONS=on` and the `artifacts` level `act` ("Building things" in Settings offers Off and Act only). With any of them missing, no ticket arrives and the room renders nothing.
