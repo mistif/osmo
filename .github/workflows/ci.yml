@@ -31,7 +31,8 @@ jobs:
       - run: npm ci
 
       - name: Types
-        run: npx tsc --noEmit -p .
+        # Next generates LayoutProps and the route types; a fresh checkout has none until typegen runs.
+        run: npx next typegen && npx tsc --noEmit -p .
 
       - name: Lint
         run: npm run lint
