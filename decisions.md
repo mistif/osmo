@@ -137,3 +137,6 @@ Gur: Osmo creates "artifacts": code or working things (small tools, pages, calcu
 
 ## 2026-10-08: artifacts spec approved
 Gur approved `docs/superpowers/specs/2026-10-08-osmo-artifacts-design.md` with its defaults: react-only imports; the thing sits to the right of the conversation on wide screens and steps aside for panels; a thing cannot ask Osmo anything from inside; kept by default; 30 builds a day. Sucrase transpiles in the room; the frame is srcdoc with a one-use nonce; only the source is stored and compiled on every open. Phases A (frame, runtime, /dev page), B (build action, streaming route, save, Insights), C (animation polish, versions), each behind a switch that is off.
+
+## 2026-10-08: three thoughts from Gur, under review, not decided
+1. On first open the app should offer to connect Gmail and Calendar so Osmo gets to know him faster (as Meta's Muse does). 2. "Make Osmo public": let other people use Osmo, not only Gur; this conflicts with the single-owner design (OSMO_OWNER_ID gates, owner-pinned admin client, one allowance, prompts naming Gur). 3. The voice listening is bad (wake word not firing, speaker mix-ups, slow). A six-lens board review (architecture, security, product, AI, voice, ops) is being written to `my-app/docs/osmo-board-review-2026-10-08.md`; Gur decides after reading it.
