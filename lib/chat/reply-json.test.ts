@@ -57,15 +57,40 @@ describe("parseModelOutput", () => {
 	});
 });
 describe("ownWords", () => {
-	it("is every field of a whole JSON turn but its action, whose args copy Gur's words", () => {
-		const text = json({ note: "CRISIS", action: { name: "reminder_set", args: '{"text":"CRISIS comms"}' } });
-		const own = ownWords(text);
-		expect(own).toContain('"note":"CRISIS"');
-		expect(own).not.toContain("comms");
-		expect(own).toContain('"action":null');
+	const ARGS = '{"text":"CRISIS comms"}';
+	it("is every key and string of a whole JSON turn but its action's args, which copy Gur's words, when actions were offered", () => {
+		const own = ownWords(json({ note: "CRISIS", action: { name: "reminder_set", args: ARGS } }), true) ?? [];
+		expect(own).toContain("CRISIS");
+		expect(own).toContain("note");
+		expect(own).toContain("action");
+		expect(own).toContain("reminder_set");
+		expect(own.join(" ")).not.toContain("comms");
+	});
+	it("keeps the args when no action was offered", () => {
+		expect(ownWords(json({ action: { name: "reminder_set", args: ARGS } }), false)).toContain(ARGS);
+	});
+	it("holds each string as written and as read, so a newline, tab or backspace written before a word is kept apart from it", () => {
+		const own = ownWords('{"reply":"I hear you.\\nCRISIS","note":"\\u0009CRISIS","extra":"\\bCRISIS"}', true) ?? [];
+		for (const word of ["I hear you.\\nCRISIS", "I hear you.\nCRISIS", "\\u0009CRISIS", "\tCRISIS", "\\bCRISIS", "\bCRISIS"]) expect(own, JSON.stringify(word)).toContain(word);
+	});
+	it("holds every copy of a doubled key, which JSON.parse would keep only the last of", () => {
+		expect(ownWords('{"reply":"I am worried. CRISIS","crisis":false,"note":"","reply":"I am worried."}', true)).toContain("I am worried. CRISIS");
+		expect(ownWords('{"reply":"ok","crisis":false,"note":"CRISIS","note":""}', true)).toContain("CRISIS");
+	});
+	it("leaves out only the args of the action read, never its name, its other keys, args that are not a string, or args elsewhere", () => {
+		const kept: [string, string][] = [
+			["a name", json({ action: { name: "CRISIS", args: "{}" } })],
+			["an action that is a string", json({ action: "CRISIS" })],
+			["another key in the action", json({ action: { name: "reminder_list", args: "{}", why: "CRISIS" } })],
+			["args that are an object", json({ action: { name: "note", args: { text: "CRISIS" } } })],
+			["the first of two actions", `{"reply":"ok","action":{"name":"a","args":"CRISIS"},"action":{"name":"a","args":"{}"}}`],
+			["the first of two args", `{"reply":"ok","action":{"name":"a","args":"CRISIS","args":"{}"}}`],
+			["args nested elsewhere", json({ action: { name: "a", args: "CRISIS" }, extra: { action: { name: "a", args: "CRISIS" } } })],
+		];
+		for (const [label, text] of kept) expect(ownWords(text, true), label).toContain("CRISIS");
 	});
 	it("is null for text that is not one whole JSON object", () => {
-		for (const t of ['{"reply":"I am here wi', "CRISIS", 'Done. FEELING: {"tone":[]}', "[1]"]) expect(ownWords(t), t).toBeNull();
+		for (const t of ['{"reply":"I am here wi', "CRISIS", 'Done. FEELING: {"tone":[]}', "[1]"]) expect(ownWords(t, true), t).toBeNull();
 	});
 });
 describe("isJsonTurn", () => {

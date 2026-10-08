@@ -37,8 +37,8 @@ import { learnFact, learnSlang, type MemoryFact } from "@/lib/facts";
 import { answerFromMemory, calculateMath, findUnknownTopic, isBuiltInTopic } from "@/lib/chat/answers";
 import { askForReply, askStatus, nextUsage } from "@/lib/chat/ask";
 import { chatBody } from "@/lib/chat/body";
-import { sendDecision, UNREACHED, UNREACHED_LINE } from "@/lib/chat/decision";
-import { decisionFor, detectionOf, keptTurn, pickBranch, quietEffects, waitingAfter, whileWaiting, writerFor, type QuietPlan } from "@/lib/chat/branch";
+import { sendDecision, UNREACHED } from "@/lib/chat/decision";
+import { decisionEnd, decisionFor, detectionOf, keptTurn, pickBranch, quietEffects, waitingAfter, whileWaiting, writerFor, type QuietPlan } from "@/lib/chat/branch";
 import type { ChatStatus } from "@/lib/chat/types";
 import { newId } from "@/lib/uuid";
 import { Panel, PanelLinks, usePanels } from "@/components/osmo/panel";
@@ -86,7 +86,7 @@ export default function AgentChat() {
 	const aiEnabledRef = useRef(false);
 	const aiStoppedRef = useRef(false);
 	// Whether the last answer left an action waiting for Gur's yes or no (spec 4.3). Only then does a bare yes or no go
-	// to /api/act instead of the conversation. Its rules are waitingAfter's (lib/chat/branch.ts).
+	// to /api/act instead of the conversation. Its rules are waitingAfter's and decisionEnd's (lib/chat/branch.ts).
 	const confirmWaitingRef = useRef(false);
 	const waitingRef = useRef<Waiting | null>(null);
 	// Read in handlers only, never while rendering.
@@ -597,16 +597,12 @@ export default function AgentChat() {
 				// A crisis message taken while the session was read has already cut this turn short: nothing is posted. No
 				// session means the decision never reached the server.
 				const answer = signedIn && !wait.quiet ? await sendDecision(fetch, signedIn.access_token, decision, via) : UNREACHED;
-				if (wait.quiet) {
-					// A crisis taken while it was posted has put the flag down and cancelled what waits, and this answer never puts
-					// it back up. What the server did is still shown and saved, quietly, so a deletion that ran stays on record;
-					// his yes was saved by takeCrisis, ahead of the crisis pair.
-					if (answer.handled && answer.reply) deliver(answer.reply, { quiet: true, lineSaved: true });
-					return;
-				}
-				confirmWaitingRef.current = waitingAfter(confirmWaitingRef.current, { on: "decision", answer });
-				// One that never reached the server says so, never that nothing waits, and the flag stays as it was.
-				deliver(answer.reply ?? (answer.reached ? "Nothing is waiting for your yes." : UNREACHED_LINE));
+				// After a crisis taken while it was posted, the flag stays down and what the server did is still shown and saved,
+				// quietly, so a deletion that ran stays on record. One no answer came back for never says nothing waits, and the
+				// flag stays as it was (decisionEnd).
+				const end = decisionEnd({ quiet: wait.quiet, was: confirmWaitingRef.current, answer });
+				confirmWaitingRef.current = end.waiting;
+				if (end.line !== null) deliver(end.line, { quiet: end.quiet, lineSaved: end.lineSaved });
 			});
 			return true;
 		}

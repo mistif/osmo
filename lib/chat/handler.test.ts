@@ -968,6 +968,34 @@ describe("handleChat POST: the detection", () => {
 		expect((await read(await handleChat(post(body()), deps))).source).toBe("model");
 	});
 
+	it("answers crisis for the bare word after a newline, tab or other control written in any field, and in a doubled key's first copy", async () => {
+		const TEXTS = [
+			'{"reply":"I hear you.\\nCRISIS","crisis":false}',
+			turn({ reply: "I hear you.\tCRISIS - please reach out." }),
+			turn({ reply: "Okay.\r\nCRISIS" }),
+			'{"reply":"Okay.\\u0009CRISIS","crisis":false}',
+			'{"reply":"Okay.\\u000aCRISIS","crisis":false}',
+			'{"reply":"ok","crisis":false,"note":"\\u0009CRISIS"}',
+			'{"reply":"ok","crisis":false,"note":"\\u0008CRISIS"}',
+			turn({ note: "Gur:\nCRISIS" }),
+			'{"reply":"I am worried. CRISIS","crisis":false,"note":"","reply":"I am worried."}',
+			'{"reply":"ok","crisis":false,"note":"CRISIS","note":""}',
+		];
+		for (const text of TEXTS) {
+			const { deps, actions } = rig({ fetcher: openai({ text }) });
+			expect(await read(await handleChat(post(body()), deps)), text).toEqual({ source: "fallback", reason: "crisis", usage: { usedToday: SPENT, usable: USABLE } });
+			expect(actions.cancelWaiting, text).toHaveBeenCalledWith(GUR);
+		}
+	});
+
+	it("answers crisis for an object with no reply whose letters alone spell crisis, as before actions", async () => {
+		for (const text of ['{"crisis":1}', '{"Crisis":""}', '{"c":"RISIS"}']) {
+			const { deps, actions } = rig({ fetcher: openai({ text }) });
+			expect(await read(await handleChat(post(body()), deps)), text).toEqual({ source: "fallback", reason: "crisis", usage: { usedToday: SPENT, usable: USABLE } });
+			expect(actions.cancelWaiting, text).toHaveBeenCalledWith(GUR);
+		}
+	});
+
 	it("answers error and logs format for half a JSON cut off by the output cap, and for a fenced block", async () => {
 		const cut = '{"reply":"I am sorry to hear that. Tell me more about';
 		for (const served of [{ status: "incomplete", incomplete: "max_output_tokens", text: cut }, { text: "```json\n" + turn() + "\n```" }]) {
@@ -1466,6 +1494,27 @@ describe("handleChat POST: actions", () => {
 		expect(await read(await handleChat(post(body()), deps))).toEqual({ source: "model", reply: `I will set that for you. ${DONE_LINE}`, usage: USED, detection: null, waiting: false });
 		expect(actions.run).toHaveBeenCalledWith(NOTE, { userId: GUR, surface: "room", now: NOW });
 		expect(actions.cancelWaiting).not.toHaveBeenCalled();
+	});
+
+	it("takes the bare word anywhere else in an action as a crisis, and in its args too when no action was offered", async () => {
+		const OTHERS = [
+			turn("I will do that.", null, { action: { name: "CRISIS", args: "{}" } }),
+			turn("I will do that.", null, { action: "CRISIS" }),
+			turn("I will do that.", null, { action: { name: "reminder_list", args: "{}", why: "CRISIS" } }),
+			turn("I will do that.", null, { action: { name: "reminder_set", args: { text: "CRISIS" } } }),
+		];
+		for (const text of OTHERS) {
+			const actions = fakeActions({ list: ENABLED, run: { kind: "done", line: DONE_LINE, result: null } });
+			const { deps } = rig({ fetcher: openai({ text }), actions });
+			expect(await read(await handleChat(post(body()), deps)), text).toEqual({ source: "fallback", reason: "crisis", usage: USED });
+			expect(actions.run, text).not.toHaveBeenCalled();
+			expect(actions.cancelWaiting, text).toHaveBeenCalledWith(GUR);
+		}
+		const NOTE = { name: "reminder_set", args: JSON.stringify({ text: "CRISIS comms checklist for Monday", at: "2026-10-12T09:00" }) };
+		const actions = fakeActions({ list: null });
+		const { deps } = rig({ fetcher: openai({ text: turn("I will set that for you.", NOTE) }), actions });
+		expect(await read(await handleChat(post(body()), deps))).toEqual({ source: "fallback", reason: "crisis", usage: USED });
+		expect(actions.cancelWaiting).toHaveBeenCalledWith(GUR);
 	});
 
 	it("runs no action for a turn the room has left while the model wrote it, as when a crisis typed meanwhile aborts it", async () => {

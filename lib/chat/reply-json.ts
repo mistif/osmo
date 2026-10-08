@@ -9,11 +9,41 @@ const actionOf = (v: unknown): ModelOutput["action"] => {
 const tryParse = (text: string): unknown => { try { return JSON.parse(text); } catch { return undefined; } };
 // Whether the text is one whole JSON object, as a strict model's turn is.
 export const isJsonTurn = (text: string): boolean => asObject(tryParse(text.trim())) !== null;
-// A whole JSON turn's own words, where the bare word CRISIS may flag a crisis: every field but the action, whose args
-// copy Gur's words. Null for text that is not one whole JSON object.
-export function ownWords(text: string): string | null {
-	const whole = asObject(tryParse(text.trim()));
-	return whole === null ? null : JSON.stringify({ ...whole, action: null });
+// A whole JSON turn's own words, where the bare word CRISIS may flag a crisis: every key and string in it, read from the
+// text itself so each copy of a doubled key counts, and each held as written and as read, so a newline or tab written
+// before a word ("\n", "\u0009") never joins it. Left out: only the args of the action read, and only when actions were
+// offered, since those copy Gur's words. Null for text that is not one whole JSON object.
+export function ownWords(text: string, offered: boolean): string[] | null {
+	const trimmed = text.trim();
+	const whole = asObject(tryParse(trimmed));
+	if (whole === null) return null;
+	const args = offered ? actionOf(whole.action)?.args : undefined;
+	const words: string[] = [];
+	// The objects and arrays open at this point, each with the key last read in it; and whether a key comes next.
+	const open: { object: boolean; key: string | null }[] = [];
+	let keyNext = false;
+	for (let i = 0; i < trimmed.length; i++) {
+		const c = trimmed[i];
+		if (c === "{" || c === "[") {
+			open.push({ object: c === "{", key: null });
+			keyNext = c === "{";
+		} else if (c === "}" || c === "]") open.pop();
+		else if (c === ",") keyNext = open.at(-1)?.object === true;
+		else if (c === '"') {
+			// The text parsed whole, so every string closes, and an escaped quote is skipped with its backslash.
+			let end = i + 1;
+			while (trimmed[end] !== '"') end += trimmed[end] === "\\" ? 2 : 1;
+			const written = trimmed.slice(i + 1, end);
+			const read = JSON.parse(trimmed.slice(i, end + 1)) as string;
+			const top = open.at(-1);
+			if (keyNext && top) top.key = read;
+			const isArgs = !keyNext && read === args && open.length === 2 && open[0].key === "action" && open[1].object && open[1].key === "args";
+			if (!isArgs) words.push(written, read);
+			keyNext = false;
+			i = end;
+		}
+	}
+	return words;
 }
 const FEELING = "FEELING:";
 // A JSON object's start, such as {"reply":. Plain speech has none, so text that holds one is never spoken.

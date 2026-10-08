@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { sendDecision, UNREACHED_LINE } from "./decision";
+import { NOTHING_WAITING_LINE, sendDecision, UNREACHED_LINE } from "./decision";
 
 const json = (body: unknown, status = 200) =>
 	new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -84,8 +84,14 @@ describe("sendDecision", () => {
 		expect(await sendDecision(honouring, "t", "yes", "typed", 20)).toEqual(UNREACHED);
 	});
 
-	it("has a line for a decision that never reached the server, which Osmo can say", () => {
+	it("has a line for a decision no answer came back for, which Osmo can say", () => {
 		expect(UNREACHED_LINE).toMatch(/^[A-Za-z ,.]+$/);
 		expect(UNREACHED_LINE).not.toContain("Nothing is waiting");
+		expect(NOTHING_WAITING_LINE).toMatch(/^[A-Za-z ,.]+$/);
+	});
+
+	it("never says the answer did not get through, since a timeout or a lost answer can follow an action that ran", () => {
+		expect(UNREACHED_LINE).not.toMatch(/could not|couldn't|did not get|didn't get|never/i);
+		expect(UNREACHED_LINE).toMatch(/did not hear back/i);
 	});
 });

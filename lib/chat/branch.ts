@@ -5,7 +5,7 @@ import { decisionOf } from "../actions/decision-words";
 import { askedForName, justLearnedName } from "../agent/context";
 import { isCrisis } from "../agent/safety";
 import type { AskResult } from "./ask";
-import type { DecisionAnswer } from "./decision";
+import { NOTHING_WAITING_LINE, UNREACHED_LINE, type DecisionAnswer } from "./decision";
 import { LIMITS } from "./types";
 
 export type Branch =
@@ -133,4 +133,17 @@ export function waitingAfter(was: boolean, step: WaitingStep): boolean {
 	if (step.on === "model") return step.answer?.kind === "model" && step.answer.waiting;
 	if (step.on === "decision") return step.answer.reached ? step.answer.waiting : was;
 	return false;
+}
+
+// How a bare yes or no posted to /api/act ends in the room: whether one waits after it, and the line Osmo delivers, if
+// any, and how. quiet: a crisis was taken while it was posted; that put the flag down and cancelled what waits, so the
+// flag never goes back up, and only a line the server sent is shown, quietly, with his yes already saved by takeCrisis
+// (lineSaved). Otherwise the answer sets the flag (waitingAfter), and Osmo says the server's line, that nothing waits
+// when the server said so, or that he did not hear back.
+export type DecisionEnd = { waiting: boolean; line: string | null; quiet: boolean; lineSaved: boolean };
+export function decisionEnd(c: { quiet: boolean; was: boolean; answer: DecisionAnswer }): DecisionEnd {
+	const { answer } = c;
+	if (c.quiet) return { waiting: false, line: answer.handled && answer.reply ? answer.reply : null, quiet: true, lineSaved: true };
+	const line = answer.reply ?? (answer.reached ? NOTHING_WAITING_LINE : UNREACHED_LINE);
+	return { waiting: waitingAfter(c.was, { on: "decision", answer }), line, quiet: false, lineSaved: false };
 }

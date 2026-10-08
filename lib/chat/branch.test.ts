@@ -20,7 +20,9 @@ import type { SendOptions } from "../voice/guest";
 import type { AskResult } from "./ask";
 import { answerFromMemory, calculateMath, findUnknownTopic, isBuiltInTopic } from "./answers";
 import type { RoomLine } from "./body";
+import { NOTHING_WAITING_LINE, UNREACHED_LINE, type DecisionAnswer } from "./decision";
 import {
+	decisionEnd,
 	decisionFor,
 	detectionOf,
 	keptTurn,
@@ -465,5 +467,33 @@ describe("waitingAfter", () => {
 
 	it("leaves it as it was after a decision that never reached the server, which knows nothing of it", () => {
 		for (const was of [true, false]) expect(waitingAfter(was, { on: "decision", answer: { handled: false, reply: null, waiting: false, reached: false } }), String(was)).toBe(was);
+	});
+});
+
+describe("decisionEnd", () => {
+	const ran: DecisionAnswer = { handled: true, reply: "Deleted the note.", waiting: false, reached: true };
+	const typeIt: DecisionAnswer = { handled: true, reply: "For that one I need you to type yes.", waiting: true, reached: true };
+	const none: DecisionAnswer = { handled: false, reply: null, waiting: false, reached: true };
+	const unreached: DecisionAnswer = { handled: false, reply: null, waiting: false, reached: false };
+	const spoken = { quiet: false, lineSaved: false };
+
+	it("says the server's line, and takes whether one still waits from its answer", () => {
+		expect(decisionEnd({ quiet: false, was: true, answer: ran })).toEqual({ waiting: false, line: "Deleted the note.", ...spoken });
+		expect(decisionEnd({ quiet: false, was: true, answer: typeIt })).toEqual({ waiting: true, line: typeIt.reply, ...spoken });
+	});
+
+	it("says nothing waits only when the server answered so", () => {
+		expect(decisionEnd({ quiet: false, was: true, answer: none })).toEqual({ waiting: false, line: NOTHING_WAITING_LINE, ...spoken });
+	});
+
+	it("keeps the flag as it was and says it did not hear back when no answer came", () => {
+		for (const was of [true, false]) expect(decisionEnd({ quiet: false, was, answer: unreached }), String(was)).toEqual({ waiting: was, line: UNREACHED_LINE, ...spoken });
+	});
+
+	it("never puts the flag back up after a crisis, and shows only a line the server sent, quietly, with his yes already saved", () => {
+		for (const was of [true, false]) {
+			for (const answer of [ran, typeIt]) expect(decisionEnd({ quiet: true, was, answer }), answer.reply ?? "").toEqual({ waiting: false, line: answer.reply, quiet: true, lineSaved: true });
+			for (const answer of [none, unreached]) expect(decisionEnd({ quiet: true, was, answer }), JSON.stringify(answer)).toEqual({ waiting: false, line: null, quiet: true, lineSaved: true });
+		}
 	});
 });

@@ -16,7 +16,7 @@ import { callModel, type ModelOutcome, type Parsed } from "./openai";
 import { buildInput, buildInstructions, fitToCeiling } from "./prompt";
 import { checkBody } from "./request";
 import { ownWords, parseModelOutput, type ModelOutput } from "./reply-json";
-import { hasCrisisWord, isCrisisFlag, lastFullSentence, saidWhole, speakable } from "./speakable";
+import { hasCrisisWord, isCrisisFlag, lastFullSentence, saidWhole, speakable, spellsCrisis } from "./speakable";
 import { turnFormat } from "./turn-schema";
 import type { ChatAnswer, ChatStatus, FallbackReason, InputItem, Usage } from "./types";
 
@@ -168,7 +168,7 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 	const { outcome, usage } = spent;
 
 	// 12. Check the reply. A crisis drops the turn's action.
-	const result = judge(deps, outcome, entry.model);
+	const result = judge(deps, outcome, entry.model, { args: actions !== null, quoted: null });
 	if ("reason" in result) {
 		if (result.reason === "crisis") await cancel();
 		return fallback(result.reason, usage);
@@ -199,7 +199,7 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 			const fitted = fitToCeiling(body, CALL_CEILING, { format: form, actions, result: read });
 			const again = await spend(ctx, { instructions: buildInstructions(fitted, form, actions, read), input: buildInput(fitted), format });
 			final = again.usage ?? final;
-			const second = again.kind === "called" ? judge(deps, again.outcome, entry.model, out.result) : null;
+			const second = again.kind === "called" ? judge(deps, again.outcome, entry.model, { args: true, quoted: out.result }) : null;
 			if (second !== null && "reason" in second && second.reason === "crisis") {
 				await cancel();
 				return fallback("crisis", final);
@@ -328,9 +328,9 @@ type Verdict =
 	| { reply: string; detection: Detection | null; action: ModelOutput["action"]; whole: boolean }
 	| { reason: "error" | "crisis" | "empty"; why: "model" | "refusal" | "content_filter" | "status" | "incomplete" | "format" | null };
 
-// Step 12 for either call: the verdict, with why a reply was refused logged by name. quoted is a result read back for call 2.
-function judge(deps: ChatDeps, outcome: Answered, model: string, quoted: string | null = null): Verdict {
-	const result = verdict(outcome.parsed, model, quoted);
+// Step 12 for either call: the verdict, with why a reply was refused logged by name. copies: what the turn may copy (see flagged).
+function judge(deps: ChatDeps, outcome: Answered, model: string, copies: Copies): Verdict {
+	const result = verdict(outcome.parsed, model, copies);
 	if ("reason" in result) {
 		if (result.why === "model") deps.log("chat.model", { served: outcome.parsed.model, requestId: outcome.requestId });
 		else if (result.why !== null) deps.log("chat.reply", { why: result.why, requestId: outcome.requestId });
@@ -342,25 +342,29 @@ function judge(deps: ChatDeps, outcome: Answered, model: string, quoted: string 
 // still counts. Quotes inside a string are escaped, so it never matches in an action's args.
 const CRISIS_FIELD = /"crisis"\s*:\s*true/;
 
-// Whether the model flagged a crisis: the field, a reply of the word alone, or the old bare word CRISIS anywhere in the
-// model's own words. For a whole JSON turn those leave out its action, whose args copy Gur's words. A result read back
-// for call 2 is his data (notes, reminders, later mail), so when it holds the word itself a JSON turn may copy it
-// anywhere: then only the field and a reply of the word alone count.
-function flagged(text: string, out: ModelOutput | null, quoted: string | null): boolean {
-	if (out?.crisis || CRISIS_FIELD.test(text)) return true;
-	const own = ownWords(text);
+// What a turn may copy of Gur's own words without it flagging a crisis. args: actions were offered, so the args of the
+// action it sets copy his words. quoted: the result call 2 answers with, his data (notes, reminders, later mail).
+type Copies = { args: boolean; quoted: string | null };
+
+// Whether the model flagged a crisis: the field, a reply of the word alone, text whose letters alone spell it (as an
+// object with no reply may), or the old bare word CRISIS anywhere in the model's own words (see ownWords: a whole JSON
+// turn's every key and string but the args it may copy). When the result call 2 answers with holds the word itself, a
+// JSON turn may copy it anywhere: then only the field and a reply of the word alone count.
+function flagged(text: string, out: ModelOutput | null, copies: Copies): boolean {
+	if (out?.crisis || CRISIS_FIELD.test(text) || spellsCrisis(text)) return true;
+	const own = ownWords(text, copies.args);
 	if (own === null) return isCrisisFlag(text);
-	return !(quoted !== null && hasCrisisWord(quoted)) && hasCrisisWord(own);
+	return !(copies.quoted !== null && hasCrisisWord(copies.quoted)) && own.some(hasCrisisWord);
 }
 
 // Step 12, in this order: the crisis flag (see flagged; it stands whichever model wrote it), then the served model (a
 // missing one counts as a mismatch), a refusal or content filter, the status, text that is half a JSON or a fence, a
 // reply cut off by the output cap cut back to its last full sentence, and last whether anything speakable is left. The
 // detection is checked here, so the browser only ever gets a validated one. The action comes with the reply.
-function verdict(parsed: Parsed, model: string, quoted: string | null): Verdict {
+function verdict(parsed: Parsed, model: string, copies: Copies): Verdict {
 	const out = parseModelOutput(parsed.text);
 	// A crisis flag stands whichever model wrote it; a mismatch is still logged, and its settling row still stops the day.
-	if (flagged(parsed.text, out, quoted)) return { reason: "crisis", why: parsed.model !== model ? "model" : null };
+	if (flagged(parsed.text, out, copies)) return { reason: "crisis", why: parsed.model !== model ? "model" : null };
 	if (parsed.model !== model) return { reason: "error", why: "model" };
 	if (parsed.refused || (parsed.status === "incomplete" && parsed.incomplete === "content_filter")) {
 		return { reason: "error", why: parsed.refused ? "refusal" : "content_filter" };
