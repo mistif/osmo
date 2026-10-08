@@ -136,6 +136,8 @@ export class VoiceEngine {
 	private error: string | null = null;
 	// Bumped by dispose(), so a mic or detector still loading from before it can't land on the fresh instance.
 	private generation = 0;
+	// True from dispose() until the next configure(): a reply landing after Lock (or an unmount) is not spoken.
+	private disposed = false;
 	// The last JUDGEMENT_LOG_SIZE speaker checks, oldest first. Kept across dispose(), so a remount doesn't lose them.
 	private readonly judgements: JudgementRecord[] = [];
 
@@ -149,6 +151,7 @@ export class VoiceEngine {
 
 	readonly configure = (config: VoiceConfig): void => {
 		this.config = config;
+		this.disposed = false;
 		const want = config.listen && config.wakeReady;
 		if (want && config.prints.length === 0) {
 			// Listening needs a taught voice, so the second check always runs while the microphone is on.
@@ -205,7 +208,7 @@ export class VoiceEngine {
 
 	readonly onReply = (reply: string, via: Via): void => {
 		const config = this.config;
-		if (!config) return;
+		if (!config || this.disposed) return;
 		const wanted = (via === "voice" || config.speakTyped) && config.canSpeak;
 		const before = this.state;
 		const next = this.send({ type: "reply", via, spoken: wanted, now: this.deps.now() });
@@ -224,6 +227,7 @@ export class VoiceEngine {
 	// detector is kept (reloading the model is wasted when React StrictMode remounts the same engine).
 	readonly dispose = (): void => {
 		this.generation += 1;
+		this.disposed = true;
 		this.stopHearing();
 		this.mic?.close();
 		this.mic = null;

@@ -695,4 +695,20 @@ describe("VoiceEngine", () => {
 		expect(h.mics).toHaveLength(2);
 		expect(h.mics[1].closed).toBe(false);
 	});
+
+	it("says nothing for a reply that lands after dispose (Lock), and speaks again once configured", async () => {
+		const h = harness({ speakTyped: true });
+		await h.flush();
+		await converse(h, "Osmo, hello");
+		h.engine.dispose();
+		const spoken = h.said.length;
+		h.engine.onReply("Good evening.", "voice");
+		h.engine.onReply("Good evening.", "typed");
+		expect(h.said).toHaveLength(spoken);
+		expect(h.mode()).toBe("off");
+		h.engine.configure(h.config);
+		await h.flush();
+		h.engine.onReply("Good evening.", "typed");
+		expect(h.said).toHaveLength(spoken + 1);
+	});
 });
