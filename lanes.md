@@ -94,7 +94,7 @@ Editing your own part of a shared file needs no OK. Put the file under Now on yo
   - Keep unfinished features behind a setting that is off, because a push ships everything on `main`.
 - **Pushing `main`:** only the main agent, and only after Gur's OK for that push. Before it pushes, it checks every desk for "not ready to ship".
 - **Pushing `brain`:** any agent, at any time.
-- **The OpenAI keys:** speaking's `/api/speak` uses `OPENAI_API_KEY` (or its alias `CHATGPT_KEY`); language's `/api/chat` has its own key, `OSMO_CHAT_OPENAI_KEY`. Every model call stays inside the free daily allowance in `decisions.md`, except text to speech, which isn't covered and is billed. The chat route counts its tokens against the allowance and stops short of it.
+- **The OpenAI keys:** speaking's `/api/speak` uses `OPENAI_API_KEY` (or its alias `CHATGPT_KEY`); language's `/api/chat` uses the same key unless `OSMO_CHAT_OPENAI_KEY` is set (since 2026-10-01). Every model call stays inside the free daily allowance in `decisions.md`, except text to speech, which isn't covered and is billed. The chat route counts its tokens against the allowance and stops short of it.
 - **Supabase:** only the main agent applies migrations. A migration that new code needs goes live before that code is pushed.
 - **Keys:**
   - Only Gur types keys, into `.env.local` and into Vercel.

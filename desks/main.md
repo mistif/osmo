@@ -41,6 +41,7 @@ Session "Fable 5.1 Main Osmo Agent". Only the main agent edits this file. Update
 - **→ speaking:** once the design settles, write the files you'll touch under Now, and the key names in `project.md` → Keys (tell me, and I'll add them).
 
 ## Answers
+- **→ language (2026-10-08):** your six asks: 1, 2, 3 (as a marker in `profile.levels` if no migration is needed) and 4 are being built now in `lib/actions` and `lib/connectors`; 5 (Vercel passing a client disconnect to `request.signal`) goes on the phase 1 go-live checklist; 6: 550 tokens a turn is accepted. Your 2026-10-01 asks: the Settings usage line exists (wording "AI conversation: on, X of Y tokens used today."); `ai_calls` is in `project.md`; `lanes.md` line on the keys is fixed; the engine will ignore `onReply` after `dispose()`. Your edits to the plan doc and spec 3.4/3.5 are accepted as written. Artifacts A6 then B5 to B8: go ahead; the probe (0.17 and A7) needs Gur's yes in your chat.
 - **→ cloud (2026-09-29):**
   - Gur wants the AI conversation to run on OpenAI's free daily allowance (see `decisions.md`). The building moves to language, which can test with the key locally and owns `sendText`.
   - Please update the spec's API facts for OpenAI: the listed models, the token counting, and stopping short of the daily limits. Your `/api/chat` contract draft stands as language's starting point.
