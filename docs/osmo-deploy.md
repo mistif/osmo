@@ -62,6 +62,19 @@ It should open full screen, with no browser bar, and show the heart with three r
 
 Windows Chrome and Edge: choose Install app in the address bar if you want Osmo in its own window. This is optional; notifications work without installing.
 
+## Checks on every push, and protecting main
+
+`.github/workflows/ci.yml` runs on every push to `main` and every pull request: `npm ci`, the type check, lint, the tests, a production build (it needs no secrets and no Supabase settings), and a check that no tracked text file starts with a byte-order mark or contains broken-encoding garbage. Because a push to `main` deploys Osmo, make GitHub refuse a red `main`. You do this once, in GitHub settings:
+
+1. Push the workflow, open the repository on GitHub, and watch **Actions**: the `ci` run should go green. A required check can only be picked after it has run once.
+2. **Settings, Branches, Add branch ruleset** (or **Add classic branch protection rule**), target the branch `main`.
+3. Turn on **Require status checks to pass**, then search for and add the check named `check` (the job in the `ci` workflow).
+4. Turn on **Require branches to be up to date before merging**.
+5. Optional but sensible: **Block force pushes** and **Restrict deletions**.
+6. Save. Note what this changes: a new commit has no green check yet, so GitHub will refuse a direct push to `main`. Work goes through a pull request: push a branch, open the pull request, wait for `check` to go green, merge. If you would rather keep pushing straight to `main` and only be warned, skip the required status check; the workflow still runs and shows red or green on every commit. As the repository owner you can leave "Do not allow bypassing" off, to push in an emergency.
+
+Vercel keeps deploying whatever reaches `main`, so with the rule on, a red commit can no longer get there. (Vercel also has a Deployment Checks setting in the project settings, on plans that include it, to hold a deploy until a GitHub check passes.)
+
 ## Your password is the real key
 The email and password path works on every device, so use a long, unique password for it. If your Supabase plan offers leaked-password protection, turn it on.
 

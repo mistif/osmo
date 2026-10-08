@@ -1,0 +1,69 @@
+# Osmo's checks. Every push to main and every pull request runs the same things Gur's agents run
+# by hand: types, lint, tests, a production build, and a guard against broken text encoding.
+# Nothing here needs a secret, and the build needs no Supabase settings.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Types
+        run: npx tsc --noEmit -p .
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npx vitest run
+
+      - name: Build
+        run: npx next build
+
+      # A tracked text file must be plain UTF-8: no byte-order mark at the start, and none of the
+      # garbage that appears when UTF-8 is read as Windows-1252 and saved again (an a with a
+      # circumflex, then a euro sign: bytes c3 a2 e2 82 ac). Both have broken Osmo's text before.
+      - name: Text encoding
+        run: |
+          set -u
+          export LC_ALL=C
+          bad=0
+          mojibake=$(printf '\xc3\xa2\xe2\x82\xac')
+          while IFS= read -r f; do
+            [ -f "$f" ] || continue
+            if [ "$(head -c 3 "$f" | od -An -tx1 | tr -d ' \n')" = "efbbbf" ]; then
+              echo "BOM at the start of: $f"
+              bad=1
+            fi
+            if grep -qF -- "$mojibake" "$f"; then
+              echo "Broken encoding (mojibake) in: $f"
+              bad=1
+            fi
+          done < <(git ls-files -- app components lib docs | grep -E '[.](ts|tsx|css|md)$' || true)
+          if [ "$bad" -ne 0 ]; then
+            echo "Fix the files above: save them as UTF-8 without a BOM and restore the original characters."
+            exit 1
+          fi
+          echo "All tracked text files are clean UTF-8."
