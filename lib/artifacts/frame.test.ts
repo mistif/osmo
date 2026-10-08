@@ -67,3 +67,23 @@ describe("newNonce", () => {
 		expect(newNonce()).toMatch(/^[0-9a-f]{32}$/);
 	});
 });
+
+describe("buildFramePage with the runtime inlined (dev, and any page that is not https)", () => {
+	const TEXT = "window.__osmoDefine = function(){};";
+	const inline = (over: Partial<Parameters<typeof buildFramePage>[0]> = {}) => buildFramePage({ nonce: NONCE, runtimeText: TEXT, code: "exports.default = 1;", aura: AURA, ...over });
+	it("keeps the same policy and exactly two nonced script tags, the first without an address", () => {
+		const html = inline();
+		expect(html).toContain(`content="${cspFor(NONCE)}"`);
+		const tags = html.match(/<script[^>]*>/g) ?? [];
+		expect(tags).toEqual([`<script nonce="${NONCE}">`, `<script nonce="${NONCE}">`]);
+		expect(html.indexOf(TEXT)).toBeLessThan(html.indexOf("__osmoDefine(function"));
+	});
+	it("needs exactly one of the address or the text", () => {
+		expect(() => buildFramePage({ nonce: NONCE, code: "x", aura: AURA })).toThrow();
+		expect(() => buildFramePage({ nonce: NONCE, runtimeUrl: RUNTIME, runtimeText: TEXT, code: "x", aura: AURA })).toThrow();
+	});
+	it("refuses runtime text that could close the script tag", () => {
+		expect(() => inline({ runtimeText: "a </script><b>" })).toThrow();
+		expect(() => inline({ runtimeText: "a <!-- b" })).toThrow();
+	});
+});
