@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { validateDetection, type Detection } from "../agent/detection";
 import { bearerToken, requireUser, type ServerUser } from "../server/auth";
-import { CALL_CEILING, dayKey, estimateTokens, fits, MAX_OUTPUT_TOKENS, ownerId, readConfig, sameUser, type Env } from "./allowance";
+import { CALL_CEILING, dayKey, estimateTokens, fits, MAX_OUTPUT_TOKENS, ownerId, readConfig, sameUser, type Env, type ModelEntry } from "./allowance";
 import { dayUse, ledgerKey, reservationRow, settlingRow, supabaseLedger, ZERO, type Counts, type LedgerStore, type Reservation } from "./ledger";
 import { callModel, type ModelOutcome, type Parsed } from "./openai";
 import { buildInput, buildInstructions, fitToCeiling } from "./prompt";
@@ -16,7 +16,7 @@ import { checkBody } from "./request";
 import { parseModelOutput } from "./reply-json";
 import { isCrisisFlag, lastFullSentence, speakable } from "./speakable";
 import { TURN_FORMAT } from "./turn-schema";
-import type { ChatAnswer, ChatStatus, FallbackReason, Usage } from "./types";
+import type { ChatAnswer, ChatStatus, FallbackReason, InputItem, Usage } from "./types";
 
 export type ChatDeps = {
 	// The server's settings, read on every request.
@@ -118,31 +118,58 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 	const body = fitToCeiling(checked.body);
 	const instructions = buildInstructions(body, entry.strict ? "json" : "feeling");
 	const input = buildInput(body);
-	const estimate = estimateTokens(instructions, input);
+
+	// 5 to 11, in spend.
+	const ctx: Spend = { deps, user, entry, key: config.key, usable, store: deps.ledger(token) };
+	const spent = await spend(ctx, { instructions, input, format: entry.strict ? TURN_FORMAT : undefined });
+	if (spent.kind === "skip") return fallback(spent.reason, spent.usage);
+	const { outcome, usage } = spent;
+
+	// 12. Check the reply.
+	const result = verdict(outcome.parsed, entry.model);
+	if ("reason" in result) {
+		if (result.why === "model") deps.log("chat.model", { served: outcome.parsed.model, requestId: outcome.requestId });
+		else if (result.why !== null) deps.log("chat.reply", { why: result.why, requestId: outcome.requestId });
+		return fallback(result.reason, usage);
+	}
+
+	// 13. Answer.
+	return answer({ source: "model", reply: result.reply, usage, detection: result.detection });
+}
+
+type Spend = { deps: ChatDeps; user: ServerUser; entry: ModelEntry; key: string; usable: number; store: LedgerStore };
+// A skip names the fallback the turn answers with; a call that ran was always answered, since spend logs and skips the rest.
+type Spent = { kind: "skip"; reason: FallbackReason; usage: Usage | null } | { kind: "called"; outcome: Answered; usage: Usage };
+type Answered = Extract<ModelOutcome, { kind: "answered" }>;
+
+// Steps 5 to 11 for one model call, so every call of a turn is booked the same way: read the day, check the
+// budget, reserve, read again, call once, settle.
+export async function spend(s: Spend, call: { instructions: string; input: InputItem[]; format: unknown }): Promise<Spent> {
+	const { deps, user, entry, usable, store } = s;
+	const estimate = estimateTokens(call.instructions, call.input);
 
 	// 5. Today's rows. The clock is read once, so a call that crosses midnight UTC stays on one day.
 	const day = dayKey(deps.now());
-	const key = ledgerKey(config.key);
-	const store = deps.ledger(token);
+	const key = ledgerKey(s.key);
 	const first = await store.readDay(day);
 	if (!first.ok) {
 		deps.log("chat.ledger", { step: "read", code: first.code });
-		return fallback("error", null);
+		return { kind: "skip", reason: "error", usage: null };
 	}
 	const before = dayUse(first.value, entry.pool, user.id, key);
 
 	// 6. A model other than the one asked for was served today: nothing more until 00:00 UTC.
-	if (before.stopped) return fallback("error", { usedToday: before.used, usable });
+	if (before.stopped) return { kind: "skip", reason: "error", usage: { usedToday: before.used, usable } };
 
 	// 7. The budget, before the call and never after. fitToCeiling always gets a valid body under the
 	// ceiling; the check is here so a prompt that somehow doesn't fit is never sent.
-	if (estimate > CALL_CEILING || !fits(before.used, estimate, usable)) return fallback("allowance", { usedToday: before.used, usable });
+	if (estimate > CALL_CEILING || !fits(before.used, estimate, usable)) return { kind: "skip", reason: "allowance", usage: { usedToday: before.used, usable } };
 
 	// 8. Reserve the estimate.
 	const booked = await store.insert(reservationRow({ day, pool: entry.pool, model: entry.model, estimate, maxOutput: MAX_OUTPUT_TOKENS }));
 	if (!booked.ok) {
 		deps.log("chat.ledger", { step: "reserve", code: booked.code });
-		return fallback("error", { usedToday: before.used, usable });
+		return { kind: "skip", reason: "error", usage: { usedToday: before.used, usable } };
 	}
 	const reservation: Reservation = { id: booked.value, day, pool: entry.pool, model: entry.model, estimate };
 	// A settling row that fails to save is logged, and the reservation's estimate stays counted.
@@ -158,17 +185,17 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 	if (!second.ok) {
 		deps.log("chat.ledger", { step: "read", code: second.code });
 		await settle(ZERO, entry.model);
-		return fallback("error", null);
+		return { kind: "skip", reason: "error", usage: null };
 	}
 	const after = dayUse(second.value, entry.pool, user.id, key);
 	if (after.stopped || after.used > usable) {
 		const withdrawn = await settle(ZERO, entry.model);
-		return fallback(after.stopped ? "error" : "allowance", { usedToday: withdrawn ? after.used - estimate : after.used, usable });
+		return { kind: "skip", reason: after.stopped ? "error" : "allowance", usage: { usedToday: withdrawn ? after.used - estimate : after.used, usable } };
 	}
 
 	// 10. The one call, with no retries.
 	const safetyId = createHash("sha256").update(user.id).digest("hex");
-	const outcome = await callModel(deps.fetch, config.key, { entry, instructions, input, safetyId, maxOutput: MAX_OUTPUT_TOKENS, format: entry.strict ? TURN_FORMAT : undefined });
+	const outcome = await callModel(deps.fetch, s.key, { entry, instructions: call.instructions, input: call.input, safetyId, maxOutput: MAX_OUTPUT_TOKENS, format: call.format });
 
 	// 11. Settle. usedToday is the second read's count with this call's estimate replaced by what was settled.
 	let usedToday = after.used;
@@ -182,19 +209,9 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 			type: outcome.kind === "rejected" ? outcome.type : null,
 			requestId: outcome.requestId,
 		});
-		return fallback("error", usage);
+		return { kind: "skip", reason: "error", usage };
 	}
-
-	// 12. Check the reply.
-	const result = verdict(outcome.parsed, entry.model);
-	if ("reason" in result) {
-		if (result.why === "model") deps.log("chat.model", { served: outcome.parsed.model, requestId: outcome.requestId });
-		else if (result.why !== null) deps.log("chat.reply", { why: result.why, requestId: outcome.requestId });
-		return fallback(result.reason, usage);
-	}
-
-	// 13. Answer.
-	return answer({ source: "model", reply: result.reply, usage, detection: result.detection });
+	return { kind: "called", outcome, usage };
 }
 
 // What a call is settled with: OpenAI's own counts when it reported them, and zero for a request it

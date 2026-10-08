@@ -6,7 +6,7 @@ import { CHARACTER } from "../agent/character";
 import { DEFAULT_WEIGHTS } from "../agent/state";
 import { bearerToken } from "../server/auth";
 import { CALL_CEILING, estimateTokens, MAX_OUTPUT_TOKENS, MODELS, type Env } from "./allowance";
-import { chatDeps, handleChat, type ChatDeps } from "./handler";
+import { chatDeps, handleChat, spend, type ChatDeps } from "./handler";
 import { ledgerKey, reservationRow, settlingRow, supabaseLedger, type LedgerRow, type LedgerStore } from "./ledger";
 import { RESPONSES_URL } from "./openai";
 import { buildInput, buildInstructions } from "./prompt";
@@ -982,5 +982,35 @@ describe("handleChat POST: nothing leaks", () => {
 		for (const secret of [KEY, "sk-proj", "Incorrect API key", SENTENCE, "input[1]", PG_MESSAGE, "already exists", "Check the ledger", "What should we cook"]) {
 			expect(all, secret).not.toContain(secret);
 		}
+	});
+});
+
+describe("spend: one reserve, call and settle", () => {
+	const hello = { instructions: "Say hello to Gur.", input: [{ role: "user" as const, content: "Hi." }], format: TURN_FORMAT };
+	const bye = { instructions: "Say goodbye to Gur.", input: [{ role: "user" as const, content: "Bye for now." }], format: TURN_FORMAT };
+
+	it("books two calls on one ledger, each reserved and settled, and skips a third that no longer fits, with no call", async () => {
+		const { deps, ledger, fetcher } = rig();
+		const entry = MODELS.find((m) => m.model === MODEL)!;
+		// Room for both calls, and not for a third once both are settled.
+		const usable = 2 * SPENT + estimateTokens(hello.instructions, hello.input) - 1;
+		const s = { deps, user: { id: GUR }, entry, key: KEY, usable, store: ledger.store };
+		const one = await spend(s, hello);
+		expect(one).toMatchObject({ kind: "called", outcome: { kind: "answered" }, usage: { usedToday: SPENT, usable } });
+		const two = await spend(s, bye);
+		expect(two).toMatchObject({ kind: "called", outcome: { kind: "answered" }, usage: { usedToday: 2 * SPENT, usable } });
+		expect(fetcher).toHaveBeenCalledTimes(2);
+		expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body)).instructions).toBe(bye.instructions);
+		const reservations = ledger.rows.filter((row) => row.settles === null);
+		const settling = ledger.rows.filter((row) => row.settles !== null);
+		expect(reservations.map((row) => row.input_tokens + row.output_tokens)).toEqual([estimateTokens(hello.instructions, hello.input), estimateTokens(bye.instructions, bye.input)]);
+		expect(settling.map((row) => row.settles)).toEqual(reservations.map((row) => row.id));
+		for (const row of settling) {
+			expect(row).toMatchObject({ model: MODEL, input_tokens: 1200, cached_tokens: 1024, output_tokens: 40 });
+			expect(row.signature).toMatch(/^[0-9a-f]{64}$/);
+		}
+		expect(await spend(s, hello)).toEqual({ kind: "skip", reason: "allowance", usage: { usedToday: 2 * SPENT, usable } });
+		expect(fetcher).toHaveBeenCalledTimes(2);
+		expect(ledger.rows).toHaveLength(4);
 	});
 });
