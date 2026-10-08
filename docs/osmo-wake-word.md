@@ -54,5 +54,5 @@ The notebook is a year behind Colab. Trained once this way; the model is `public
 
 ## If he wakes too often, or not enough
 
-- **Wakes by mistake** (TV, conversation): first raise `threshold` in `lib/voice/wake.ts` (0.7 → 0.8). If that isn't enough, train again with the phrase "hey osmo" — set `config["target_phrase"] = ["hey osmo"]` and `config["model_name"] = "hey_osmo"` — which wakes by mistake far less. The downloaded file is `hey_osmo.onnx`; rename it to `osmo.onnx` before giving it to Claude. Claude must also regenerate the voice-check clips to say "Hey Osmo" (they currently say "Osmo.").
-- **Doesn't wake when you say it:** lower `threshold` a little (0.7 → 0.6), or train again with `n_samples` at 10000.
+- **Wakes by mistake** (TV, conversation): first raise `threshold` in `lib/voice/wake.ts` (0.6 → 0.7). If that isn't enough, train again with the phrase "hey osmo" — set `config["target_phrase"] = ["hey osmo"]` and `config["model_name"] = "hey_osmo"` — which wakes by mistake far less. The downloaded file is `hey_osmo.onnx`; rename it to `osmo.onnx` before giving it to Claude. Claude must also regenerate the voice-check clips to say "Hey Osmo" (they currently say "Osmo.").
+- **Doesn't wake when you say it:** lower `threshold` a little (0.6 → 0.5, the library default), or train again with `n_samples` at 10000.
