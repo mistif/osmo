@@ -48,6 +48,12 @@ describe("crisis messages with typos", () => {
 		}
 	});
 
+	it("still catches Swedish ones", () => {
+		for (const text of ["jag vill ta livet av migg", "jag vill skdaa mig själv", "jag vill försvina för alltid", "jag vill hänga mgi"]) {
+			expect(isCrisis(text), text).toBe(true);
+		}
+	});
+
 	it("does not flag ordinary messages that only look close", () => {
 		for (const text of ["and it all worked out", "i killed it at work today", "that movie was to die for", "im dead lol"]) {
 			expect(isCrisis(text), text).toBe(false);
