@@ -44,6 +44,7 @@ Osmo is a chat companion for one person, Gur. Today he is rule-based: every repl
 | `OSMO_CHAT_MODEL` | optional | language: `/api/chat`. A dated snapshot from `lib/chat/allowance.ts`; unset means `gpt-5.4-mini-2026-03-17`. An unlisted model means off. |
 | `OSMO_MINI_TOKENS_PER_DAY` | `.env.local`, Vercel Production | language: `/api/chat`. Osmo's share of the small pool per UTC day, digits only (Gur's value: 700000). Missing or invalid means off. |
 | `OSMO_TOKENS_RESERVE` | optional | language: `/api/chat`. The margin kept back, written `0` or `0.x`; unset or malformed means 0.1. |
+| `OSMO_BUILD` | `.env.local`; Vercel Production when Gur turns it on | main and language: `/api/build` (language) and `/api/artifacts` (main), and the `build` action. Server-only. Exactly `on` enables them; anything else is off. Also needs `OSMO_CHAT=on`, `OSMO_ACTIONS=on` and the `artifacts` level `act` in Settings. |
 | `NEXT_PUBLIC_OSMO_DEMO` | local only, never in production | the bond demo switch |
 
 Vercel's variables target Production only, so preview deployments of other branches fail at build. Adding the Preview target is Gur's call.
@@ -62,7 +63,8 @@ Vercel's variables target Production only, so preview deployments of other branc
 
 All tables use per-user row-level security, `(select auth.uid()) = user_id`:
 - `agent_state`, `dilemma_log`, `emotion_associations`, `event_log`, `memory_facts`, `mood_days`, `user_words`, `voiceprints`, `word_lookups`;
-- `messages`, whose `speaker` column is null for Gur and `'guest'` for anyone else.
+- `messages`, whose `speaker` column is null for Gur and `'guest'` for anyone else;
+- `artifacts` (things Osmo built: `title`, `source` at most 12,288 bytes, `version`, `parent_id`, `kept`). **Written (`docs/migrations/artifacts-phase-1.sql`), not applied until Gur says OK**, so until then every read of it fails with PGRST205 and the room shows nothing. The browser may select and delete its own rows and update `title` and `kept`; it can never insert (only `/api/artifacts`, through the owner-pinned admin client).
 
 Only the main agent applies migrations.
 
@@ -164,6 +166,14 @@ It checks `Authorization: Bearer <Supabase access token>` and returns the user, 
   - **The `POST` answer** is `ChatAnswer`: `{ source: "model", reply, usage }` or `{ source: "fallback", reason: "off" | "allowance" | "error" | "empty" | "crisis", usage }`. `usage` is `{ usedToday, usable }` for the pool, including this call, or null when today's rows weren't read.
   - **What the route writes.** It reads and writes only `ai_calls`, as Gur through row-level security, with no service-role key. The browser keeps saving `messages`, `agent_state`, `mood_days`, facts and vocabulary itself. There's no streaming.
   - **The browser's side** is `lib/chat/ask.ts`: `askStatus`, `askForReply` (a 15-second limit; it never throws) and `nextUsage`.
+
+### Artifacts (owner: main; `/api/build` is language's; spec `docs/superpowers/specs/2026-10-08-osmo-artifacts-design.md`, plan `docs/superpowers/plans/2026-10-08-osmo-artifacts-phase-a-b.md`)
+- **Dark.** Needs `OSMO_BUILD=on`, `OSMO_CHAT=on`, `OSMO_ACTIONS=on` and the `artifacts` level `act` ("Building things" in Settings offers Off and Act only). With any of them missing, no ticket arrives and the room renders nothing.
+- **The ticket seam.** `runAction` (main) returns `ActionOutcome` `done` with `ticket?: BuildTicket = { brief: string; actionId: number | null }` for the `build` action (`lib/actions/build.ts`, tier 2, daily cap 30 counted in the `actions` log; `buildGate(userId, now)` returns `"ok" | "off" | "cap"` for `/api/build` to re-check). `handler.ts` (language, task B8) carries it on `ChatAnswer.build`; `sendText` (language) then calls `buildRef.current?.start(ticket)` and `takeCrisis` calls `buildRef.current?.cancel()`. **`buildRef` already exists in `app/assistant.tsx`** (main added it and assigns it from `useBuild()`), so B8 only calls it.
+- **`/api/build`** (language, B5 to B8; not built yet): POST `{ brief }` or `{ repair: { source, error } }` with the bearer token; answers NDJSON `BuildLine`s (`lib/artifacts/protocol.ts`: `{t:"delta",s}`, `{t:"done",tokens}`, `{t:"error",code}` with code one of off, allowance, cap, too_big, failed). A 404 means off.
+- **`/api/artifacts`** (main, built): POST `{ source, actionId? }` compiles the source again as a gate and inserts; answers `{ id, version, title }` (409 at 200 rows, 404 unless both switches are on). POST `{ failed: true, actionId }` settles the build's log row. The brief never reaches it.
+- **The room.** `lib/artifacts/build-run.ts` (`runBuild`, one build: stream, compile, repair once, save), `lib/room/build-controller.ts` (state and verbs), `components/osmo/use-build.ts`, `thing-panel.tsx`, `thing.module.css`, `things-made.tsx` (Insights, "Things I made"). The stage carries `data-building`, `data-built` (1.6 s), `--build-progress` and `--quicken`. `/dev/artifact` (404 in production) runs the panel with a fake stream.
+- **The frame.** `lib/artifacts/frame.ts`, `bridge.ts`, `components/osmo/artifact-frame.tsx`: `sandbox="allow-scripts"` only, nonce CSP, runtime bundle `public/artifact/runtime.<hash>.js` (`npm run artifact:runtime`).
 
 ## Docs
 
