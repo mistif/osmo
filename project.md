@@ -181,3 +181,6 @@ It checks `Authorization: Bearer <Supabase access token>` and returns the user, 
 - **Deploying and Gur's hand checks:** `docs/osmo-deploy.md`.
 - **Voice:** `docs/osmo-voice-models.md` (the models) and `docs/osmo-wake-word.md` (wake word training).
 - **Demo mode:** `docs/osmo-demo-mode.md`.
+
+## Versions (since 2026-10-08)
+`package.json` carries the version (0.2.0 now). Settings → About shows "Version x.y.z, build <commit>, <day>"; `next.config.ts` fills `NEXT_PUBLIC_OSMO_VERSION`, `NEXT_PUBLIC_OSMO_BUILD` (Vercel's commit on a deploy, git's locally) and `NEXT_PUBLIC_OSMO_BUILT_AT`. Rule: main bumps the patch number with each push to `main` and the minor when a feature switch goes on (connectors, artifacts); the build hash always says the exact commit.
