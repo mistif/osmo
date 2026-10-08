@@ -1,0 +1,22 @@
+/* The shell v2 panel and the lines its pages share. The base look is panels.module.css, unchanged. */
+.panel { composes: panel from "./panels.module.css"; }
+.top { composes: top from "./panels.module.css"; }
+.title { composes: title from "./panels.module.css"; }
+.close { composes: close from "./panels.module.css"; }
+.heading { display: flex; align-items: baseline; flex-wrap: wrap; min-width: 0; }
+.back { composes: close from "./panels.module.css"; margin-right: 0.8rem; }
+
+/* On a phone the panel stops above the bar; with the keyboard up the bar is hidden and it fills the screen. */
+@media (max-width: 40rem) { .panel.panel { bottom: calc(var(--bar-h) + env(safe-area-inset-bottom)); } }
+:global([data-typing]) .panel.panel { bottom: 0; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; margin-top: 1rem; }
+.chip { composes: link from "./panels.module.css"; }
+.chip[aria-pressed="true"] { opacity: 1; border-bottom-color: var(--aura-a); }
+.meta { font-size: 0.8rem; opacity: 0.6; font-variant-numeric: tabular-nums; }
+.h3 { font-size: 1.05rem; font-weight: 600; margin: 0 0 0.4rem; }
+.lit { animation: lit 1.2s ease-out; }
+@keyframes lit { from { background: color-mix(in oklab, var(--aura-a) 28%, transparent); } }
+.pageLink { display: block; width: 100%; text-align: left; font: inherit; color: inherit; background: none; border: 0; padding: 0.7rem 0; cursor: pointer; }
+.pageLink:focus-visible, .back:focus-visible, .chip:focus-visible { outline: 2px solid var(--aura-a); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .lit { animation: none; } }
