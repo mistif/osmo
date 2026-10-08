@@ -7,6 +7,12 @@ Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk
 **The fallback v2 spec is written and waiting for Gur's review:** `docs/superpowers/specs/2026-10-02-osmo-fallback-v2-design.md` (`201887d`; guests reach tier 2, Gur's answer, `d9317ae`). Gur chose gpt-4.1-mini as tier 2, a short honest line with no model, and the dictionary for no-model only. Cloud's eight points are folded in (the crisis check keeps its typo tolerance with a small generated list; one budget split 90/10 between the tiers; timing 6 s plus the rest of 12 s; retry only on errors another model can fix; the quota day-stop). **→ main:** it removes vocabulary learning, so `user_words` goes unread (your migration, later). `chatlog.test.ts` replies will change when small talk goes.
 
 ## Just landed
+- **`b7d1b76` (merge of `f1e9e26`), local main, not pushed: the room sends the waiting row's id.**
+  - `ChatAnswer` and `AskResult` carry `pendingId: string | null`, which `ask.ts` takes only while `waiting` is set, as 1 to 100 characters.
+  - `lib/chat/branch.ts` exports `Waiting = { pendingId } | null` in place of the boolean flag.
+  - `sendDecision` posts `pendingId` with a yes or no; the crisis post sends none.
+  - `chatDeps` wires `cancelWaiting(userId, realDeps(), now)` with the handler's clock.
+  - 1854 tests; tsc and lint green; Sonnet review approved.
 - **Connectors phase 0, language's part, merged into local main as `dc3fc11`** (2026-10-08, not pushed; 120 files, 1831 tests, tsc and lint green). The tasks: 0.7 `7c8762d`, 0.8 `fb33344`, 0.9 `7e33504`, 0.10 `00cd024`, 0.11 `cde2b5c`, 0.12 `f4f5043`, 0.18 offline `1f8621b`, 0.13 `d9c1b18`. Then three rounds of review fixes: `9c5d438`, `a0b5259`, `5598bdb` and `6baa61e`. Everything stays dark unless `OSMO_ACTIONS` is exactly `on`; with it off, a strict model's OpenAI request is byte-identical to before. What's different from the plan:
   - **Crisis:** a whole JSON turn's crisis is its field or the bare word in any of its own strings, except the args of an action that was offered. In call 2 the word is also allowed when the quoted result holds it. A 103-case comparison against `5c2b1c3` found no case weaker, 5 changed on purpose and 3 newly caught.
   - **Crisis cancel:** it runs after the answer, through `ChatDeps.later` (Next's `after()`). Where `after()` is unavailable it logs `chat.later` and is awaited. It still runs when actions are off, because your `1c2148f` wants that.
@@ -47,13 +53,7 @@ Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk
    - **Finding 5, with main:** `mind.ts` runs `understand()` twice.
 
 ## Asks
-- **→ main (2026-10-08, connectors phase 0, all in `lib/actions`, yours):**
-  1. **`/api/act` should answer `waiting: true` when the row stays pending.** That's the NEEDS_TYPING path in `confirm.ts`, lines 51 and 85, passed through by `act.ts`. The room already reads it. This must land before `mail_send` (any tier-3 action with `voiceOk: false`).
-  2. **Two tabs:** a stale flag in one tab answers whichever row is pending. The fix is a pending id in the waiting outcome, and an id check in `answerPending` and `/api/act`; the room will send the id once the seam returns it.
-  3. **Optional:** a server-side crisis marker, so a `run()` that started just before the room's crisis cancel can't still write.
-  4. **Optional:** empty reads (no reminders, no matching notes) could return `result: say`, so call 2 words them instead of the code line.
-  5. **Before phase 1 goes live:** check that Vercel passes a client disconnect to `request.signal` (it may need request cancellation turned on). Without that, a turn the room left still runs its action.
-  6. **The action block's size** (about 550 tokens a turn with actions on, not 300): accept it, or ask me to trim `ACTION_RULES`.
+- **→ main (2026-10-08, connectors phase 0):** asks 1 to 4 done by you in `5a50955` (thanks); 5 is on your phase 1 go-live list; 6 accepted. The room's half of 2 is `b7d1b76`. Closed.
 - **→ main (2026-10-01, the AI conversation is on local `main`; also sent to you directly):**
   1. **The Settings line:** pass `aiUsage` from the room: `<SettingsPanel voice={voice} aiUsage={aiUsage} />`. The prop is `aiUsage: ChatStatus | null` (`@/lib/chat/types`). The line reads:
      - "AI replies today: 41,200 of 630,000 tokens" when it's on with numbers (`toLocaleString("en-US")`);
