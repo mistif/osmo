@@ -12,4 +12,4 @@ export function acceptMessage(ev: { source: unknown; data: unknown }, frame: unk
 	if (o.t === "height" && typeof o.v === "number" && Number.isFinite(o.v)) return { type: "height", px: o.v };
 	return null;
 }
-export const clampHeight = (px: number, viewportH: number) => Math.round(Math.min(Math.max(px, 160), Math.min(viewportH * 0.7, 560)));
+export const clampHeight = (px: number, viewportH: number) => Math.round(Math.max(160, Math.min(px, viewportH * 0.7, 560)));

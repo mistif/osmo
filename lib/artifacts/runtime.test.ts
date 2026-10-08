@@ -11,5 +11,6 @@ describe("the committed runtime bundle", () => {
 		expect(existsSync(join(process.cwd(), "public", RUNTIME_PATH))).toBe(true);
 		expect(built.text).not.toMatch(/localStorage|sessionStorage/);
 		expect(built.text).not.toContain("fetch(");
+		for (const word of ["sendBeacon", "RTCPeerConnection", "new WebSocket", "new XMLHttpRequest", "WebTransport"]) expect(built.text, word).not.toContain(word);
 	}, 30_000);
 });

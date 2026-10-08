@@ -49,6 +49,7 @@ export default function A(){
 	useEffect(() => { ref.current.click(); }, []);
 	return <a ref={ref} href="https://example.com">go</a>;
 }`,
+	webrtc: `export default function A(){ new RTCPeerConnection(); return <p>webrtc</p>; }`,
 	eval: `export default function A(){ eval("1 + 1"); return <p>eval</p>; }`,
 	image: `export default function A(){ return <img src="https://example.com/x.png" alt="" />; }`,
 	location: `import { useEffect } from "react";

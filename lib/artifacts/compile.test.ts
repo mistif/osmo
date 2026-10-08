@@ -14,6 +14,20 @@ describe("checkSource", () => {
 	it.each(["fetch", "XMLHttpRequest", "WebSocket", "EventSource", "sendBeacon", "importScripts", "eval", "Function(", "import(", "window.top", "window.parent", "parent.x", "top.x", "document.cookie", "localStorage", "sessionStorage", "indexedDB", "location", "history", "postMessage", "navigator", "</SCRIPT", "<!--"])("forbids %s", (w) => {
 		expect(forbiddenWord(`const a = 1; ${w} ;`)).not.toBeNull();
 	});
+	it.each(["RTCPeerConnection", "webkitRTCPeerConnection", "RTCDataChannel", "RTCRtpSender", "WebTransport", "mediaDevices"])("forbids %s", (w) => {
+		expect(forbiddenWord(`const a = new ${w}();`)).toBe(w);
+	});
+	it("tolerates whitespace before the parenthesis of import( and Function(", () => {
+		expect(forbiddenWord("const a = import  (\"x\");")).toBe("import(");
+		expect(forbiddenWord("const a = import\n(\"x\");")).toBe("import(");
+		expect(forbiddenWord("const f = new Function \t(\"return 1\");")).toBe("Function(");
+		expect(forbiddenWord("const f = Function\n(\"return 1\");")).toBe("Function(");
+	});
+	it("refuses a re-export from anything but react", () => {
+		const tail = `\nexport default function A(){return null}`;
+		for (const bad of [`export * from "lodash";`, `export * as x from "lodash";`, `export { a } from "./x";`, `export{a,b}from'x';`, `export  *  from  "x";`]) expect(checkSource(bad + tail).ok, bad).toBe(false);
+		expect(checkSource(`export { useState } from "react";${tail}`).ok).toBe(true);
+	});
 	it("does not flag words inside longer words", () => expect(forbiddenWord("const desktop = prefetcher; relocation")).toBeNull());
 	it("rejects other imports, odd names, namespace imports, missing or double default, required props", () => {
 		for (const bad of [`import x from "lodash";\nexport default function A(){return null}`, `import { createPortal } from "react";\nexport default function A(){return null}`, `import * as R from "react";\nexport default function A(){return null}`, `const A = () => null;`, `export default function A(){return null}\nexport default function B(){return null}`, `export default function A(props){return null}`]) expect(checkSource(bad).ok).toBe(false);

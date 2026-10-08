@@ -56,4 +56,8 @@ describe("clampHeight", () => {
 		expect(clampHeight(500, 600)).toBe(420);
 		expect(clampHeight(300, 800)).toBe(300);
 	});
+	it("keeps the 160 floor on a tiny viewport", () => {
+		expect(clampHeight(300, 200)).toBe(160);
+		expect(clampHeight(100, 200)).toBe(160);
+	});
 });

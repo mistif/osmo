@@ -14,6 +14,17 @@ describe("lockdown", () => {
 			expect(win[name]).toBeUndefined();
 		}
 	});
+	it("also removes WebRTC and WebTransport, and navigator.mediaDevices", () => {
+		const names = ["RTCPeerConnection", "webkitRTCPeerConnection", "RTCDataChannel", "RTCRtpSender", "WebTransport"];
+		const win: Record<string, unknown> = { navigator: { mediaDevices: {} } };
+		for (const n of names) win[n] = 1;
+		lockdown(win);
+		for (const n of names) {
+			expect(win[n]).toBeUndefined();
+			expect(Object.getOwnPropertyDescriptor(win, n)?.configurable).toBe(false);
+		}
+		expect((win.navigator as { mediaDevices?: unknown }).mediaDevices).toBeUndefined();
+	});
 	it("does not throw for a property it cannot redefine", () => {
 		const win = {};
 		Object.defineProperty(win, "fetch", { value: 1, configurable: false, writable: false });
