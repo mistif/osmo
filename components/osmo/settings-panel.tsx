@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { OSMO_BUILD, OSMO_BUILT_AT, OSMO_VERSION, versionLine } from "@/lib/shell/version";
 import { deviceRow } from "@/lib/shell/devices";
 import {
 	listDevices,
@@ -174,6 +175,11 @@ export function SettingsPanel({ voice, aiUsage }: { voice: VoiceControls; aiUsag
 					Lock Osmo
 				</button>
 				{lockError && <p className={styles.error} role="alert">{lockError}</p>}
+			</section>
+
+			<section className={styles.section}>
+				<h3 className={styles.sectionTitle}>About</h3>
+				<p className={styles.note}>{versionLine(OSMO_VERSION, OSMO_BUILD, OSMO_BUILT_AT)}</p>
 			</section>
 		</>
 	);

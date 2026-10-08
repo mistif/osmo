@@ -1,6 +1,26 @@
+import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import type { NextConfig } from "next";
 
+// The build's identity, shown in Settings (lib/shell/version.ts): the package version, the commit
+// (Vercel's on a deploy, git's locally) and the moment of the build. None of these is a secret.
+const version = (JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { version: string }).version;
+const build = (() => {
+	const fromVercel = process.env.VERCEL_GIT_COMMIT_SHA;
+	if (fromVercel) return fromVercel.slice(0, 7);
+	try {
+		return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim() || "local";
+	} catch {
+		return "local";
+	}
+})();
+
 const nextConfig: NextConfig = {
+	env: {
+		NEXT_PUBLIC_OSMO_VERSION: version,
+		NEXT_PUBLIC_OSMO_BUILD: build,
+		NEXT_PUBLIC_OSMO_BUILT_AT: new Date().toISOString(),
+	},
 	// The room lives at "/" and the lock at "/lock"; old addresses still work.
 	async redirects() {
 		return [
