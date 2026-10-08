@@ -594,7 +594,8 @@ export default function AgentChat() {
 					ensureSession().catch(() => null),
 					new Promise<null>((resolve) => setTimeout(() => resolve(null), SESSION_TIMEOUT_MS)),
 				]);
-				const answer = signedIn ? await sendDecision(fetch, signedIn.access_token, decision, via) : { handled: false, reply: null };
+				// A crisis message taken while the session was read has already cut this turn short: nothing is posted.
+				const answer = signedIn && !wait.quiet ? await sendDecision(fetch, signedIn.access_token, decision, via) : { handled: false, reply: null };
 				confirmWaitingRef.current = false;
 				if (!wait.quiet) deliver(answer.reply ?? "Nothing is waiting for your yes.");
 			});
