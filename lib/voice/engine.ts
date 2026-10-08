@@ -7,7 +7,7 @@ import { speechSeconds, trimSilence } from "./levels";
 import { detectorOn, greetDue, inConversation, initialVoice, micOpen, recognizerOn, step, type VoiceEvent, type VoiceState } from "./machine";
 import type { SampleRing } from "./ring";
 import { messageFrom, spokenSeconds } from "./utterance";
-import { bestScore, CARRY_OVER_SECONDS, judge, type Voiceprint } from "./voiceprint";
+import { bestScore, judgement, type Verdict, type Voiceprint } from "./voiceprint";
 
 export const MIC_BLOCKED = "I can't hear you. Allow the microphone for this site in your browser settings, then try again.";
 export const NO_MIC = "I can't find a microphone on this device.";
@@ -91,6 +91,20 @@ export type VoiceConfig = {
 	needTeaching(reason: "mic"): void;
 };
 
+// What the speaker check made of one spoken message. Scores and verdicts only, never the words.
+export type JudgementRecord = {
+	at: number;
+	// -1 when there was no reading.
+	score: number;
+	verdict: Verdict;
+	speaker: Speaker;
+	// The line that decided it (see voiceprint.ts).
+	threshold: number;
+	speechSeconds: number;
+};
+// How many records the engine keeps.
+export const JUDGEMENT_LOG_SIZE = 50;
+
 export type VoiceView = { state: VoiceState; liveText: string | null; error: string | null };
 
 export class VoiceEngine {
@@ -119,6 +133,8 @@ export class VoiceEngine {
 	private error: string | null = null;
 	// Bumped by dispose(), so a mic or detector still loading from before it can't land on the fresh instance.
 	private generation = 0;
+	// The last JUDGEMENT_LOG_SIZE speaker checks, oldest first. Kept across dispose(), so a remount doesn't lose them.
+	private readonly judgements: JudgementRecord[] = [];
 
 	constructor(deps: VoiceDeps, emit: (view: VoiceView) => void) {
 		this.deps = deps;
@@ -140,6 +156,9 @@ export class VoiceEngine {
 		if (want !== this.state.listening) this.send({ type: "listen", on: want, now: this.deps.now() });
 		if (want && !this.detector && !this.detectorLoading) void this.loadDetector();
 	};
+
+	// Recent speaker checks, oldest first, for Settings to show so the thresholds can be set from real use.
+	readonly lastJudgements = (): readonly JudgementRecord[] => [...this.judgements];
 
 	readonly micPress = (): void => {
 		const config = this.config;
@@ -391,10 +410,14 @@ export class VoiceEngine {
 				return null;
 			}
 		}
-		const speaker = judge({ score, speechSeconds: seconds, ownerSoFar: this.state.owner });
-		// Dev only, for tuning MATCH_THRESHOLD against real voices: how close this line was to Gur's voiceprints.
+		const prints = this.config?.prints ?? [];
+		const result = judgement({ score, speechSeconds: seconds, ownerSoFar: this.state.owner, ownerPrints: prints.length > 0 });
+		this.judgements.push({ at: this.deps.now(), score, verdict: result.verdict, speaker: result.speaker, threshold: result.threshold, speechSeconds: seconds });
+		if (this.judgements.length > JUDGEMENT_LOG_SIZE) this.judgements.splice(0, this.judgements.length - JUDGEMENT_LOG_SIZE);
+		const speaker = result.speaker;
+		// Dev only, for tuning the thresholds against real voices: how close this line was to Gur's voiceprints, and what was decided.
 		if (process.env.NODE_ENV !== "production") {
-			console.info(`[osmo voice] ${speaker} score=${score.toFixed(3)} speech=${seconds.toFixed(1)}s carried=${this.state.owner && seconds < CARRY_OVER_SECONDS} "${message}"`);
+			console.info(`[osmo voice] ${speaker} verdict=${result.verdict} score=${score.toFixed(3)} threshold=${result.threshold} speech=${seconds.toFixed(1)}s "${message}"`);
 		}
 		return speaker;
 	}

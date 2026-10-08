@@ -5,8 +5,15 @@ import type { Speaker } from "./guest";
 
 // Which model made an embedding. Voiceprints from any other model are never compared.
 export const MODEL_ID = "campplus-en-voxceleb-16k";
-// At or above this, the voice is Gur's. Anything else, including unsure, is someone else.
+// At or above this, the voice is confidently Gur's.
 export const MATCH_THRESHOLD = 0.5;
+// Between this and MATCH_THRESHOLD the voice is unsure, and the device leans toward Gur. Real voices vary by mic,
+// room and day (the same person commonly scores 0.4-0.7 on CAM++), and the thresholds were tuned on synthetic voices, not on him.
+// The worst failure is the one person the device is passkey-locked to being answered as a stranger (no memory, no name),
+// while a stranger leaning to "you" in the unsure band is the milder one (the synthetic test voices reached 0.41 against
+// each other, so a real guest can land in the band; that is accepted). It applies only while no second voice has been enrolled on the device; with one, the
+// confident line decides again. Scores are logged per message (VoiceEngine.lastJudgements) so both lines can be set from his real distribution.
+export const LEAN_THRESHOLD = 0.35;
 // While teaching, each reading must be at least this close to the average of the others.
 const READING_AGREEMENT = 0.5;
 // Follow-ups shorter than this keep the conversation's speaker once Gur has been recognized.
@@ -63,7 +70,31 @@ export function bestScore(embedding: ArrayLike<number>, prints: readonly Voicepr
 	return prints.filter((p) => p.model === model).reduce((best, p) => Math.max(best, cosine(embedding, p.embedding)), -1);
 }
 
-export function judge(input: { score: number; speechSeconds: number; ownerSoFar: boolean }): Speaker {
-	if (input.ownerSoFar && input.speechSeconds < CARRY_OVER_SECONDS) return "you";
-	return input.score >= MATCH_THRESHOLD ? "you" : "guest";
+export type Verdict = "match" | "lean" | "carry-over" | "no-reading" | "guest";
+export type Judgement = { speaker: Speaker; verdict: Verdict; threshold: number };
+
+export type JudgeInput = {
+	// From bestScore; -1 means no reading (the model hadn't loaded, or there was too little audio to measure).
+	score: number;
+	speechSeconds: number;
+	ownerSoFar: boolean;
+	// Another voice has been enrolled besides Gur's: no leaning, the confident line decides. Default false.
+	secondVoice?: boolean;
+	// The device holds Gur's voiceprints. Default true; without them nothing can be trusted and every voice is a guest.
+	ownerPrints?: boolean;
+};
+
+// Who spoke, and why: which line applied. `threshold` is the line that decided a score-based verdict.
+export function judgement(input: JudgeInput): Judgement {
+	const lean = (input.ownerPrints ?? true) && !input.secondVoice;
+	const threshold = lean ? LEAN_THRESHOLD : MATCH_THRESHOLD;
+	if (input.ownerSoFar && input.speechSeconds < CARRY_OVER_SECONDS) return { speaker: "you", verdict: "carry-over", threshold };
+	if (input.score >= MATCH_THRESHOLD) return { speaker: "you", verdict: "match", threshold: MATCH_THRESHOLD };
+	if (lean && input.score === -1) return { speaker: "you", verdict: "no-reading", threshold };
+	if (lean && input.score >= LEAN_THRESHOLD) return { speaker: "you", verdict: "lean", threshold };
+	return { speaker: "guest", verdict: "guest", threshold };
+}
+
+export function judge(input: JudgeInput): Speaker {
+	return judgement(input).speaker;
 }

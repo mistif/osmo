@@ -111,6 +111,8 @@ export function useVoice(options: { speech: SpeechHooks; sendTextRef: { current:
 		prints,
 		teaching,
 		onReply: engine.onReply,
+		// The last 50 speaker checks (score, verdict, threshold), oldest first, for Settings to show later.
+		lastJudgements: engine.lastJudgements,
 		stop: engine.stop,
 		micPress() {
 			unlockVoices();
