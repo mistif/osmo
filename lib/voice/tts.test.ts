@@ -7,6 +7,7 @@ import {
 	INSTRUCTIONS_VERSION,
 	speechTone,
 	TONE_INSTRUCTIONS,
+	TTS_SPEED,
 	TTS_VOICE,
 	wordsSpokenBy,
 	wordSpans,
@@ -45,6 +46,22 @@ describe("speechTone", () => {
 
 	it("never asks for a flat or slow delivery, which is what sounds robotic", () => {
 		expect(TONE_INSTRUCTIONS.composed).not.toMatch(/\bslower\b|\bmeasured\b/i);
+	});
+
+	it("still asks for the variation that keeps him from going flat", () => {
+		// This is what buys the life in his voice. Pace is a separate dial (TTS_SPEED), and losing
+		// this line while slowing him down is how he ends up sounding robotic again.
+		for (const instruction of Object.values(TONE_INSTRUCTIONS)) {
+			expect(instruction).toMatch(/never flat/i);
+		}
+		expect(TONE_INSTRUCTIONS.composed).toMatch(/variation in pitch and emphasis/i);
+	});
+
+	it("does not rush him", () => {
+		// JARVIS "never rushes". 1.15 was tried on 2026-09-30 and rejected by ear on 2026-10-08:
+		// it was a wrong fix for flatness, which the wording above handles instead.
+		expect(TTS_SPEED).toBeLessThanOrEqual(1.05);
+		expect(TTS_SPEED).toBeGreaterThanOrEqual(0.9);
 	});
 });
 
