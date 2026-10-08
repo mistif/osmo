@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // The ONNX runtime copied from node_modules by scripts/copy-ort.mjs (git-ignored, third-party).
     "public/ort/**",
+    // The generated, minified artifact runtime (scripts/build-artifact-runtime.mjs).
+    "public/artifact/**",
   ]),
 ]);
 

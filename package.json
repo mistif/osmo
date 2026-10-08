@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "voice:check": "vitest run --config vitest.voice.config.mts"
+    "voice:check": "vitest run --config vitest.voice.config.mts",
+    "artifact:runtime": "node scripts/build-artifact-runtime.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.1",
@@ -25,6 +26,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/web-push": "^3.6.4",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
     "typescript": "^5",

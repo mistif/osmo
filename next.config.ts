@@ -18,6 +18,14 @@ const nextConfig: NextConfig = {
 					{ key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
 				],
 			},
+			// The artifact runtime is named by its hash, so it can be cached for good.
+			{
+				source: "/artifact/:path*",
+				headers: [
+					{ key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+					{ key: "X-Content-Type-Options", value: "nosniff" },
+				],
+			},
 			// The service worker must never be cached, or an old one could outlive a fix.
 			{
 				source: "/sw.js",
