@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { ensureSession, supabase } from "@/lib/supabase";
 import { deviceRow } from "@/lib/shell/devices";
-import { geocode, levelDescription, loadProfileRow, roundCoord, saveProfile, type Level, type Place, type ProfilePatch, type ProfileRow } from "@/lib/shell/profile-client";
+import { BUILD_PRIVACY, geocode, levelDescription, levelsFor, loadProfileRow, roundCoord, saveProfile, type Level, type Place, type ProfilePatch, type ProfileRow } from "@/lib/shell/profile-client";
 import { enablePush, INSTALL_HINT, pushState, type PushState } from "@/lib/shell/push-client";
 import styles from "./panels.module.css";
 
@@ -13,6 +13,7 @@ const CONNECTORS = [
 	{ id: "reminders", name: "Reminders" },
 	{ id: "notes", name: "Notes" },
 	{ id: "weather", name: "Weather" },
+	{ id: "artifacts", name: "Building things" },
 ];
 const LEVELS: { id: Level; name: string }[] = [
 	{ id: "off", name: "Off" },
@@ -206,7 +207,10 @@ export function ConnectorsSettings() {
 					{row.paused ? "I am paused. I will not act on anything, and no reminder will be sent, until you turn this off." : "While this is on, I do nothing but talk, and no reminder is sent."}
 				</p>
 				{CONNECTORS.map((c) => {
-					const level: Level = row.levels[c.id] ?? "off";
+					const offered = levelsFor(c.id);
+					// A level this connector does not offer (a held Ask for building) reads as off.
+					const saved: Level = row.levels[c.id] ?? "off";
+					const level: Level = offered.includes(saved) ? saved : "off";
 					return (
 						<div key={c.id}>
 							<div className={styles.line}>
@@ -220,7 +224,7 @@ export function ConnectorsSettings() {
 										void save({ levels: { ...row.levels, [c.id]: next } }, (r) => ({ ...r, levels: { ...r.levels, [c.id]: next } }));
 									}}
 								>
-									{LEVELS.map((l) => (
+									{LEVELS.filter((l) => offered.includes(l.id)).map((l) => (
 										<option key={l.id} value={l.id}>
 											{l.name}
 										</option>
@@ -228,6 +232,7 @@ export function ConnectorsSettings() {
 								</select>
 							</div>
 							<p className={styles.note}>{levelDescription(c.id, level)}</p>
+							{c.id === "artifacts" && <p className={styles.note}>{BUILD_PRIVACY}</p>}
 						</div>
 					);
 				})}

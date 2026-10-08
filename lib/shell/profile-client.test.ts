@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, it, vi } from "vitest";
-import { ensureTimezone, geocode, LEVEL_WORDS, levelDescription, loadProfileRow, roundCoord, saveProfile } from "./profile-client";
+import { BUILD_PRIVACY, ensureTimezone, geocode, LEVEL_WORDS, levelDescription, levelsFor, loadProfileRow, roundCoord, saveProfile } from "./profile-client";
 
 describe("roundCoord", () => {
 	it("keeps two decimals", () => {
@@ -31,6 +31,21 @@ describe("LEVEL_WORDS", () => {
 	it("uses the general words for reminders and notes", () => {
 		expect(levelDescription("reminders", "ask")).toBe(LEVEL_WORDS.ask);
 		expect(levelDescription("notes", "act")).toBe(LEVEL_WORDS.act);
+	});
+
+	it("offers Building things only Off and Act, and every other connector all four", () => {
+		expect(levelsFor("artifacts")).toEqual(["off", "act"]);
+		for (const c of ["reminders", "notes", "weather"]) expect(levelsFor(c)).toEqual(["off", "read", "ask", "act"]);
+	});
+
+	it("describes Building things in his own words and falls back to off for a level it does not offer", () => {
+		expect(levelDescription("artifacts", "off")).toMatch(/not build/);
+		expect(levelDescription("artifacts", "act")).toMatch(/keep it unless you discard/);
+		expect(levelDescription("artifacts", "ask")).toBe(levelDescription("artifacts", "off"));
+	});
+
+	it("carries the privacy line for building, word for word", () => {
+		expect(BUILD_PRIVACY).toBe("Osmo writes what he builds with an OpenAI model. It is sent your request, and your earlier version when you ask for a change, and nothing else about you.");
 	});
 
 	it("is plain, speakable text", () => {

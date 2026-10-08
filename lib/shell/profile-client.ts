@@ -25,7 +25,22 @@ const WEATHER_WORDS: Record<Level, string> = {
 	act: "act: the same as read. Weather only looks, so I never need to ask first",
 };
 
-export const levelDescription = (connector: string, level: Level): string => (connector === "weather" ? WEATHER_WORDS[level] : LEVEL_WORDS[level]);
+// Building things is a build the room starts on its own, so only Off and Act mean anything (a held "ask" would route the
+// yes through /api/act, which does not carry the ticket). Phase C can add Ask.
+const BUILD_WORDS: Partial<Record<Level, string>> = {
+	off: "off: I will not build anything",
+	act: "act: I build what you ask for, and keep it unless you discard it",
+};
+
+export const levelsFor = (connector: string): Level[] => (connector === "artifacts" ? ["off", "act"] : ["off", "read", "ask", "act"]);
+
+export const levelDescription = (connector: string, level: Level): string => {
+	if (connector === "artifacts") return BUILD_WORDS[level] ?? BUILD_WORDS.off!;
+	return connector === "weather" ? WEATHER_WORDS[level] : LEVEL_WORDS[level];
+};
+
+// Shown under the Building things row: what leaves the device when he builds (spec 12).
+export const BUILD_PRIVACY = "Osmo writes what he builds with an OpenAI model. It is sent your request, and your earlier version when you ask for a change, and nothing else about you.";
 
 export type Place = { label: string; lat: number; lon: number };
 
