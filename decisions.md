@@ -151,3 +151,6 @@ Gur read `my-app/docs/osmo-board-review-2026-10-08.md` and said go on the small 
 
 ## 2026-10-08: the shell, version 2
 Gur, looking at Meta's Muse: a left icon rail (bottom bar on phones) with Talk, Ideas, Goals, Library, Feed, Search, Settings, each icon with its own small motion; Settings split into pages; Memory folds into Library, Insights' mood week into Feed; Ideas (kept thoughts, growable into plans or built things) and Goals (tracked progress, like Muse's "23 applied") are new; Search over everything. The room stays voice-first. Spec being written: `docs/superpowers/specs/2026-10-08-osmo-shell-v2-design.md`; Gur reviews before any plan.
+
+## 2026-10-08: shell v2 spec approved
+Gur approved `docs/superpowers/specs/2026-10-08-osmo-shell-v2-design.md` with its defaults: Osmo may keep an idea on his own (3 a day, logged); the rail grows as pages arrive; forgetting a Library link removes its chat line; the header heart becomes the rail's Talk icon; Ideas and Goals before Search. Phase A (rail, Settings pages, Library, Feed) behind `NEXT_PUBLIC_OSMO_SHELL2`. Gur wants the planning and building done by subagents to save usage; main orchestrates.
