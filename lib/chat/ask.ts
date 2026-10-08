@@ -4,13 +4,14 @@
 
 import type { ChatBody, ChatStatus, FallbackReason, Usage } from "./types";
 
-// The browser's limit. The route gives OpenAI 10 seconds, so it normally answers well before this.
-export const ASK_TIMEOUT_MS = 15_000;
+// The browser's limit. A turn with a result makes two model calls of up to 10 seconds each, so the route
+// can take about 20 seconds and normally answers well before this.
+export const ASK_TIMEOUT_MS = 25_000;
 
 const CHAT_URL = "/api/chat";
 
 export type AskResult =
-	| { kind: "model"; reply: string; usage: Usage; detection: unknown }
+	| { kind: "model"; reply: string; usage: Usage; detection: unknown; waiting: boolean }
 	| { kind: "crisis"; usage: Usage | null }
 	| { kind: "fallback"; why: FallbackReason | "http" | "network" | "timeout" | "aborted" | "bad_answer"; usage: Usage | null; stop: boolean };
 
@@ -71,7 +72,14 @@ function answerOf(json: unknown): AskResult {
 		const reply = answer.reply;
 		if (typeof reply !== "string" || reply.trim() === "" || usage === null) return failed("bad_answer");
 		// Passed on unchecked (this file imports nothing); the room validates it. A missing one is null, never a bad answer: an older server still works.
-		return { kind: "model", reply, usage, detection: typeof answer.detection === "object" && answer.detection !== null ? answer.detection : null };
+		// waiting: only a true counts, so an older server that sends none reads as not waiting.
+		return {
+			kind: "model",
+			reply,
+			usage,
+			detection: typeof answer.detection === "object" && answer.detection !== null ? answer.detection : null,
+			waiting: answer.waiting === true,
+		};
 	}
 	const reason = answer.source === "fallback" ? REASONS.find((known) => known === answer.reason) : undefined;
 	if (reason === undefined) return failed("bad_answer");

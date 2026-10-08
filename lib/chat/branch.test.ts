@@ -405,8 +405,8 @@ describe("detectionOf", () => {
 
 	it("gives the model answer's detection and nothing for any other answer", () => {
 		const detection = { tones: ["sad"] };
-		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection })).toBe(detection);
-		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection: null })).toBeNull();
+		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection, waiting: false })).toBe(detection);
+		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection: null, waiting: false })).toBeNull();
 		const others: (AskResult | null)[] = [{ kind: "crisis", usage }, { kind: "fallback", why: "error", usage, stop: false }, null];
 		for (const answer of others) expect(detectionOf(answer), JSON.stringify(answer)).toBeNull();
 	});
