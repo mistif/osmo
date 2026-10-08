@@ -1,5 +1,5 @@
 -- Artifacts phase 1 (spec 2026-10-08-osmo-artifacts-design.md section 7). Insert only through /api/artifacts (service role).
--- STATUS: written, NOT applied. Main applies it as migration artifacts_phase_1 after Gur's OK in chat, then records "as applied" here.
+-- STATUS: applied on 2026-10-08 as migration artifacts_phase_1, with Gur's OK.
 -- The browser may read and delete its own rows and change only title and kept; it can never insert.
 
 create table public.artifacts (
