@@ -1,9 +1,11 @@
 // Who writes a reply: code or the model. sendText (app/assistant.tsx) keeps today's chain of branches in today's
 // order; these pure functions pick the branch and its writer, so the choice is tested with the real helpers.
 
+import { decisionOf } from "../actions/decision-words";
 import { askedForName, justLearnedName } from "../agent/context";
 import { isCrisis } from "../agent/safety";
 import type { AskResult } from "./ask";
+import type { DecisionAnswer } from "./decision";
 import { LIMITS } from "./types";
 
 export type Branch =
@@ -113,4 +115,21 @@ export function whileWaiting(text: string): "take" | "drop" {
 export type QuietPlan = { applyPendingTopic: false; startLookup: false; reply: "none" | "noExplain" };
 export function quietEffects(waitingOn: "model" | "lookup"): QuietPlan {
 	return { applyPendingTopic: false, startLookup: false, reply: waitingOn === "model" ? "none" : "noExplain" };
+}
+
+// A bare yes or no answers the waiting confirmation (spec 4.3) only from Gur, never in a crisis, and only while one waits.
+// A longer sentence with a yes in it is the conversation's.
+export function decisionFor(c: { guest: boolean; crisis: boolean; waiting: boolean; text: string }): "yes" | "no" | null {
+	return c.guest || c.crisis || !c.waiting ? null : decisionOf(c.text);
+}
+
+// Whether a bare yes or no still goes to /api/act after this step. A guest's turn leaves it as it was. Any other turn of
+// Gur's moves past the question, code's turns included, so a yes to Osmo's own question ("Do you agree?") is never taken
+// for one; then a model answer, or the decision's own answer, says whether one waits again.
+export type WaitingStep = { on: "guest" } | { on: "turn" } | { on: "model"; answer: AskResult | null } | { on: "decision"; answer: DecisionAnswer };
+export function waitingAfter(was: boolean, step: WaitingStep): boolean {
+	if (step.on === "guest") return was;
+	if (step.on === "model") return step.answer?.kind === "model" && step.answer.waiting;
+	if (step.on === "decision") return step.answer.waiting;
+	return false;
 }

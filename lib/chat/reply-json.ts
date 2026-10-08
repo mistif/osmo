@@ -7,6 +7,8 @@ const actionOf = (v: unknown): ModelOutput["action"] => {
 	return o && typeof o.name === "string" && o.name !== "" && typeof o.args === "string" ? { name: o.name, args: o.args } : null;
 };
 const tryParse = (text: string): unknown => { try { return JSON.parse(text); } catch { return undefined; } };
+// Whether the text is one whole JSON object, as a strict model's turn is.
+export const isJsonTurn = (text: string): boolean => asObject(tryParse(text.trim())) !== null;
 const FEELING = "FEELING:";
 // A JSON object's start, such as {"reply":. Plain speech has none, so text that holds one is never spoken.
 const EMBEDDED_JSON = /\{\s*"\w+"\s*:/;

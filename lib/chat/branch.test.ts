@@ -21,11 +21,13 @@ import type { AskResult } from "./ask";
 import { answerFromMemory, calculateMath, findUnknownTopic, isBuiltInTopic } from "./answers";
 import type { RoomLine } from "./body";
 import {
+	decisionFor,
 	detectionOf,
 	keptTurn,
 	MODEL_BRANCHES,
 	pickBranch,
 	quietEffects,
+	waitingAfter,
 	whileWaiting,
 	writerFor,
 	type Branch,
@@ -409,5 +411,55 @@ describe("detectionOf", () => {
 		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection: null, waiting: false })).toBeNull();
 		const others: (AskResult | null)[] = [{ kind: "crisis", usage }, { kind: "fallback", why: "error", usage, stop: false }, null];
 		for (const answer of others) expect(detectionOf(answer), JSON.stringify(answer)).toBeNull();
+	});
+});
+
+describe("decisionFor", () => {
+	const GUR_WAITING = { guest: false, crisis: false, waiting: true };
+
+	it("reads a bare yes or no from Gur while a confirmation waits", () => {
+		expect(decisionFor({ ...GUR_WAITING, text: "yes" })).toBe("yes");
+		expect(decisionFor({ ...GUR_WAITING, text: "Go ahead." })).toBe("yes");
+		expect(decisionFor({ ...GUR_WAITING, text: "no" })).toBe("no");
+		expect(decisionFor({ ...GUR_WAITING, text: "never mind" })).toBe("no");
+	});
+
+	it("never takes a guest's yes, a yes in a crisis, or one with nothing waiting", () => {
+		expect(decisionFor({ ...GUR_WAITING, guest: true, text: "yes" })).toBeNull();
+		expect(decisionFor({ ...GUR_WAITING, crisis: true, text: "stop" })).toBeNull();
+		expect(decisionFor({ ...GUR_WAITING, waiting: false, text: "yes" })).toBeNull();
+	});
+
+	it("leaves a longer sentence with a yes in it to the conversation", () => {
+		for (const text of ["yes, but tomorrow", "yes please send it to Sam too", "I said no to him", "no idea"]) {
+			expect(decisionFor({ ...GUR_WAITING, text }), text).toBeNull();
+		}
+	});
+});
+
+describe("waitingAfter", () => {
+	const usage = { usedToday: 1, usable: 2 };
+	const model = (waiting: boolean): AskResult => ({ kind: "model", reply: "Delete it? Say yes to go ahead, or no.", usage, detection: null, waiting });
+
+	it("leaves the confirmation waiting through a guest's turn", () => {
+		expect(waitingAfter(true, { on: "guest" })).toBe(true);
+		expect(waitingAfter(false, { on: "guest" })).toBe(false);
+	});
+
+	it("moves past it on any other turn of Gur's, so a yes to Osmo's own question is never taken as one", () => {
+		expect(waitingAfter(true, { on: "turn" })).toBe(false);
+	});
+
+	it("waits again only when a model answer says an action waits", () => {
+		expect(waitingAfter(false, { on: "model", answer: model(true) })).toBe(true);
+		expect(waitingAfter(true, { on: "model", answer: model(false) })).toBe(false);
+		const others: (AskResult | null)[] = [{ kind: "crisis", usage }, { kind: "fallback", why: "timeout", usage: null, stop: false }, null];
+		for (const answer of others) expect(waitingAfter(true, { on: "model", answer }), JSON.stringify(answer)).toBe(false);
+	});
+
+	it("keeps it waiting after a decision only when the server says the row still waits", () => {
+		expect(waitingAfter(true, { on: "decision", answer: { handled: true, reply: "For that one I need you to type yes.", waiting: true } })).toBe(true);
+		expect(waitingAfter(true, { on: "decision", answer: { handled: true, reply: "Deleted the note.", waiting: false } })).toBe(false);
+		expect(waitingAfter(true, { on: "decision", answer: { handled: false, reply: null, waiting: false } })).toBe(false);
 	});
 });

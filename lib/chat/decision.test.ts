@@ -16,7 +16,7 @@ const honouring = ((_url: string, init: RequestInit) =>
 		init.signal?.addEventListener("abort", () => reject(init.signal?.reason));
 	})) as unknown as typeof fetch;
 
-const NONE = { handled: false, reply: null };
+const NONE = { handled: false, reply: null, waiting: false };
 
 describe("sendDecision", () => {
 	it("posts the decision and how it came to /api/act with Gur's token", async () => {
@@ -35,12 +35,23 @@ describe("sendDecision", () => {
 
 	it("passes a handled answer and its reply line through", async () => {
 		const { fetchFn } = answering(() => json({ handled: true, reply: "Cancelled." }));
-		expect(await sendDecision(fetchFn, "t", "no", "typed")).toEqual({ handled: true, reply: "Cancelled." });
+		expect(await sendDecision(fetchFn, "t", "no", "typed")).toEqual({ handled: true, reply: "Cancelled.", waiting: false });
 	});
 
 	it("keeps a handled answer without a reply line as handled, with no line", async () => {
 		const { fetchFn } = answering(() => json({ handled: true, reply: 42 }));
-		expect(await sendDecision(fetchFn, "t", "yes", "typed")).toEqual({ handled: true, reply: null });
+		expect(await sendDecision(fetchFn, "t", "yes", "typed")).toEqual({ handled: true, reply: null, waiting: false });
+	});
+
+	it("passes on that the row still waits, as when a spoken yes must be typed, and reads anything but true as not waiting", async () => {
+		const typed = answering(() => json({ handled: true, reply: "For that one I need you to type yes.", waiting: true }));
+		expect(await sendDecision(typed.fetchFn, "t", "yes", "voice")).toEqual({ handled: true, reply: "For that one I need you to type yes.", waiting: true });
+		for (const waiting of [undefined, false, "yes", 1]) {
+			const { fetchFn } = answering(() => json({ handled: true, reply: "Done.", waiting }));
+			expect((await sendDecision(fetchFn, "t", "yes", "typed")).waiting, String(waiting)).toBe(false);
+		}
+		const unhandled = answering(() => json({ handled: false, waiting: true }));
+		expect(await sendDecision(unhandled.fetchFn, "t", "yes", "typed")).toEqual(NONE);
 	});
 
 	it("reads nothing waiting as not handled", async () => {

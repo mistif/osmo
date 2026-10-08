@@ -106,6 +106,12 @@ function fitted(text: string): string {
 	return cutAtWord(text.slice(0, cuts[0]));
 }
 
+// Whether speakable keeps all of the text: no sentence dropped and none cut to fit what Osmo says.
+export function saidWhole(raw: string): boolean {
+	const text = plain(raw);
+	return fitted(text) === text;
+}
+
 // The reply as Osmo says it, or "" when nothing speakable is left.
 export function speakable(raw: string): string {
 	const text = plain(raw);

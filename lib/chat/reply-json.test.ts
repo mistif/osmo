@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseModelOutput } from "./reply-json";
+import { isJsonTurn, parseModelOutput } from "./reply-json";
 const json = (o: object) => JSON.stringify({ reply: "I am sorry to hear that.", crisis: false, tone: ["worried"], intensity: 2, about: "someone_close", wants: "listen", note: "", ...o });
 describe("parseModelOutput", () => {
 	it("reads the JSON shape", () => {
@@ -52,5 +52,13 @@ describe("parseModelOutput", () => {
 	it("never reads an action from the FEELING or plain branches, even when the text mentions one", () => {
 		expect(parseModelOutput('Done, I will remind you. FEELING: {"action":{"name":"reminder_set","args":"{}"}}')).toMatchObject({ reply: "Done, I will remind you.", action: null });
 		expect(parseModelOutput("I will use reminder_set for that.")).toMatchObject({ reply: "I will use reminder_set for that.", action: null });
+	});
+});
+describe("isJsonTurn", () => {
+	it("is true only for text that is one whole JSON object", () => {
+		expect(isJsonTurn(json({}))).toBe(true);
+		expect(isJsonTurn(`  ${json({ crisis: true })}
+`)).toBe(true);
+		for (const t of ['{"reply":"I am here wi', '"CRISIS"', "CRISIS", "[1]", "56", 'Done. FEELING: {"tone":[]}', ""]) expect(isJsonTurn(t), t).toBe(false);
 	});
 });

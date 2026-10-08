@@ -38,7 +38,7 @@ import { answerFromMemory, calculateMath, findUnknownTopic, isBuiltInTopic } fro
 import { askForReply, askStatus, nextUsage } from "@/lib/chat/ask";
 import { chatBody } from "@/lib/chat/body";
 import { sendDecision } from "@/lib/chat/decision";
-import { detectionOf, keptTurn, pickBranch, quietEffects, whileWaiting, writerFor, type QuietPlan } from "@/lib/chat/branch";
+import { decisionFor, detectionOf, keptTurn, pickBranch, quietEffects, waitingAfter, whileWaiting, writerFor, type QuietPlan } from "@/lib/chat/branch";
 import type { ChatStatus } from "@/lib/chat/types";
 import { newId } from "@/lib/uuid";
 import { Panel, PanelLinks, usePanels } from "@/components/osmo/panel";
@@ -52,8 +52,6 @@ import { Figure } from "@/components/osmo/figure";
 import { useBuild } from "@/components/osmo/use-build";
 import { ThingPanel } from "@/components/osmo/thing-panel";
 import type { BuildTicket } from "@/lib/actions/types";
-// From its own file, which imports nothing: lib/actions/index pulls in the server's database.
-import { decisionOf } from "@/lib/actions/decision-words";
 
 type ChatMessage = {
 	role: "user" | "agent";
@@ -87,8 +85,8 @@ export default function AgentChat() {
 	const [aiUsage, setAiUsage] = useState<ChatStatus | null>(null);
 	const aiEnabledRef = useRef(false);
 	const aiStoppedRef = useRef(false);
-	// Whether the last model answer left an action waiting for Gur's yes or no (spec 4.3). Only then does a bare
-	// yes or no go to /api/act instead of the conversation.
+	// Whether the last answer left an action waiting for Gur's yes or no (spec 4.3). Only then does a bare yes or no go
+	// to /api/act instead of the conversation. Its rules are waitingAfter's (lib/chat/branch.ts).
 	const confirmWaitingRef = useRef(false);
 	const waitingRef = useRef<Waiting | null>(null);
 	// Read in handlers only, never while rendering.
@@ -288,16 +286,20 @@ export default function AgentChat() {
 		sendText(input, { via: "typed", speaker: "you" });
 	}
 
+	// A crisis cancels every waiting confirmation, so a yes afterwards finds nothing (spec 4.3, 9.1). It's posted whatever
+	// the flag says: a confirmation may still wait from before a reload, from another tab, or after a later answer
+	// cleared the flag. A crisis is rare, and the server's cancel is cheap.
+	function cancelConfirmation() {
+		confirmWaitingRef.current = false;
+		void ensureSession().catch(() => null).then((s) => s && sendDecision(fetch, s.access_token, "crisis", "typed"));
+	}
+
 	// A crisis message that arrives while Osmo waits on another turn is answered at once, never dropped. The
 	// waiting turn owns this step of his heart, so it isn't stepped here; that turn finishes quietly instead.
 	function takeCrisis(text: string, options: SendOptions): boolean {
 		setPendingLearning(null);
 		aiStoppedRef.current = true;
-		// A crisis cancels the waiting confirmation, so a yes afterwards finds nothing (spec 9.1).
-		if (confirmWaitingRef.current) {
-			confirmWaitingRef.current = false;
-			void ensureSession().catch(() => null).then((s) => s && sendDecision(fetch, s.access_token, "crisis", "typed"));
-		}
+		cancelConfirmation();
 		const wait = waitingRef.current;
 		// A model turn cut short gets no reply, so its line is saved here, ahead of the crisis pair as on screen.
 		// Only the crisis message that first quiets it saves it.
@@ -350,10 +352,7 @@ export default function AgentChat() {
 		// confirmation is cancelled (spec 9.1).
 		if (crisis) {
 			aiStoppedRef.current = true;
-			if (confirmWaitingRef.current) {
-				confirmWaitingRef.current = false;
-				void ensureSession().catch(() => null).then((s) => s && sendDecision(fetch, s.access_token, "crisis", "typed"));
-			}
+			cancelConfirmation();
 		}
 		// A new question is answered, not saved as the explanation Osmo asked for. A guest's words never
 		// answer Gur's pending question, and leave it waiting for him.
@@ -584,7 +583,7 @@ export default function AgentChat() {
 		// A bare yes or no, while an action waits for it, answers that action and nothing else (spec 4.3, 9.1): code
 		// matches the words, the server completes or cancels it, and its line is the reply. Never a guest's, never
 		// in a crisis. His heart doesn't step for it.
-		const decision = guest || crisis || !confirmWaitingRef.current ? null : decisionOf(text);
+		const decision = decisionFor({ guest, crisis, waiting: confirmWaitingRef.current, text });
 		if (decision) {
 			if (via === "typed") setInput("");
 			setMessages((current) => [...current, userMessage]);
@@ -595,12 +594,15 @@ export default function AgentChat() {
 					new Promise<null>((resolve) => setTimeout(() => resolve(null), SESSION_TIMEOUT_MS)),
 				]);
 				// A crisis message taken while the session was read has already cut this turn short: nothing is posted.
-				const answer = signedIn && !wait.quiet ? await sendDecision(fetch, signedIn.access_token, decision, via) : { handled: false, reply: null };
-				confirmWaitingRef.current = false;
+				const answer = signedIn && !wait.quiet ? await sendDecision(fetch, signedIn.access_token, decision, via) : { handled: false, reply: null, waiting: false };
+				confirmWaitingRef.current = waitingAfter(confirmWaitingRef.current, { on: "decision", answer });
 				if (!wait.quiet) deliver(answer.reply ?? "Nothing is waiting for your yes.");
 			});
 			return true;
 		}
+		// Any other turn of Gur's moves past the question, so a later bare yes is the conversation's again (a model answer
+		// below may say one waits anew); a guest's turn leaves it waiting for him.
+		confirmWaitingRef.current = waitingAfter(confirmWaitingRef.current, { on: guest ? "guest" : "turn" });
 
 		if (writer === "model" && turn && prepared) {
 			// A spoken message leaves a half-typed draft alone.
@@ -622,7 +624,7 @@ export default function AgentChat() {
 				if (answer) {
 					setAiUsage((current) => nextUsage(current, answer));
 					// Only a model answer that says an action waits makes the next bare yes or no go to /api/act.
-					confirmWaitingRef.current = answer.kind === "model" && answer.waiting;
+					confirmWaitingRef.current = waitingAfter(confirmWaitingRef.current, { on: "model", answer });
 					// A crisis flag, a 403 or "off": nothing more is posted this visit.
 					if (answer.kind === "crisis" || (answer.kind === "fallback" && answer.stop)) aiStoppedRef.current = true;
 					// A 403 or "off" means it's really off; a crisis only pauses it for this visit.

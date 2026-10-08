@@ -6,6 +6,7 @@
 
 import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { after } from "next/server";
 import { cancelWaiting, listEnabledActions, runAction, type ActionContext, type ActionOutcome, type ActionProposal, type EnabledActions } from "../actions";
 import { validateDetection, type Detection } from "../agent/detection";
 import { bearerToken, requireUser, type ServerUser } from "../server/auth";
@@ -14,8 +15,8 @@ import { dayUse, ledgerKey, reservationRow, settlingRow, supabaseLedger, ZERO, t
 import { callModel, type ModelOutcome, type Parsed } from "./openai";
 import { buildInput, buildInstructions, fitToCeiling } from "./prompt";
 import { checkBody } from "./request";
-import { parseModelOutput, type ModelOutput } from "./reply-json";
-import { isCrisisFlag, lastFullSentence, speakable } from "./speakable";
+import { isJsonTurn, parseModelOutput, type ModelOutput } from "./reply-json";
+import { isCrisisFlag, lastFullSentence, saidWhole, speakable } from "./speakable";
 import { turnFormat } from "./turn-schema";
 import type { ChatAnswer, ChatStatus, FallbackReason, InputItem, Usage } from "./types";
 
@@ -36,6 +37,8 @@ export type ChatDeps = {
 		run(p: ActionProposal, ctx: ActionContext): Promise<ActionOutcome>;
 		cancelWaiting(userId: string): Promise<void>;
 	};
+	// Work that must not hold up the answer, run once it has been sent. Never throws.
+	later(work: () => Promise<unknown>): void;
 };
 
 export function chatDeps(): ChatDeps {
@@ -56,6 +59,14 @@ export function chatDeps(): ChatDeps {
 		now: () => Date.now(),
 		log: (event, fields) => console.warn(JSON.stringify({ event, ...fields })),
 		actions: { list: (userId) => listEnabledActions(userId), run: (p, ctx) => runAction(p, ctx), cancelWaiting: (userId) => cancelWaiting(userId) },
+		// Next keeps the function alive for it after the response. Outside a request, where after() throws, it starts at once.
+		later: (work) => {
+			try {
+				after(work);
+			} catch {
+				void work().catch(() => {});
+			}
+		},
 	};
 }
 
@@ -121,18 +132,20 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 	}
 	const checked = checkBody(raw);
 	if (!checked.ok) return fail(400, "bad_request");
-	// A crisis, here or flagged by the model, also cancels any confirmation waiting for his yes (spec 4.3, 9.1).
-	const cancel = () => quietly(deps, "cancel", () => deps.actions.cancelWaiting(user.id), undefined);
+	// A crisis, here or flagged by the model, also cancels any confirmation waiting for his yes (spec 4.3, 9.1), even with
+	// actions off (a row may be left from before). It runs after the crisis answer is sent, so it never holds that answer up.
+	const cancel = () => deps.later(() => quietly(deps, "cancel", () => deps.actions.cancelWaiting(user.id), undefined));
 	if (checked.crisis) {
-		await cancel();
+		cancel();
 		return fallback("crisis", null);
 	}
 
 	// 4. The actions switched on, which only a strict model can set; then the prompt, trimmed to the per-call ceiling.
-	// With none on, the prompt and the format are exactly what they were before actions.
+	// With none on, a strict model's prompt and format are exactly what they were before actions. (A model that is not
+	// strict is trimmed by the FEELING prompt it is sent; before actions it was measured with the slightly shorter JSON one.)
 	const form = entry.strict ? "json" : "feeling";
 	const listed = entry.strict ? await quietly(deps, "list", () => deps.actions.list(user.id), null) : null;
-	const actions = listed !== null && listed.names.length > 0 ? listed : null;
+	const actions = offered(listed);
 	const body = fitToCeiling(checked.body, CALL_CEILING, { format: form, actions });
 	const instructions = buildInstructions(body, form, actions);
 	const input = buildInput(body);
@@ -147,13 +160,14 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 	// 12. Check the reply. A crisis drops the turn's action.
 	const result = judge(deps, outcome, entry.model);
 	if ("reason" in result) {
-		if (result.reason === "crisis") await cancel();
+		if (result.reason === "crisis") cancel();
 		return fallback(result.reason, usage);
 	}
 
 	// 13. The action, then the answer (spec 3.5, 3.6). Done with nothing to read: the model's sentence, then the code's
-	// exact line. Waiting, failed or refused: only the code's line. Done with a result: call 2 answers with it, and when
-	// it cannot, the code's line stands. Call 2's own action and tone reading are dropped; its crisis flag still counts.
+	// exact line. Waiting, failed or refused: only the code's line. Done with a result: call 2 answers with it, its body
+	// fitted again so the result has room, and when it cannot, or its answer is too long to say whole, the code's line
+	// stands, so no item is lost. Call 2's own action and tone reading are dropped; its crisis flag still counts.
 	let reply = result.reply,
 		waiting = false,
 		final = usage;
@@ -166,20 +180,30 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 		} else if (out.kind === "failed" || out.kind === "refused") reply = out.line;
 		else if (out.kind === "done" && out.result === null) reply = `${reply} ${out.line}`;
 		else if (out.kind === "done" && out.result !== null) {
-			const again = await spend(ctx, { instructions: buildInstructions(body, form, actions, { name: proposal.name, text: out.result }), input, format });
+			const read = { name: proposal.name, text: out.result };
+			const fitted = fitToCeiling(body, CALL_CEILING, { format: form, actions, result: read });
+			const again = await spend(ctx, { instructions: buildInstructions(fitted, form, actions, read), input: buildInput(fitted), format });
 			final = again.usage ?? final;
 			const second = again.kind === "called" ? judge(deps, again.outcome, entry.model) : null;
 			if (second !== null && "reason" in second && second.reason === "crisis") {
-				await cancel();
+				cancel();
 				return fallback("crisis", final);
 			}
-			reply = second !== null && !("reason" in second) ? second.reply : out.line;
+			reply = second !== null && !("reason" in second) && second.whole ? second.reply : out.line;
 		}
 	}
 	return answer({ source: "model", reply, usage: final, detection: result.detection, waiting });
 }
 
 const IGNORED: ActionOutcome = { kind: "ignored" };
+
+// Building things is not offered until the room can start a build from the action's ticket (artifacts, task B8):
+// until then a build would be logged and counted while nothing appears. Null when nothing else is on.
+function offered(listed: EnabledActions | null): EnabledActions | null {
+	if (listed === null) return null;
+	const kept = listed.names.flatMap((name, i) => (name === "build" ? [] : [{ name, line: listed.lines[i] }]));
+	return kept.length === 0 ? null : { ...listed, names: kept.map((k) => k.name), lines: kept.map((k) => k.line) };
+}
 
 // The actions seam never breaks a turn: a throw reads as nothing on, nothing run or nothing cancelled, and only the step is logged.
 async function quietly<T>(deps: ChatDeps, step: "list" | "run" | "cancel", work: () => Promise<T>, otherwise: T): Promise<T> {
@@ -284,8 +308,9 @@ function settlement(outcome: ModelOutcome, reservation: Reservation): { counts: 
 	};
 }
 
+// whole: the reply is all the model wrote, with nothing cut by the output cap or dropped to fit what Osmo says.
 type Verdict =
-	| { reply: string; detection: Detection | null; action: ModelOutput["action"] }
+	| { reply: string; detection: Detection | null; action: ModelOutput["action"]; whole: boolean }
 	| { reason: "error" | "crisis" | "empty"; why: "model" | "refusal" | "content_filter" | "status" | "incomplete" | "format" | null };
 
 // Step 12 for either call: the verdict, with why a reply was refused logged by name.
@@ -308,8 +333,11 @@ const CRISIS_FIELD = /"crisis"\s*:\s*true/;
 // detection is checked here, so the browser only ever gets a validated one. The action comes with the reply.
 function verdict(parsed: Parsed, model: string): Verdict {
 	const out = parseModelOutput(parsed.text);
+	// A whole JSON turn flags a crisis with its field or its reply, both in out.crisis. Its action's args copy Gur's own
+	// words, so the raw text is searched only for the other forms: FEELING, plain text, and JSON the output cap cut off.
+	const searchRaw = out === null || !isJsonTurn(parsed.text);
 	// A crisis flag stands whichever model wrote it; a mismatch is still logged, and its settling row still stops the day.
-	if (out?.crisis || isCrisisFlag(parsed.text) || CRISIS_FIELD.test(parsed.text)) return { reason: "crisis", why: parsed.model !== model ? "model" : null };
+	if (out?.crisis || (searchRaw && (isCrisisFlag(parsed.text) || CRISIS_FIELD.test(parsed.text)))) return { reason: "crisis", why: parsed.model !== model ? "model" : null };
 	if (parsed.model !== model) return { reason: "error", why: "model" };
 	if (parsed.refused || (parsed.status === "incomplete" && parsed.incomplete === "content_filter")) {
 		return { reason: "error", why: parsed.refused ? "refusal" : "content_filter" };
@@ -318,5 +346,6 @@ function verdict(parsed: Parsed, model: string): Verdict {
 	if (parsed.status === "incomplete" && parsed.incomplete !== "max_output_tokens") return { reason: "error", why: "incomplete" };
 	if (out === null) return { reason: "error", why: "format" };
 	const reply = speakable(parsed.status === "incomplete" ? lastFullSentence(out.reply) : out.reply);
-	return reply === "" ? { reason: "empty", why: null } : { reply, detection: validateDetection(out.detection, "model"), action: out.action };
+	const whole = parsed.status === "completed" && saidWhole(out.reply);
+	return reply === "" ? { reason: "empty", why: null } : { reply, detection: validateDetection(out.detection, "model"), action: out.action, whole };
 }
