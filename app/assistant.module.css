@@ -544,3 +544,30 @@
 		transition: none;
 	}
 }
+
+/* ---------- Shell v2 (NEXT_PUBLIC_OSMO_SHELL2): a rail on the left, a bar on phones ---------- */
+
+.stage[data-shell] {
+	--rail-w: 4.25rem;
+	--bar-h: 3.5rem;
+	--rail-ground: color-mix(in oklab, var(--ink) 38%, var(--base));
+	padding-left: calc(var(--rail-w) + 2rem);
+}
+.stage[data-shell] .figure {
+	left: calc(50% + var(--rail-w) / 2);
+}
+@media (min-width: 40.01rem) {
+	.stage[data-shell][data-panel] .column {
+		--avail: calc(100vw - var(--rail-w) - var(--panel-w) - 3rem);
+	}
+}
+@media (max-width: 40rem) {
+	.stage[data-shell] {
+		--rail-w: 0rem;
+		padding-left: 2rem;
+		padding-bottom: calc(var(--bar-h) + env(safe-area-inset-bottom));
+	}
+	.stage[data-shell][data-typing] {
+		padding-bottom: 0;
+	}
+}

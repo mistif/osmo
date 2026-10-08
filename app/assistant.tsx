@@ -51,6 +51,10 @@ import { useHeartMotion } from "@/components/osmo/use-heart-motion";
 import { Figure } from "@/components/osmo/figure";
 import { useBuild } from "@/components/osmo/use-build";
 import { ThingPanel } from "@/components/osmo/thing-panel";
+import { SHELL2 } from "@/lib/shell/flag";
+import { useShell } from "@/components/osmo/use-shell";
+import { Rail } from "@/components/osmo/rail";
+import { ShellPanels } from "@/components/osmo/shell-panels";
 import type { BuildTicket } from "@/lib/actions/types";
 
 type ChatMessage = {
@@ -114,6 +118,8 @@ export default function AgentChat() {
 	const reduceMotionRef = useRef(false);
 	const [speaking, setSpeaking] = useState<{ index: number; chars: number } | null>(null);
 	const heart = useHeartMotion(stageRef);
+	const shell = useShell(SHELL2, stageRef, ready);
+	const openPanel = SHELL2 ? shell.route.panel : panels.panel;
 	// The thing he builds beside the conversation. buildRef is how sendText hands over a ticket (language, task B8);
 	// until a ticket arrives nothing renders. Locking unmounts the room, and the hook cancels a running build then.
 	const build = useBuild();
@@ -276,7 +282,7 @@ export default function AgentChat() {
 			},
 		},
 		sendTextRef,
-		openSettings: () => panels.open("settings"),
+		openSettings: () => (SHELL2 ? shell.open("settings", "voice") : panels.open("settings")),
 	});
 	useEffect(() => {
 		onReplyRef.current = voice.onReply;
@@ -702,7 +708,8 @@ export default function AgentChat() {
 		<div ref={stageRef} className={`${styles.stage} ${font.className}`} style={stageStyle}
 			data-tone={theme.tone}
 			data-speaking={speaking ? "" : undefined}
-			data-panel={panels.panel ?? undefined}
+			data-panel={openPanel ?? undefined}
+			data-shell={SHELL2 ? "" : undefined}
 			data-building={build.view?.phase === "building" ? "" : undefined}
 			data-built={build.built ? "" : undefined}
 			data-listening={voice.mode === "awake" || voice.mode === "followup" ? "" : undefined}
@@ -715,16 +722,18 @@ export default function AgentChat() {
 				<Figure className={styles.figure} said={said} heard={heard} />
 			</div>
 
+			{SHELL2 && <Rail items={shell.items} fill={70} onNavigate={shell.navigate} linkRef={shell.linkRef} />}
+
 			<main className={styles.column}>
 				<header className={styles.head}>
-					<span className={styles.heart} aria-hidden="true" />
+					{!SHELL2 && <span className={styles.heart} aria-hidden="true" />}
 					<div>
 						<h1 className={styles.name}>Osmo</h1>
 						<p className={styles.mood} role="status">
 							Feeling {feelingPhrase(agent.activations, baseline)}
 						</p>
 					</div>
-					<PanelLinks panel={panels.panel} toggle={panels.toggle} linkRef={panels.linkRef} />
+					{!SHELL2 && <PanelLinks panel={panels.panel} toggle={panels.toggle} linkRef={panels.linkRef} />}
 				</header>
 
 				{!voiceOnly && (
@@ -758,7 +767,7 @@ export default function AgentChat() {
 				</ol>
 				)}
 
-				<ThingPanel build={build} aura={{ a: theme.colorA, b: theme.colorB, bg: theme.base, ink: "#f3efe8" }} hidden={panels.panel !== null} />
+				<ThingPanel build={build} aura={{ a: theme.colorA, b: theme.colorB, bg: theme.base, ink: "#f3efe8" }} hidden={openPanel !== null} />
 
 				<form onSubmit={sendMessage} className={styles.composer}>
 					<input
@@ -797,7 +806,18 @@ export default function AgentChat() {
 				)}
 			</main>
 
-			{panels.panel && (
+			{SHELL2 && (
+				<ShellPanels
+					shell={shell}
+					memory={memory}
+					onMemoryChange={setMemory}
+					agent={agent}
+					voice={voice}
+					aiUsage={aiUsage}
+					onOpenThing={(id, title, source) => { build.show(id, title, source); shell.close(); }}
+				/>
+			)}
+			{!SHELL2 && panels.panel && (
 				<Panel id={panels.panel} onClose={panels.close}>
 					{panels.panel === "memory" && <MemoryPanel memory={memory} onChange={setMemory} />}
 					{panels.panel === "insights" && <InsightsPanel agent={agent} onOpenThing={(id, title, source) => { build.show(id, title, source); panels.close(); }} onThingDeleted={(id) => { if (build.view?.phase === "ready" && build.view.id === id) build.close(); }} />}

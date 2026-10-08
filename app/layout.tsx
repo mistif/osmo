@@ -11,7 +11,12 @@ export const metadata: Metadata = {
 	appleWebApp: { capable: true, title: "Osmo", statusBarStyle: "black-translucent" },
 };
 
-export const viewport: Viewport = { themeColor: THEME_COLOR };
+// viewport-fit=cover is what env(safe-area-inset-bottom) needs for the shell v2 bar; it stays off unless the switch is on,
+// so today's shell is unchanged on a notched phone.
+export const viewport: Viewport = {
+	themeColor: THEME_COLOR,
+	...(process.env.NEXT_PUBLIC_OSMO_SHELL2 === "on" ? { viewportFit: "cover" as const } : {}),
+};
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
 	return (
