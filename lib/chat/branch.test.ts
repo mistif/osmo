@@ -458,8 +458,12 @@ describe("waitingAfter", () => {
 	});
 
 	it("keeps it waiting after a decision only when the server says the row still waits", () => {
-		expect(waitingAfter(true, { on: "decision", answer: { handled: true, reply: "For that one I need you to type yes.", waiting: true } })).toBe(true);
-		expect(waitingAfter(true, { on: "decision", answer: { handled: true, reply: "Deleted the note.", waiting: false } })).toBe(false);
-		expect(waitingAfter(true, { on: "decision", answer: { handled: false, reply: null, waiting: false } })).toBe(false);
+		expect(waitingAfter(true, { on: "decision", answer: { handled: true, reply: "For that one I need you to type yes.", waiting: true, reached: true } })).toBe(true);
+		expect(waitingAfter(true, { on: "decision", answer: { handled: true, reply: "Deleted the note.", waiting: false, reached: true } })).toBe(false);
+		expect(waitingAfter(true, { on: "decision", answer: { handled: false, reply: null, waiting: false, reached: true } })).toBe(false);
+	});
+
+	it("leaves it as it was after a decision that never reached the server, which knows nothing of it", () => {
+		for (const was of [true, false]) expect(waitingAfter(was, { on: "decision", answer: { handled: false, reply: null, waiting: false, reached: false } }), String(was)).toBe(was);
 	});
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isJsonTurn, parseModelOutput } from "./reply-json";
+import { isJsonTurn, ownWords, parseModelOutput } from "./reply-json";
 const json = (o: object) => JSON.stringify({ reply: "I am sorry to hear that.", crisis: false, tone: ["worried"], intensity: 2, about: "someone_close", wants: "listen", note: "", ...o });
 describe("parseModelOutput", () => {
 	it("reads the JSON shape", () => {
@@ -9,6 +9,8 @@ describe("parseModelOutput", () => {
 	});
 	it.each([["the field", json({ crisis: true })], ["the old word in the reply", json({ reply: "CRISIS" })], ["Crisis. in the reply", json({ reply: "**Crisis.**" })]])("flags a crisis from %s", (_n, t) =>
 		expect(parseModelOutput(t)?.crisis).toBe(true));
+	it("leaves the bare word inside a JSON turn's sentence to the handler, which knows what the turn may copy", () =>
+		expect(parseModelOutput(json({ reply: "You have the CRISIS comms checklist at nine." }))?.crisis).toBe(false));
 	it("strips the FEELING line, even when its JSON is bad", () => {
 		const good = parseModelOutput('That sounds hard.\nFEELING: {"tone":["sad"],"intensity":2}');
 		expect(good).toMatchObject({ reply: "That sounds hard.", crisis: false });
@@ -52,6 +54,18 @@ describe("parseModelOutput", () => {
 	it("never reads an action from the FEELING or plain branches, even when the text mentions one", () => {
 		expect(parseModelOutput('Done, I will remind you. FEELING: {"action":{"name":"reminder_set","args":"{}"}}')).toMatchObject({ reply: "Done, I will remind you.", action: null });
 		expect(parseModelOutput("I will use reminder_set for that.")).toMatchObject({ reply: "I will use reminder_set for that.", action: null });
+	});
+});
+describe("ownWords", () => {
+	it("is every field of a whole JSON turn but its action, whose args copy Gur's words", () => {
+		const text = json({ note: "CRISIS", action: { name: "reminder_set", args: '{"text":"CRISIS comms"}' } });
+		const own = ownWords(text);
+		expect(own).toContain('"note":"CRISIS"');
+		expect(own).not.toContain("comms");
+		expect(own).toContain('"action":null');
+	});
+	it("is null for text that is not one whole JSON object", () => {
+		for (const t of ['{"reply":"I am here wi', "CRISIS", 'Done. FEELING: {"tone":[]}', "[1]"]) expect(ownWords(t), t).toBeNull();
 	});
 });
 describe("isJsonTurn", () => {

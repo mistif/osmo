@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { sendDecision } from "./decision";
+import { sendDecision, UNREACHED_LINE } from "./decision";
 
 const json = (body: unknown, status = 200) =>
 	new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -16,7 +16,9 @@ const honouring = ((_url: string, init: RequestInit) =>
 		init.signal?.addEventListener("abort", () => reject(init.signal?.reason));
 	})) as unknown as typeof fetch;
 
-const NONE = { handled: false, reply: null, waiting: false };
+// The server answered and nothing waits; and the request that never reached it, which says nothing about the row.
+const NONE = { handled: false, reply: null, waiting: false, reached: true };
+const UNREACHED = { handled: false, reply: null, waiting: false, reached: false };
 
 describe("sendDecision", () => {
 	it("posts the decision and how it came to /api/act with Gur's token", async () => {
@@ -35,17 +37,17 @@ describe("sendDecision", () => {
 
 	it("passes a handled answer and its reply line through", async () => {
 		const { fetchFn } = answering(() => json({ handled: true, reply: "Cancelled." }));
-		expect(await sendDecision(fetchFn, "t", "no", "typed")).toEqual({ handled: true, reply: "Cancelled.", waiting: false });
+		expect(await sendDecision(fetchFn, "t", "no", "typed")).toEqual({ handled: true, reply: "Cancelled.", waiting: false, reached: true });
 	});
 
 	it("keeps a handled answer without a reply line as handled, with no line", async () => {
 		const { fetchFn } = answering(() => json({ handled: true, reply: 42 }));
-		expect(await sendDecision(fetchFn, "t", "yes", "typed")).toEqual({ handled: true, reply: null, waiting: false });
+		expect(await sendDecision(fetchFn, "t", "yes", "typed")).toEqual({ handled: true, reply: null, waiting: false, reached: true });
 	});
 
 	it("passes on that the row still waits, as when a spoken yes must be typed, and reads anything but true as not waiting", async () => {
 		const typed = answering(() => json({ handled: true, reply: "For that one I need you to type yes.", waiting: true }));
-		expect(await sendDecision(typed.fetchFn, "t", "yes", "voice")).toEqual({ handled: true, reply: "For that one I need you to type yes.", waiting: true });
+		expect(await sendDecision(typed.fetchFn, "t", "yes", "voice")).toEqual({ handled: true, reply: "For that one I need you to type yes.", waiting: true, reached: true });
 		for (const waiting of [undefined, false, "yes", 1]) {
 			const { fetchFn } = answering(() => json({ handled: true, reply: "Done.", waiting }));
 			expect((await sendDecision(fetchFn, "t", "yes", "typed")).waiting, String(waiting)).toBe(false);
@@ -59,26 +61,31 @@ describe("sendDecision", () => {
 		expect(await sendDecision(fetchFn, "t", "yes", "typed")).toEqual(NONE);
 	});
 
-	it("reads a 401 and a 500 as not handled, even with a handled body", async () => {
+	it("reads a 401 and a 500 as not handled and never reached, even with a handled body", async () => {
 		for (const status of [401, 500]) {
 			const { fetchFn } = answering(() => json({ handled: true, reply: "Done." }, status));
-			expect(await sendDecision(fetchFn, "t", "yes", "typed")).toEqual(NONE);
+			expect(await sendDecision(fetchFn, "t", "yes", "typed")).toEqual(UNREACHED);
 		}
 	});
 
-	it("reads a body that is not JSON as not handled", async () => {
+	it("reads a body that is not JSON as not handled and never reached", async () => {
 		const { fetchFn } = answering(() => new Response("<html>oops</html>", { status: 200 }));
-		expect(await sendDecision(fetchFn, "t", "yes", "typed")).toEqual(NONE);
+		expect(await sendDecision(fetchFn, "t", "yes", "typed")).toEqual(UNREACHED);
 	});
 
-	it("reads a failed request as not handled, never throwing", async () => {
+	it("reads a failed request as not handled and never reached, never throwing", async () => {
 		const fetchFn = vi.fn(async () => {
 			throw new TypeError("Failed to fetch");
 		}) as unknown as typeof fetch;
-		expect(await sendDecision(fetchFn, "t", "crisis", "typed")).toEqual(NONE);
+		expect(await sendDecision(fetchFn, "t", "crisis", "typed")).toEqual(UNREACHED);
 	});
 
-	it("gives up after its time limit, as not handled", async () => {
-		expect(await sendDecision(honouring, "t", "yes", "typed", 20)).toEqual(NONE);
+	it("gives up after its time limit, as not handled and never reached", async () => {
+		expect(await sendDecision(honouring, "t", "yes", "typed", 20)).toEqual(UNREACHED);
+	});
+
+	it("has a line for a decision that never reached the server, which Osmo can say", () => {
+		expect(UNREACHED_LINE).toMatch(/^[A-Za-z ,.]+$/);
+		expect(UNREACHED_LINE).not.toContain("Nothing is waiting");
 	});
 });

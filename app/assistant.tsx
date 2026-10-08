@@ -37,7 +37,7 @@ import { learnFact, learnSlang, type MemoryFact } from "@/lib/facts";
 import { answerFromMemory, calculateMath, findUnknownTopic, isBuiltInTopic } from "@/lib/chat/answers";
 import { askForReply, askStatus, nextUsage } from "@/lib/chat/ask";
 import { chatBody } from "@/lib/chat/body";
-import { sendDecision } from "@/lib/chat/decision";
+import { sendDecision, UNREACHED, UNREACHED_LINE } from "@/lib/chat/decision";
 import { decisionFor, detectionOf, keptTurn, pickBranch, quietEffects, waitingAfter, whileWaiting, writerFor, type QuietPlan } from "@/lib/chat/branch";
 import type { ChatStatus } from "@/lib/chat/types";
 import { newId } from "@/lib/uuid";
@@ -525,8 +525,9 @@ export default function AgentChat() {
 		// The user's message sits at messages.length, so the reply is at messages.length + 1: the composer
 		// is locked while Osmo waits, and a crisis message taken meanwhile makes this reply a quiet one.
 		// A quiet reply is only shown and saved: it doesn't move the heart, start the typing or reach the
-		// voice, where a typed reply would cut off the crisis reply being spoken.
-		const deliver = (reply: string, how: { quiet: boolean } = { quiet: false }) => {
+		// voice, where a typed reply would cut off the crisis reply being spoken. lineSaved: takeCrisis already saved
+		// his line, ahead of the crisis pair, so only the reply is saved here.
+		const deliver = (reply: string, how: { quiet: boolean; lineSaved?: boolean } = { quiet: false }) => {
 			replied = true;
 			const agentMessage: ChatMessage = { role: "agent", text: greetGuest(reply, guest && (options.greet ?? false), crisis), ...mark };
 			if (!how.quiet) {
@@ -535,7 +536,7 @@ export default function AgentChat() {
 				setSpeaking(reduceMotionRef.current ? null : { index: messages.length + 1, chars: 0 });
 			}
 			setMessages((current) => [...current, agentMessage]);
-			void saveMessages([userMessage, agentMessage]);
+			void saveMessages(how.lineSaved ? [agentMessage] : [userMessage, agentMessage]);
 			// Handed over once sendText has returned, so the voice always knows its message was taken
 			// before the reply arrives, even when the reply is ready at once.
 			if (!how.quiet) queueMicrotask(() => onReplyRef.current?.(agentMessage.text, via));
@@ -593,10 +594,19 @@ export default function AgentChat() {
 					ensureSession().catch(() => null),
 					new Promise<null>((resolve) => setTimeout(() => resolve(null), SESSION_TIMEOUT_MS)),
 				]);
-				// A crisis message taken while the session was read has already cut this turn short: nothing is posted.
-				const answer = signedIn && !wait.quiet ? await sendDecision(fetch, signedIn.access_token, decision, via) : { handled: false, reply: null, waiting: false };
+				// A crisis message taken while the session was read has already cut this turn short: nothing is posted. No
+				// session means the decision never reached the server.
+				const answer = signedIn && !wait.quiet ? await sendDecision(fetch, signedIn.access_token, decision, via) : UNREACHED;
+				if (wait.quiet) {
+					// A crisis taken while it was posted has put the flag down and cancelled what waits, and this answer never puts
+					// it back up. What the server did is still shown and saved, quietly, so a deletion that ran stays on record;
+					// his yes was saved by takeCrisis, ahead of the crisis pair.
+					if (answer.handled && answer.reply) deliver(answer.reply, { quiet: true, lineSaved: true });
+					return;
+				}
 				confirmWaitingRef.current = waitingAfter(confirmWaitingRef.current, { on: "decision", answer });
-				if (!wait.quiet) deliver(answer.reply ?? "Nothing is waiting for your yes.");
+				// One that never reached the server says so, never that nothing waits, and the flag stays as it was.
+				deliver(answer.reply ?? (answer.reached ? "Nothing is waiting for your yes." : UNREACHED_LINE));
 			});
 			return true;
 		}

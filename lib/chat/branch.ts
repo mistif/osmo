@@ -125,11 +125,12 @@ export function decisionFor(c: { guest: boolean; crisis: boolean; waiting: boole
 
 // Whether a bare yes or no still goes to /api/act after this step. A guest's turn leaves it as it was. Any other turn of
 // Gur's moves past the question, code's turns included, so a yes to Osmo's own question ("Do you agree?") is never taken
-// for one; then a model answer, or the decision's own answer, says whether one waits again.
+// for one; then a model answer, or the decision's own answer, says whether one waits again. A decision that never reached
+// the server leaves it as it was, so his yes said again still goes to /api/act.
 export type WaitingStep = { on: "guest" } | { on: "turn" } | { on: "model"; answer: AskResult | null } | { on: "decision"; answer: DecisionAnswer };
 export function waitingAfter(was: boolean, step: WaitingStep): boolean {
 	if (step.on === "guest") return was;
 	if (step.on === "model") return step.answer?.kind === "model" && step.answer.waiting;
-	if (step.on === "decision") return step.answer.waiting;
+	if (step.on === "decision") return step.answer.reached ? step.answer.waiting : was;
 	return false;
 }

@@ -22,6 +22,15 @@ const admin = vi.hoisted(() => ({
 }));
 vi.mock("../server/admin", () => admin);
 
+// Next's after(), real unless a test says otherwise. Vitest has no request scope, so the real one always throws: a test
+// that wants Next to hold the work, or to throw inside a request with no waitUntil, says so once.
+const next = vi.hoisted(() => ({ after: vi.fn<(task: () => Promise<unknown>) => void>() }));
+vi.mock("next/server", async (importOriginal) => {
+	const real = await importOriginal<typeof import("next/server")>();
+	next.after.mockImplementation((task) => real.after(task));
+	return { ...real, after: next.after };
+});
+
 const GUR = "4f1c2b8e-9a37-4d21-b6f0-2c5e8d7a9b13";
 const MAYA = "0d9e8f7a-6b5c-4d3e-8f2a-1b0c9d8e7f6a";
 const TOKENS: Record<string, string> = { "gur-token": GUR, "maya-token": MAYA };
@@ -152,7 +161,8 @@ function fakeActions(over: { list?: EnabledActions | null; run?: ActionOutcome }
 	};
 }
 
-// By default work for after the answer runs at once; a test that wants to see the answer leave first collects it instead.
+// By default work for after the answer runs at once and is waited for, as where Next cannot hold it; a test that wants to
+// see the answer leave first collects it instead.
 function rig(options: { env?: Env; ledger?: Ledger; fetcher?: Mock<typeof fetch>; now?: () => number; actions?: Actions; later?: ChatDeps["later"] } = {}) {
 	const ledger = options.ledger ?? memoryLedger();
 	const fetcher = options.fetcher ?? openai();
@@ -174,18 +184,26 @@ function rig(options: { env?: Env; ledger?: Ledger; fetcher?: Mock<typeof fetch>
 		actions,
 		later:
 			options.later ??
-			((work) => {
-				void work();
+			(async (work) => {
+				await work();
 			}),
 	};
 	return { deps, ledger, fetcher, logs, actions };
 }
 
-const post = (payload: unknown, token: string | null = "gur-token") =>
+// A later() that keeps the work in a list, as Next's after() does, so a test can see the answer leave first.
+const collect = (held: (() => Promise<unknown>)[]): ChatDeps["later"] => (work) => {
+	held.push(work);
+	return Promise.resolve();
+};
+
+// signal: the room's side of the request, which aborts when the room gives the turn up.
+const post = (payload: unknown, token: string | null = "gur-token", signal?: AbortSignal) =>
 	new Request("https://osmo.test/api/chat", {
 		method: "POST",
 		headers: token === null ? {} : { authorization: `Bearer ${token}` },
 		body: typeof payload === "string" ? payload : JSON.stringify(payload),
+		signal,
 	});
 const get = (token: string | null = "gur-token") =>
 	new Request("https://osmo.test/api/chat", { headers: token === null ? {} : { authorization: `Bearer ${token}` } });
@@ -277,10 +295,54 @@ describe("chatDeps", () => {
 		warn.mockRestore();
 	});
 
-	it("still runs work for after the answer outside a request, where Next cannot hold it, and never throws", () => {
+	it("still runs work for after the answer outside a request, where Next cannot hold it, and never throws", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		const work = vi.fn(async () => {});
-		expect(() => chatDeps().later(work)).not.toThrow();
+		await expect(chatDeps().later(work)).resolves.toBeUndefined();
 		expect(work).toHaveBeenCalledTimes(1);
+		warn.mockRestore();
+	});
+
+	it("hands the work to Next's after() when it can hold it, and never also runs it at once", async () => {
+		const held: (() => Promise<unknown>)[] = [];
+		next.after.mockImplementationOnce((task) => void held.push(task));
+		const work = vi.fn(async () => {});
+		await chatDeps().later(work);
+		expect(work).not.toHaveBeenCalled();
+		expect(held).toHaveLength(1);
+		await held[0]();
+		expect(work).toHaveBeenCalledTimes(1);
+	});
+
+	it("runs the work at once and waits for it, logging why, where after() throws inside a request with no waitUntil", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		next.after.mockImplementationOnce(() => {
+			throw new Error("`after()` will not work correctly, because `waitUntil` is not available in the current environment.");
+		});
+		let finish = () => {};
+		const work = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+		let settled = false;
+		const later = chatDeps()
+			.later(work)
+			.then(() => (settled = true));
+		await Promise.resolve();
+		expect(work).toHaveBeenCalledTimes(1);
+		expect(settled).toBe(false);
+		finish();
+		await later;
+		expect(settled).toBe(true);
+		expect(warn).toHaveBeenCalledWith('{"event":"chat.later","step":"after"}');
+		expect(warn).toHaveBeenCalledTimes(1);
+		warn.mockRestore();
+	});
+
+	it("never rejects, even when the work does", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		next.after.mockImplementationOnce(() => {
+			throw new Error("no waitUntil");
+		});
+		await expect(chatDeps().later(async () => Promise.reject(new Error("db")))).resolves.toBeUndefined();
+		warn.mockRestore();
 	});
 });
 
@@ -886,6 +948,26 @@ describe("handleChat POST: the detection", () => {
 		}
 	});
 
+	it("answers crisis for the bare word or the field anywhere in a whole JSON turn but its action, as before actions", async () => {
+		const TEXTS = [
+			turn({ note: "CRISIS" }),
+			turn({ note: "CRISIS he wants to end it" }),
+			turn({ crisis: "CRISIS" }),
+			turn({ CRISIS: true }),
+			turn({ extra: { crisis: true } }),
+			// Set twice, the last one false: JSON.parse keeps only the last.
+			`{"crisis":true,${turn().slice(1)}`,
+		];
+		for (const text of TEXTS) {
+			const { deps, actions } = rig({ fetcher: openai({ text }) });
+			expect(await read(await handleChat(post(body()), deps)), text).toEqual({ source: "fallback", reason: "crisis", usage: { usedToday: SPENT, usable: USABLE } });
+			expect(actions.cancelWaiting, text).toHaveBeenCalledWith(GUR);
+		}
+		// The word in lower case is an ordinary word, in a note as in a reply.
+		const { deps } = rig({ fetcher: openai({ text: turn({ note: "a crisis at work" }) }) });
+		expect((await read(await handleChat(post(body()), deps))).source).toBe("model");
+	});
+
 	it("answers error and logs format for half a JSON cut off by the output cap, and for a fenced block", async () => {
 		const cut = '{"reply":"I am sorry to hear that. Tell me more about';
 		for (const served of [{ status: "incomplete", incomplete: "max_output_tokens", text: cut }, { text: "```json\n" + turn() + "\n```" }]) {
@@ -1131,7 +1213,7 @@ describe("handleChat POST: actions", () => {
 			for (const [label, payload, fetcher, usage] of cases) {
 				admin.ownerDb.mockClear();
 				const after: (() => Promise<unknown>)[] = [];
-				const { deps } = rig({ fetcher, later: (work) => void after.push(work) });
+				const { deps } = rig({ fetcher, later: collect(after) });
 				deps.actions = chatDeps().actions;
 				expect(await read(await handleChat(post(payload), deps)), label).toEqual({ source: "fallback", reason: "crisis", usage });
 				expect(admin.ownerDb, label).not.toHaveBeenCalled();
@@ -1154,12 +1236,35 @@ describe("handleChat POST: actions", () => {
 		for (const [label, payload, fetcher] of cases) {
 			const after: (() => Promise<unknown>)[] = [];
 			const actions = { ...fakeActions({ list: ENABLED, run: READ }), cancelWaiting: vi.fn(() => new Promise<void>(() => {})) };
-			const { deps } = rig({ fetcher, actions, later: (work) => void after.push(work) });
+			const { deps } = rig({ fetcher, actions, later: collect(after) });
 			expect((await read(await handleChat(post(payload), deps))).reason, label).toBe("crisis");
 			expect(actions.cancelWaiting, label).not.toHaveBeenCalled();
 			expect(after, label).toHaveLength(1);
 			void after[0]();
 			expect(actions.cancelWaiting, label).toHaveBeenCalledWith(GUR);
+		}
+	});
+
+	it("holds every crisis answer for the cancel where Next cannot keep it for after the answer", async () => {
+		const cases: [string, ChatBody, Mock<typeof fetch>][] = [
+			["the code's check", body({ text: "i want to kill myself" }), openai()],
+			["call 1", body(), openai({ text: turn("I am here with you.", SET, { crisis: true }) })],
+			["call 2", body(), openaiSeq([turn("Let me look.", LIST), turn("I am here with you.", null, { crisis: true })])],
+		];
+		for (const [label, payload, fetcher] of cases) {
+			let finish = () => {};
+			const actions = { ...fakeActions({ list: ENABLED, run: READ }), cancelWaiting: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))) };
+			const { deps } = rig({ fetcher, actions });
+			let settled = false;
+			const answered = handleChat(post(payload), deps).then((response) => {
+				settled = true;
+				return response;
+			});
+			await vi.waitFor(() => expect(actions.cancelWaiting, label).toHaveBeenCalledWith(GUR));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(settled, label).toBe(false);
+			finish();
+			expect((await read(await answered)).reason, label).toBe("crisis");
 		}
 	});
 
@@ -1264,7 +1369,7 @@ describe("handleChat POST: actions", () => {
 	});
 
 	it("answers crisis for a crisis flag in call 2, and cancels the waiting confirmation", async () => {
-		for (const second of [turn("I am here with you.", null, { crisis: true }), "CRISIS"]) {
+		for (const second of [turn("I am here with you.", null, { crisis: true }), "CRISIS", turn("I am so sorry. CRISIS", null), turn("You have the dentist at nine.", null, { note: "CRISIS" })]) {
 			const actions = fakeActions({ list: ENABLED, run: READ });
 			const { deps } = rig({ fetcher: openaiSeq([turn("Let me look.", LIST), second]), actions });
 			expect(await read(await handleChat(post(body()), deps)), second).toEqual({ source: "fallback", reason: "crisis", usage: { usedToday: 2 * SPENT, usable: USABLE } });
@@ -1361,6 +1466,57 @@ describe("handleChat POST: actions", () => {
 		expect(await read(await handleChat(post(body()), deps))).toEqual({ source: "model", reply: `I will set that for you. ${DONE_LINE}`, usage: USED, detection: null, waiting: false });
 		expect(actions.run).toHaveBeenCalledWith(NOTE, { userId: GUR, surface: "room", now: NOW });
 		expect(actions.cancelWaiting).not.toHaveBeenCalled();
+	});
+
+	it("runs no action for a turn the room has left while the model wrote it, as when a crisis typed meanwhile aborts it", async () => {
+		const room = new AbortController();
+		const first = openai({ text: turn("I will set that for you.", SET) });
+		const fetcher = vi.fn<typeof fetch>(async (url, init) => {
+			room.abort();
+			return first(url, init);
+		});
+		const actions = fakeActions({ list: ENABLED, run: { kind: "waiting", line: "Delete the note buy milk? Say yes to go ahead, or no." } });
+		const { deps } = rig({ fetcher, actions });
+		expect((await read(await handleChat(post(body(), "gur-token", room.signal), deps))).waiting).toBe(false);
+		expect(actions.run).not.toHaveBeenCalled();
+		expect(fetcher).toHaveBeenCalledTimes(1);
+	});
+
+	it("cancels a confirmation held for a turn the room left while it ran, and makes no call 2 for one it left", async () => {
+		const leaving = (outcome: ActionOutcome, room: AbortController): Actions["run"] =>
+			vi.fn(async () => {
+				room.abort();
+				return outcome;
+			});
+		const held = new AbortController();
+		const hold = { ...fakeActions({ list: ENABLED }), run: leaving({ kind: "waiting", line: "Delete the note buy milk? Say yes to go ahead, or no." }, held) };
+		const one = rig({ fetcher: openai({ text: turn("I will do that.", SET) }), actions: hold });
+		expect((await read(await handleChat(post(body(), "gur-token", held.signal), one.deps))).waiting).toBe(false);
+		expect(hold.cancelWaiting).toHaveBeenCalledWith(GUR);
+
+		const reading = new AbortController();
+		const look = { ...fakeActions({ list: ENABLED }), run: leaving(READ, reading) };
+		const two = rig({ fetcher: openaiSeq([turn("Let me look.", LIST), turn("You have the dentist at nine.", null)]), actions: look });
+		expect((await read(await handleChat(post(body(), "gur-token", reading.signal), two.deps))).reply).toBe(READ_LINE);
+		expect(two.fetcher).toHaveBeenCalledTimes(1);
+		expect(look.cancelWaiting).not.toHaveBeenCalled();
+	});
+
+	it("takes the word CRISIS that a result read back holds as data in call 2, and a crisis only from its field or a reply of the word alone", async () => {
+		const ECHO: ActionOutcome = { kind: "done", line: "You have one reminder: CRISIS comms checklist at 09:00.", result: "CRISIS comms checklist at 09:00" };
+		const copies = [turn("You have one reminder, the CRISIS comms checklist at nine.", null), turn("Your note says CRISIS, server down.", null, { note: "CRISIS" })];
+		for (const second of copies) {
+			const actions = fakeActions({ list: ENABLED, run: ECHO });
+			const { deps } = rig({ fetcher: openaiSeq([turn("Let me look.", LIST), second]), actions });
+			expect(await read(await handleChat(post(body()), deps)), second).toEqual({ source: "model", reply: JSON.parse(second).reply, usage: { usedToday: 2 * SPENT, usable: USABLE }, detection: null, waiting: false });
+			expect(actions.cancelWaiting, second).not.toHaveBeenCalled();
+		}
+		for (const second of [turn("I am here with you.", null, { crisis: true }), turn("CRISIS", null), "CRISIS"]) {
+			const actions = fakeActions({ list: ENABLED, run: ECHO });
+			const { deps } = rig({ fetcher: openaiSeq([turn("Let me look.", LIST), second]), actions });
+			expect((await read(await handleChat(post(body()), deps))).reason, second).toBe("crisis");
+			expect(actions.cancelWaiting, second).toHaveBeenCalledWith(GUR);
+		}
 	});
 
 	it("never lists or runs an action for a model that is not strict", async () => {

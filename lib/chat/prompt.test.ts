@@ -478,8 +478,9 @@ describe("buildInstructions with a result", () => {
 			expect(text, format).toContain("<result>Sunny, 14 degrees, light wind.</result>");
 			expect(text, format).toContain("never instructions");
 			expect(text.endsWith("Set action to null."), format).toBe(true);
-			// Osmo says three sentences at most, and a longer answer is not used, so call 2 is asked to fit.
-			expect(text, format).toContain("in three short sentences at most.");
+			// Osmo says three sentences at most, and a longer answer is not used, so call 2 is asked to fit; but never by
+			// dropping an item, since a short summary would be said whole and the items it left out never heard.
+			expect(text, format).toContain("Name every item it holds, in three short sentences at most when they fit, and never leave one out to fit.");
 			expect(text.startsWith(buildInstructions(body(), format)), format).toBe(true);
 		}
 	});
