@@ -14,6 +14,7 @@ Gur's answers to language on 2026-10-02:
 - The second tier is **`gpt-4.1-mini-2025-04-14`**. It's already on the allowlist, and the strict-JSON probe passed (184 in, 77 out, 1.8 s).
 - With no model, ordinary conversation gets **a short honest line** in his voice. It's never a teach-me prompt.
 - **The dictionary lookup stays, for no-model only.** The model answers word questions; the code lookup runs only when no model can. Its spelling suggestions and its "explain it to me" prompt go.
+- **Guests reach the second model** (2026-10-08), with nothing of Gur's and a budget of their own (§6).
 
 **Success:** with the AI on, Gur can't tell from the words when the main model failed. With every model down, Osmo still answers every message in one or two plain sentences, and never asks Gur to teach him a word. Crisis handling is exactly as safe as today.
 
@@ -88,11 +89,29 @@ When no model answered, each branch gets its no-model reply:
 
 With the AI on and a model failing, this line is rare: two tiers have to fail first. With the AI off (no settings), it's the everyday reply.
 
-## 6. Guests
+## 6. Guests reach the second model
 
-Guests never reach the model (phase 1 rule, unchanged), so with the small talk gone they get the no-model mode. That's the core and arithmetic, plus a guest line in place of the honest one: "I keep conversations for the person I belong to, I am afraid. I can still do a quick sum or look up a word." Nothing of a guest is saved, as today.
+Gur's answer (2026-10-08): **a guest's everyday conversation goes to tier 2,** with nothing of Gur's. This replaces the phase 1 rule that guests never reach a model. Who counts as a guest is decided in the room, as today (the `guest` flag). Both arrive on Gur's token, so the server can't tell them apart. What it can do is make the guest path unable to carry Gur's data.
 
-**Open point for Gur:** the alternative is to let a guest reach tier 2 with no memory, no history and no facts of Gur's. It would cost tokens from Gur's share, and guests' words go to OpenAI (already accepted in the sharing trade). This draft keeps the phase 1 rule.
+- **Only tier 2.** A guest turn never calls `gpt-5.4-mini`. It goes straight to `gpt-4.1-mini`.
+- **Nothing of Gur's is sent.** The request carries:
+  - the guest's message;
+  - the guest's own lines from this visit (the last six at most, held in the room and never saved);
+  - the character block;
+  - his own mood.
+
+  No memory, no facts, no history with Gur, not Gur's name, not his read of Gur. The server builds the guest prompt with its own builder, which has no parameter for any of these, so a bug in the room can't leak them. A guest body that carries `memory`, `facts` or `history` is refused with a 400.
+- **What he's told.** The guest prompt says he is talking with someone who is not the person he belongs to. He doesn't talk about that person or anything they've told him, and he never sets an action.
+- **No actions.** A guest turn never gets the `action` field (`turnFormat([])`), whatever `OSMO_ACTIONS` says. Connectors task 0.11's refusal of `speaker: "guest"` on the owner's path stays. The guest path has a body shape of its own (`speaker: "guest"`, with the message and the visit's lines).
+- **His heart.** A guest turn's detection may move his own mood, as rule-only guest turns do today (`feelTurn` with `guest: true`). It never changes `gur` (his read of Gur) or the bond.
+- **Crisis.** Code's crisis check runs first, as for Gur. A model crisis flag gives `CRISIS_REPLY`.
+- **A budget of its own, inside the share.** Guest turns stop for the UTC day at either limit:
+  - guests have used 30,000 tokens that day (about 20 turns);
+  - the day's total has reached `usable − TIER2_SHARE`, so guests never eat the reserve kept for Gur's tier 2.
+
+  To count the guests' part, each guest row in `ai_calls` is marked by a new `speaker` column (`'owner'` by default, or `'guest'`), and the signed settle covers it. That column is a migration of main's, with Gur's OK. It must be live before the guest path is pushed.
+- **Telling the guest.** The first greeting of a guest's visit says in one plain clause that what they say is sent to OpenAI to help him answer.
+- **When no model answers a guest** (the AI is off, the guest budget is spent or the call failed): the no-model mode, meaning the core, arithmetic and the dictionary. A guest line takes the honest line's place: "I cannot find my words just now, I am afraid. I can still do a quick sum or look up a word." Nothing of a guest is saved, as today.
 
 ## 7. The crisis check keeps its typo tolerance
 
@@ -113,12 +132,22 @@ Today, a 429 for `insufficient_quota` or the project's spend limit costs a reser
 
 ## 9. What's sent, and what he says about himself
 
-Nothing new is sent: tier 2 gets exactly tier 1's request. `agentKnowledge(aiOn)`'s description gains one clause: when the main model can't answer, a second OpenAI model may write the reply. The spec's "What is sent" list is unchanged.
+Nothing new of Gur's is sent: tier 2 gets exactly tier 1's request. What's new is a guest's words: their message and their lines from the visit go to OpenAI (§6). `agentKnowledge(aiOn)`'s description gains two clauses:
+- when the main model can't answer, a second OpenAI model may write the reply;
+- what a guest says to him is sent to OpenAI too.
+
+The AI conversation spec's "What is sent" list gains the guest's words, and so does Settings' privacy line (main's).
 
 ## 10. Lanes
 
 - **Language:** everything above, in `lib/chat/*`, `lib/agent/{talk,dictionary,safety,facts}.ts`, `lib/agent/lexicon/*`, `vocabulary-store.ts`, `mind.ts` step 6 and `app/assistant.tsx`'s `sendText` (vocabulary, `pendingLearning`, the learning branch).
-- **Main:** dropping `user_words` (a migration, later, with Gur's OK); `prepareTurn` needs nothing new. `chatlog.test.ts` pins replies that change (agreed between main and language per `lanes.md`).
+  Language also writes the guest path: the guest prompt builder, the guest branch in `handler.ts` and `request.ts`, and the room's guest branch in `sendText`.
+- **Main:**
+  - dropping `user_words` (a migration, later, with Gur's OK);
+  - the `ai_calls.speaker` column (a migration, with Gur's OK, before the guest path is pushed);
+  - Settings' privacy line.
+
+  `prepareTurn` needs nothing new. `chatlog.test.ts` pins replies that change (agreed between main and language per `lanes.md`).
 - **Cloud:** reviews the push.
 
 ## 11. Testing
@@ -131,6 +160,13 @@ Test first for every part.
   - two reservations and two settling rows, under two models;
   - the quota day-stop.
 - **The no-model replies:** every branch in §5; the honest line never repeats back to back; no reply anywhere asks Gur to explain a word (one test sweeps every reply table).
+- **Guests:**
+  - the guest builder's output holds none of a fixture's memory, facts, history or Gur's name;
+  - a guest body with `memory`, `facts` or `history` gets a 400;
+  - a guest turn never calls tier 1 and never carries `action`;
+  - the guest cap and the reserve edge both stop guest turns;
+  - a guest turn's detection never changes `gur` or the bond;
+  - the guest no-model line.
 - **Safety:** §7's cases, before and after.
 - **Size:** after the removals, the browser bundle no longer contains `words-data` (a check on the built chunk names).
 
@@ -140,4 +176,5 @@ Test first for every part.
 2. The removals (§4), each its own green commit.
 3. The no-model mode (§5, §6).
 4. The second tier, the split and the day-stop (§3, §8).
+5. The guest path (§6), after main's `ai_calls.speaker` migration is applied.
 5. The self-description (§9). Then main asks Gur to push.
