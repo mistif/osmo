@@ -2,7 +2,7 @@
 // reusing their sanitizers. Nothing here is unit-tested (it talks to the network); the pure parts it
 // feeds are. A table that does not exist yet (PGRST205) reads as empty, not as a failure.
 import { supabase } from "@/lib/supabase";
-import { sanitizeMoodDay } from "@/lib/agent/mood-days";
+import { sanitizeMoodDay, type MoodDay } from "@/lib/agent/mood-days";
 import { sanitizeThing, type ThingRow } from "@/lib/artifacts/things";
 import { sanitizeNote, sanitizeReminder, type NoteRow } from "./reminders-notes";
 import { sanitizeActionRow, type ActionRow } from "./what-i-did";
@@ -49,6 +49,15 @@ export async function readMoods(sinceDay: string): Promise<Read<MoodFeedRow>> {
 		const m = sanitizeMoodDay(x);
 		return m && { day: m.day, strongest: m.strongest };
 	});
+}
+// The mood week for the Feed chart (full rows, with valence) and the first day Osmo kept a mood, as Insights reads them.
+export async function readMoodWeek(sinceDay: string): Promise<{ rows: MoodDay[]; firstDay: string | null; failed: boolean }> {
+	const [week, first] = await Promise.all([
+		supabase.from("mood_days").select("day,valence,strongest,tally,samples").gte("day", sinceDay).order("day"),
+		supabase.from("mood_days").select("day").order("day").limit(1).maybeSingle(),
+	]);
+	if (week.error || first.error) return { rows: [], firstDay: null, failed: true };
+	return { rows: (week.data ?? []).map(sanitizeMoodDay).filter((r): r is MoodDay => r !== null), firstDay: typeof first.data?.day === "string" ? first.data.day : null, failed: false };
 }
 
 async function newestStamp(table: string, column: string): Promise<string | null> {

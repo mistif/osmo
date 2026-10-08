@@ -1,0 +1,23 @@
+/* The Feed: the mood line that draws, and the days as a thin line with a node per row. */
+.draw { animation: draw-line 700ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+/* The dash is set only while it draws, so a browser that ignores pathLength with a non-scaling stroke ends on a solid line. */
+@keyframes draw-line {
+	from { stroke-dasharray: 1; stroke-dashoffset: 1; }
+	to { stroke-dasharray: 1; stroke-dashoffset: 0; }
+}
+
+.days { list-style: none; margin: 0 0 1rem; padding: 0 0 0 0.9rem; border-left: 1px solid color-mix(in oklab, var(--aura-b) 40%, transparent); }
+.row { position: relative; }
+.row::before {
+	content: "";
+	position: absolute;
+	left: calc(-0.9rem - 0.2rem - 0.5px);
+	top: 1.05rem;
+	width: 0.4rem;
+	height: 0.4rem;
+	border-radius: 50%;
+	background: var(--aura-b);
+}
+.day { margin-top: 1.6rem; }
+
+@media (prefers-reduced-motion: reduce) { .draw { animation: none; } }
