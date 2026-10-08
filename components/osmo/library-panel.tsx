@@ -35,7 +35,7 @@ const EMPTY: Record<LibraryFilter, string> = {
 };
 
 const CONFIRM: Partial<Record<LibraryRow["kind"], string>> = {
-	thing: "This also deletes earlier versions.",
+	thing: "An earlier version, if there is one, takes its place.",
 	link: "This also removes the line from our conversation.",
 };
 
