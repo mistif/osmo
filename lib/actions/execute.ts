@@ -23,8 +23,9 @@ function logLine(def: Def, args: unknown, r: RunResult, rc: RunCtx): string {
 export async function execute(def: Def, args: unknown, rc: RunCtx, log: Logger): Promise<ActionOutcome> {
 	try {
 		const r = await def.run(args, rc);
-		await log(r.ok ? "done" : "failed", r.ok ? logLine(def, args, r, rc) : def.describe(args), r.ok ? null : "run"); // a failed say can quote the user's words (a place, a note), so the log gets the def's text-free line
-		return r.ok ? { kind: "done", line: r.say, result: r.result } : { kind: "failed", line: r.say };
+		const logged = await log(r.ok ? "done" : "failed", r.ok ? logLine(def, args, r, rc) : def.describe(args), r.ok ? null : "run"); // a failed say can quote the user's words (a place, a note), so the log gets the def's text-free line
+		if (!r.ok) return { kind: "failed", line: r.say };
+		return { kind: "done", line: r.say, result: r.result, ...(r.ticket ? { ticket: { brief: r.ticket.brief, actionId: typeof logged === "number" ? logged : null } } : {}) };
 	} catch {
 		await log("failed", def.describe(args), "exception");
 		return { kind: "failed", line: "That did not work just now." };

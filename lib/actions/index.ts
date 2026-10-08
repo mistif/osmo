@@ -10,7 +10,7 @@ import { todayLine } from "./time";
 import { decide } from "./tiers";
 import type { ActionContext, ActionOutcome, ActionProposal, Deps, EnabledActions, Env, RunCtx } from "./types";
 
-export type { ActionContext, ActionOutcome, ActionProposal, EnabledActions } from "./types";
+export type { ActionContext, ActionOutcome, ActionProposal, BuildTicket, EnabledActions } from "./types";
 
 // Bigger than any real args text (the longest is a 1,000 character note); anything over it is not parsed.
 const MAX_ARGS = 4000;
@@ -84,6 +84,20 @@ export async function runAction(p: ActionProposal, ctx: ActionContext, deps: Dep
 	} catch {
 		await log("failed", `Could not run ${def.name}`, "exception"); // writeAction never throws
 		return { kind: "failed", line: FAILED };
+	}
+}
+
+// The gate /api/build re-checks itself (artifacts spec 3.3): the switch, the owner, the level (act only, since a build runs without asking) and the daily cap.
+export async function buildGate(userId: string, now: number, deps: Deps = realDeps()): Promise<"ok" | "off" | "cap"> {
+	try {
+		if (!actionsOn(deps.env) || deps.env.OSMO_BUILD !== "on") return "off";
+		const db = deps.db();
+		if (!sameOwner(db, userId)) return "off";
+		const profile = await loadProfile(db);
+		if (profile.paused || decide(levelOf(profile, "artifacts"), 2) !== "run") return "off";
+		return (await capReached(db, "build", now, 1)) ? "cap" : "ok"; // +1: this build's own ticket row is already counted
+	} catch {
+		return "off";
 	}
 }
 

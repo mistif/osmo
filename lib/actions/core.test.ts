@@ -20,7 +20,7 @@ const broken = () =>
 		from: () => ({
 			select: () => ({
 				maybeSingle: async () => ({ data: null, error: { message: "x" } }),
-				in: () => ({ eq: () => ({ gte: async () => ({ count: null, error: { message: "x" } }) }) }),
+				in: () => ({ in: () => ({ gte: async () => ({ count: null, error: { message: "x" } }) }) }),
 			}),
 		}),
 	}) as unknown as OwnerDb;
@@ -117,7 +117,7 @@ describe("capReached", () => {
 
 	it("has no cap for an action outside the groups", async () => {
 		expect(await capReached(fakeDb({ actions: rows(500, "note_list") }), "note_list", NOW)).toBe(false);
-		expect(CAP_GROUPS.map((g) => g.limit)).toEqual([50, 100, 100]);
+		expect(CAP_GROUPS.map((g) => g.limit)).toEqual([50, 100, 100, 30]);
 	});
 
 	it("refuses when the count cannot be read", async () => {

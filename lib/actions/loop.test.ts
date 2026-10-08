@@ -36,14 +36,14 @@ const deleteMilk = propose("note_delete", { match: "milk" });
 const history = (n: number, name: string, at: number) => Array.from({ length: n }, () => ({ name, status: "done", at: iso(at) }));
 
 describe("the real registry", () => {
-	it("holds exactly the eight actions of reminders, notes and weather, each once", () => {
-		expect(REGISTRY.map((d) => d.name)).toEqual(["reminder_set", "reminder_list", "reminder_cancel", "note_add", "note_search", "note_delete", "weather_now", "weather_forecast"]);
+	it("holds exactly the eight actions of reminders, notes and weather, then build, each once", () => {
+		expect(REGISTRY.map((d) => d.name)).toEqual(["reminder_set", "reminder_list", "reminder_cancel", "note_add", "note_search", "note_delete", "weather_now", "weather_forecast", "build"]);
 	});
 	it("makes note_delete the only tier 3, with a prepare, and every action speakable", () => {
 		expect(REGISTRY.filter((d) => d.tier === 3).map((d) => d.name)).toEqual(["note_delete"]);
 		for (const d of REGISTRY) {
 			if (d.tier === 3) expect(d.prepare).toBeTypeOf("function");
-			expect(d.voiceOk).toBe(true);
+			expect(d.voiceOk).toBe(d.name !== "build"); // a thing that is built is shown, not spoken
 		}
 	});
 	it("is a no-op while OSMO_ACTIONS is not on", async () => {
@@ -393,7 +393,7 @@ describe("listEnabledActions with the real registry", () => {
 		vi.setSystemTime(NOW);
 		const { deps } = setup();
 		const list = await listEnabledActions("owner-1", deps);
-		expect(list?.names).toEqual(REGISTRY.map((d) => d.name));
+		expect(list?.names).toEqual(REGISTRY.filter((d) => d.name !== "build").map((d) => d.name)); // the artifacts level is off here
 		expect(list?.names).toHaveLength(8);
 		expect(Buffer.byteLength(list!.lines.join(" "))).toBeLessThan(1400);
 		expect(list).toMatchObject({ today: "Wednesday 7 October 2026, 14:00", timezone: "Europe/Stockholm", place: "Malmo" });

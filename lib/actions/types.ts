@@ -5,10 +5,12 @@ export type Level = "off" | "read" | "ask" | "act";
 export type Surface = "room" | "telegram" | "cron" | "confirm";
 export type Env = Readonly<Record<string, string | undefined>>;
 export type ActionProposal = { name: string; args: string };
+// The build action's hand-off to the room (artifacts spec 3.2): the validated brief and the id of the log row to settle later.
+export type BuildTicket = { brief: string; actionId: number | null };
 export type ActionContext = { userId: string; surface: Surface; now: number };
 export type ActionOutcome =
 	| { kind: "ignored" }
-	| { kind: "done"; line: string; result: string | null } // result non-null means "call 2 follows"
+	| { kind: "done"; line: string; result: string | null; ticket?: BuildTicket } // result non-null means "call 2 follows"; a ticket means the room starts a build
 	| { kind: "waiting"; line: string }
 	| { kind: "failed" | "refused"; line: string };
 export type EnabledActions = { names: string[]; lines: string[]; today: string; timezone: string; place: string | null };
@@ -22,7 +24,7 @@ export type Profile = {
 };
 export type CheckCtx = { now: number; timezone: string | null };
 export type RunCtx = CheckCtx & { db: OwnerDb; profile: Profile; fetch: typeof fetch; env: Env };
-export type RunResult = { ok: true; say: string; result: string | null } | { ok: false; say: string };
+export type RunResult = { ok: true; say: string; result: string | null; ticket?: { brief: string } } | { ok: false; say: string };
 export type Def = {
 	name: string;
 	connector: string;
@@ -40,4 +42,4 @@ export type Def = {
 	run(args: unknown, c: RunCtx): Promise<RunResult>;
 };
 export type Deps = { env: Env; db(): OwnerDb; fetch: typeof fetch; registry: readonly Def[]; count(event: string): void };
-export const CONNECTORS = ["reminders", "notes", "weather", "calendar", "mail", "spotify"] as const;
+export const CONNECTORS = ["reminders", "notes", "weather", "calendar", "mail", "spotify", "artifacts"] as const;
