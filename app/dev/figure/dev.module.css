@@ -1,6 +1,7 @@
 /* Dev page only: at phone width the toolbar wraps to two rows, so Osmo and the heard line sit lower to clear it. */
 @media (max-width: 480px) {
 	div.lower {
-		top: 56%;
+		/* The room anchors the figure by its top edge (assistant.module.css .figure); keep the same shape here. */
+		top: max(15rem, calc(56% - var(--figure) / 2 - 2rem));
 	}
 }

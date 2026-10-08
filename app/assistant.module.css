@@ -104,8 +104,11 @@
 .figure {
 	position: absolute;
 	left: 50%;
-	top: 40%;
-	translate: -50% -50%;
+	/* Sits at 40% of the stage, but never so high that what he heard runs into the header on a short
+	   window: the centre stays at least 9rem plus half his size from the top, and he shrinks on short windows. */
+	--figure: min(20rem, 80vw, 42vh);
+	top: max(9.5rem, calc(40% - var(--figure) / 2 - 2rem));
+	translate: -50% 0;
 }
 
 /* While Osmo speaks, the voice drives the heart in the header instead of its idle breath. */
