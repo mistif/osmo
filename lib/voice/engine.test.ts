@@ -26,7 +26,7 @@ type FakeMic = { ring: SampleRing; closed: boolean; onAudio: (s: Int16Array) => 
 
 function harness(
 	over: Partial<VoiceConfig> = {},
-	options: { micFailure?: MicError; embedFailure?: boolean; endAtOnce?: boolean } = {},
+	options: { micFailure?: MicError; embedFailure?: boolean; endAtOnce?: boolean; warmThrows?: boolean } = {},
 ) {
 	let now = 1000;
 	let embedding = [1, 0];
@@ -40,6 +40,8 @@ function harness(
 	const sent: { text: string; options: SendOptions }[] = [];
 	const chimes = { count: 0 };
 	const detectorResets = { count: 0 };
+	// "warm" and "embed" calls in the order they happened.
+	const order: string[] = [];
 	const deps: VoiceDeps = {
 		now: () => now,
 		later: (run, ms) => {
@@ -71,7 +73,12 @@ function harness(
 			hearings.push(hearing);
 			return { stop() {}, abort: () => void (hearing.aborted = true) };
 		},
+		warmEmbed: () => {
+			order.push("warm");
+			if (options.warmThrows) throw new Error("warm failed");
+		},
 		embed: async (samples) => {
+			order.push("embed");
 			if (options.embedFailure) throw new Error("embed failed");
 			embedded.push(samples.length);
 			return embedding;
@@ -109,6 +116,7 @@ function harness(
 	};
 	engine.configure(config);
 	return {
+		order,
 		engine,
 		config,
 		mics,
@@ -572,6 +580,42 @@ describe("VoiceEngine", () => {
 		expect(records).toHaveLength(JUDGEMENT_LOG_SIZE);
 		(records as unknown[]).length = 0;
 		expect(h.engine.lastJudgements()).toHaveLength(JUDGEMENT_LOG_SIZE);
+	});
+
+	it("loads the speaker model when listening is switched on, before the first judgement", async () => {
+		const h = harness();
+		await h.flush();
+		expect(h.order).toEqual(["warm"]);
+		await converse(h, "Osmo, hello");
+		expect(h.order).toEqual(["warm", "embed"]);
+	});
+
+	it("loads it once per switch-on, however often the room reconfigures", async () => {
+		const h = harness({ listen: false });
+		await h.flush();
+		expect(h.order).toEqual([]);
+		h.engine.configure({ ...h.config, listen: true });
+		h.engine.configure({ ...h.config, listen: true });
+		expect(h.order).toEqual(["warm"]);
+		h.engine.configure({ ...h.config, listen: false });
+		h.engine.configure({ ...h.config, listen: true });
+		expect(h.order).toEqual(["warm", "warm"]);
+	});
+
+	it("doesn't load it when listening can't start (no taught voice, or the wake word is untrained)", async () => {
+		const noPrints = harness({ prints: [] });
+		await noPrints.flush();
+		expect(noPrints.order).toEqual([]);
+		const untrained = harness({ wakeReady: false });
+		await untrained.flush();
+		expect(untrained.order).toEqual([]);
+	});
+
+	it("carries on if the head start fails", async () => {
+		const h = harness({}, { warmThrows: true });
+		await h.flush();
+		await converse(h, "Osmo, hello");
+		expect(h.sent).toHaveLength(1);
 	});
 
 	it("says it couldn't load what it needs instead of treating Gur as a stranger", async () => {

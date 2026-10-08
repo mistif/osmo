@@ -59,6 +59,9 @@ export type VoiceDeps = {
 	hear(hooks: HearHooks): Promise<Hearing>;
 	// A voice embedding for 16 kHz samples on the -1..1 scale.
 	embed(samples: Float32Array): Promise<number[]>;
+	// Optional: start loading what embed() needs (the 29.6 MB speaker model) without waiting for the first message.
+	// Failures are the dep's to swallow; embed() tries again on first use.
+	warmEmbed?(): void;
 	say(text: string, hooks: SayHooks): Spoken;
 	chime(): void;
 };
@@ -153,12 +156,22 @@ export class VoiceEngine {
 			if (this.state.listening) this.send({ type: "listen", on: false, now: this.deps.now() });
 			return;
 		}
+		// Load the speaker model as listening switches on, not on the first judgement (seconds of download mid-conversation).
+		if (want && !this.state.listening) this.warmEmbed();
 		if (want !== this.state.listening) this.send({ type: "listen", on: want, now: this.deps.now() });
 		if (want && !this.detector && !this.detectorLoading) void this.loadDetector();
 	};
 
 	// Recent speaker checks, oldest first, for Settings to show so the thresholds can be set from real use.
 	readonly lastJudgements = (): readonly JudgementRecord[] => [...this.judgements];
+
+	private warmEmbed(): void {
+		try {
+			this.deps.warmEmbed?.();
+		} catch {
+			// Only a head start; the first judgement loads it again.
+		}
+	}
 
 	readonly micPress = (): void => {
 		const config = this.config;
