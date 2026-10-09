@@ -29,12 +29,12 @@
 4. Clock edges: 23:59 to 00:00, a daylight-saving jump, an hour of 24, -0.5 or 36: sky, sun, night and stars stay defined and wrap (Task 5, "wraps hours outside 0 to 24").
 5. A zero-size or phone-size view, and `prefers-reduced-motion`: no division by zero, a tighter dead zone on a phone, zoom that jumps instead of stepping, still frames that redraw only on a new block or mode (Task 8 camera and pace tests; Task 10 zero-size painter test).
 
-## Verified before planning (reading the tree at `6951fe7`)
+## Verified before planning (reading the tree at `f970783`, release 0.2.2)
 - `vitest.config.mts`: `include: ["lib/**/*.test.ts"], environment: "node"`. No `jsdom`, `happy-dom` or `canvas` package in `node_modules`, and no new dependency is allowed, so the renderer's hash test draws to an in-memory pixel painter, not a jsdom canvas.
 - TypeScript 5.9.3: `lib.dom.d.ts` has `type ImageDataArray = Uint8ClampedArray<ArrayBuffer>`, so bitmaps are typed `Uint8ClampedArray<ArrayBuffer>`.
 - `lib/shell/flag.ts`: `export const SHELL2 = process.env.NEXT_PUBLIC_OSMO_SHELL2 === "on";`.
 - `lib/voice/machine.ts`: `export const FOLLOW_UP_MS = 6000;`; modes `off | paused | sleeping | awake | thinking | speaking | followup`; `inConversation` is awake, thinking, speaking or followup.
-- `lib/agent/state.ts`: `AgentState.activations: Activations` (12 emotions) and `AgentState.mood: Mood | null` with `Mood = { pad, at, causes: Cause[] }`, `Cause = { tone: Emotion; because; at }`. `lib/agent/feelings.ts` prepends new causes, so `causes[0]` is the newest; `at` is `Date.now()` time. `CHARACTER.baseline` (`lib/agent/baseline.ts`): joy 0.5, sadness 0.1, fear 0.08, love 0.2, boredom 0.1.
+- `lib/agent/state.ts`: `AgentState.activations: Activations` (12 emotions) and `AgentState.mood: Mood | null` with `Mood = { pad, at, causes: Cause[] }`, `Cause = { tone: Emotion; because; at }` (not exported since `2a1a50e`; nothing here imports it). `lib/agent/feelings.ts` prepends new causes, so `causes[0]` is the newest; `at` is `Date.now()` time. `CHARACTER.baseline` (`lib/agent/baseline.ts`): joy 0.5, sadness 0.1, fear 0.08, love 0.2, boredom 0.1.
 - `lib/agent/mood-theme.ts` writes `colorA`/`colorB` as `hsl(H S% L%)` (L 25 to 78, S up to 95) and `base` as `hsl(H 30% L%)`.
 - `lib/shell/contrast.ts` has `hslToRgb`, `mixOklab`, `contrastRatio`; `lib/shell/contrast.test.ts` pins the rail's contrast. The rail itself is opaque (`background: var(--rail-ground)`), so the sky only meets text in the header and the rail's hover label.
 - `app/assistant.tsx`: the aura block (`<div className={styles.aura} aria-hidden="true">` with two orbs and `<Figure className={styles.figure} said={said} heard={heard} />`) is the first child of the stage; `.aura` is `position: absolute; inset: 0; z-index: -1` inside an isolated `.stage`. `said` and `heard` are computed just before `return`. `speaking` is non-null while a reply is typed out; `thinking` is true while a model reply or lookup is pending; `messages` grows by one line per message and reply. The stage already carries `data-shell`. The voice exposes `voice.mode`.
@@ -42,7 +42,7 @@
 - Supabase upserts in the room omit `user_id` and rely on `default auth.uid()` (`memory_facts`, `onConflict: "user_id,key"`). `docs/migrations/artifacts-phase-1.sql` is the doc pattern (header with spec, STATUS line, RLS with `(select auth.uid())`, revoke then grant).
 - Dev pages (`app/dev/figure`, `app/dev/rail`): `"use client"`, `if (process.env.NODE_ENV === "production") notFound();` as the component's first line, `Bricolage_Grotesque`, `styles` from `../../assistant.module.css` for `.stage`, buttons as `${styles.mic} ${dev.btn}`.
 - `public/village/` does not exist. Node is 24.19.
-- **Dry run of this plan** (an isolated scratch copy of `6951fe7`, not the shared tree, with stub art in the exact grid format): every test in Tasks 1 and 4 to 10 and the contrast extension passes (the tile lighting test failed only on the deliberately crude stub art); `npx tsc --noEmit -p .` and `npx eslint` are clean on every new file and on the room after A1 to A7 (each anchor matched exactly once); `npx next build --webpack` with both switches on builds `/dev/world` and puts the world code in one chunk the room loads lazily.
+- **Dry run of this plan** (an isolated scratch copy of `f970783`, not the shared tree, with stub art in the exact grid format): every test in Tasks 1 and 4 to 10 and the contrast extension passes (the tile lighting test failed only on the deliberately crude stub art); `npx tsc --noEmit -p .` and `npx eslint` are clean on every new file and on the room after A1 to A7 (each anchor matched exactly once); `npx next build --webpack` with both switches on builds `/dev/world` and puts the world code in one chunk the room loads lazily.
 
 ## Spec statements the checks contradicted or left open (rulings)
 1. **17 or 18 frames.** Spec 3 lists idle 2, walk 6, kneel-build 4, turn 3, facing idle 2, sit 1 = 18, but says the optional sheet is "17 frames ... 272 by 32". The list is the specific statement: 18 frames, and `public/village/osmo-sheet.png` must be 288 by 32.
@@ -3197,7 +3197,7 @@ git commit -m "feat(world): /dev/world shows every state, hour and stage of the 
 - Consumes: `WORLD` (Task 1), `WorldStage`, `WorldControl` (Task 11).
 - Produces: the world in the room behind both switches.
 
-Before editing, put `app/assistant.tsx` under Now on `brain/desks/main.md` and push the desk. Anchors are text in the file at `6951fe7`; find each by its text, not by line number.
+Before editing, put `app/assistant.tsx` under Now on `brain/desks/main.md` and push the desk. Anchors are text in the file at `f970783`; find each by its text, not by line number.
 
 - [ ] **A1** Replace `import { SHELL2 } from "@/lib/shell/flag";` with:
 ```ts
