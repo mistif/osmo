@@ -1,5 +1,5 @@
 -- Village phase 1 (spec 2026-10-09-osmo-village-design.md section 4): how far Osmo has built each room.
--- STATUS: written, not applied. The main agent applies it as migration village_phase_1 with Gur's OK, before the
+-- STATUS: applied 2026-10-09 as migration village_phase_1 (Gur's OK). authenticated has select, insert, update, delete (verified). Was: before the
 -- code that reads it is pushed.
 -- One row per room. The browser reads and writes its own rows; a save never moves laid backwards and never changes
 -- when a room was started or first finished (the trigger), so two tabs, or a late save from an old tab, cannot undo
