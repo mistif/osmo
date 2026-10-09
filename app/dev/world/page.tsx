@@ -75,34 +75,37 @@ export default function WorldPage() {
 	);
 	return (
 		<div className={`${styles.stage} ${font.className}`} style={stageStyle} data-tone={theme.tone} data-speaking={speaking ? "" : undefined}>
-			<div className={dev.toolbar}>{POSES.map((p) => button(p, poseKind === p, () => setPoseKind(p)))}</div>
-			<div className={dev.toolbar}>{FILLS.map((f, i) => button(f.label, fill === i, () => setFill(i)))}</div>
-			<div className={dev.toolbar}>
-				{HOURS.map((h) => button(h.label, hour === h.hour, () => setHour(h.hour)))}
-				{button("Real clock", hour === null, () => setHour(null))}
-				<input
-					className={dev.range}
-					type="range"
-					min={0}
-					max={23.75}
-					step={0.25}
-					value={hour ?? 12}
-					aria-label="Hour of the day"
-					onChange={(e) => setHour(Number(e.target.value))}
-				/>
-				<span>{hour === null ? "real clock" : `${Math.floor(hour)}:${String((hour % 1) * 60).padStart(2, "0")}`}</span>
+			<div className={dev.scroller}>
+				<div className={dev.toolbar}>{POSES.map((p) => button(p, poseKind === p, () => setPoseKind(p)))}</div>
+				<div className={dev.toolbar}>{FILLS.map((f, i) => button(f.label, fill === i, () => setFill(i)))}</div>
+				<div className={dev.toolbar}>
+					{HOURS.map((h) => button(h.label, hour === h.hour, () => setHour(h.hour)))}
+					{button("Real clock", hour === null, () => setHour(null))}
+					<input
+						className={dev.range}
+						type="range"
+						min={0}
+						max={23.75}
+						step={0.25}
+						value={hour ?? 12}
+						aria-label="Hour of the day"
+						onChange={(e) => setHour(Number(e.target.value))}
+					/>
+					<span>{hour === null ? "real clock" : `${Math.floor(hour)}:${String((hour % 1) * 60).padStart(2, "0")}`}</span>
+				</div>
+				<div className={dev.toolbar}>
+					{MOODS.map((m) => button(m, mood === m, () => setMood(m)))}
+					{button("Message", false, () => setLines((n) => n + 1))}
+					{button("Speaking", speaking, () => setSpeaking((v) => !v))}
+					{button("Phone", phone, () => setPhone((v) => !v))}
+				</div>
+				<p className={dev.note}>
+					Live: he builds a local hall from nothing (nothing is saved). Message and Speaking turn him to you; he turns back six
+					seconds after Speaking is off. Set prefers-reduced-motion in devtools for still frames.
+				</p>
+				{phone && <div className={dev.phone}>{world}</div>}
 			</div>
-			<div className={dev.toolbar}>
-				{MOODS.map((m) => button(m, mood === m, () => setMood(m)))}
-				{button("Message", false, () => setLines((n) => n + 1))}
-				{button("Speaking", speaking, () => setSpeaking((v) => !v))}
-				{button("Phone", phone, () => setPhone((v) => !v))}
-			</div>
-			<p className={dev.note}>
-				Live: he builds a local hall from nothing (nothing is saved). Message and Speaking turn him to you; he turns back six
-				seconds after Speaking is off. Set prefers-reduced-motion in devtools for still frames.
-			</p>
-			{phone ? <div className={dev.phone}>{world}</div> : world}
+			{!phone && world}
 		</div>
 	);
 }
