@@ -2,6 +2,7 @@
 
 import { Bricolage_Grotesque } from "next/font/google";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { type CSSProperties, FormEvent, useEffect, useRef, useState } from "react";
 import { Mic, Square } from "lucide-react";
 import styles from "./assistant.module.css";
@@ -51,10 +52,11 @@ import { useHeartMotion } from "@/components/osmo/use-heart-motion";
 import { Figure } from "@/components/osmo/figure";
 import { useBuild } from "@/components/osmo/use-build";
 import { ThingPanel } from "@/components/osmo/thing-panel";
-import { SHELL2 } from "@/lib/shell/flag";
+import { SHELL2, WORLD } from "@/lib/shell/flag";
 import { useShell } from "@/components/osmo/use-shell";
 import { Rail } from "@/components/osmo/rail";
 import { ShellPanels } from "@/components/osmo/shell-panels";
+import type { WorldControl } from "@/components/osmo/world";
 import type { BuildTicket } from "@/lib/actions/types";
 
 type ChatMessage = {
@@ -68,6 +70,8 @@ type ChatMessage = {
 type Waiting = { id: number; on: "model" | "lookup"; controller: AbortController | null; quiet: boolean; line: ChatMessage };
 
 const font = Bricolage_Grotesque({ subsets: ["latin"], display: "swap" });
+// The village loads after first paint, and only behind both switches (lib/shell/flag.ts).
+const WorldStage = dynamic(() => import("@/components/osmo/world").then((m) => m.WorldStage), { ssr: false });
 
 // How long a turn waits for the session before his own words answer; the model call keeps its own 15 s.
 const SESSION_TIMEOUT_MS = 3_000;
@@ -119,6 +123,8 @@ export default function AgentChat() {
 	const [speaking, setSpeaking] = useState<{ index: number; chars: number } | null>(null);
 	const heart = useHeartMotion(stageRef);
 	const shell = useShell(SHELL2, stageRef, ready);
+	// The village's control: the composer's focus and typing turn him to Gur (components/osmo/world.tsx).
+	const worldRef = useRef<WorldControl | null>(null);
 	const openPanel = SHELL2 ? shell.route.panel : panels.panel;
 	// The thing he builds beside the conversation. buildRef is how sendText hands over a ticket (language, task B8);
 	// until a ticket arrives nothing renders. Locking unmounts the room, and the hook cancels a running build then.
@@ -710,17 +716,37 @@ export default function AgentChat() {
 			data-speaking={speaking ? "" : undefined}
 			data-panel={openPanel ?? undefined}
 			data-shell={SHELL2 ? "" : undefined}
+			data-world={WORLD ? "" : undefined}
 			data-building={build.view?.phase === "building" ? "" : undefined}
 			data-built={build.built ? "" : undefined}
 			data-listening={voice.mode === "awake" || voice.mode === "followup" ? "" : undefined}
 			data-chat={voiceOnly ? undefined : ""}
 			data-fade={voice.fadeSaid ? "" : undefined}
 		>
-			<div className={styles.aura} aria-hidden="true">
-				<span className={`${styles.orb} ${styles.orbA}`} />
-				<span className={`${styles.orb} ${styles.orbB}`} />
-				<Figure className={styles.figure} said={said} heard={heard} />
-			</div>
+			{WORLD ? (
+				ready && (
+					<WorldStage
+						agent={agent}
+						colorA={theme.colorA}
+						colorB={theme.colorB}
+						said={said}
+						heard={heard}
+						controlRef={worldRef}
+						signals={{
+							lines: messages.length,
+							inTalk: voice.mode === "awake" || voice.mode === "thinking" || voice.mode === "speaking" || voice.mode === "followup",
+							speaking: speaking !== null,
+							thinking,
+						}}
+					/>
+				)
+			) : (
+				<div className={styles.aura} aria-hidden="true">
+					<span className={`${styles.orb} ${styles.orbA}`} />
+					<span className={`${styles.orb} ${styles.orbB}`} />
+					<Figure className={styles.figure} said={said} heard={heard} />
+				</div>
+			)}
 
 			{SHELL2 && <Rail items={shell.items} fill={70} onNavigate={shell.navigate} linkRef={shell.linkRef} />}
 
@@ -773,7 +799,11 @@ export default function AgentChat() {
 					<input
 						className={styles.field}
 						value={voice.liveText ?? input}
-						onChange={(event) => setInput(event.target.value)}
+						onFocus={() => worldRef.current?.attend()}
+						onChange={(event) => {
+							setInput(event.target.value);
+							worldRef.current?.attend();
+						}}
 						placeholder={ready ? "Tell Osmo how you're doing" : "Osmo is waking up…"}
 						aria-label="Message"
 						disabled={!ready || thinking}

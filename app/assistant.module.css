@@ -571,3 +571,9 @@
 		padding-bottom: 0;
 	}
 }
+
+/* ---------- The village (NEXT_PUBLIC_OSMO_WORLD, inside the v2 shell): components/osmo/world.tsx ---------- */
+/* The header sits on the sky; a soft shadow keeps it crisp at the brightest hour. */
+.stage[data-world] .head {
+	text-shadow: 0 1px 3px rgb(0 0 0 / 0.55);
+}
