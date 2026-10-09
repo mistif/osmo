@@ -60,7 +60,7 @@ describe("pickEvent", () => {
 describe("applyEvent", () => {
 	it("tragic events raise sadness and lower outlook; happy do the opposite", () => {
 		const sad = applyEvent(defaultState(), ev());
-		expect(sad.activations.sadness).toBeCloseTo(0.55, 5);
+		expect(sad.activations.sadness).toBeCloseTo(0.5, 5);
 		expect(sad.outlook).toBeCloseTo(-0.032, 5);
 		const glad = applyEvent(defaultState(), ev({ valence: "happy", shifts: { joy: 0.4 } }));
 		expect(glad.outlook).toBeCloseTo(0.032, 5);
@@ -80,9 +80,9 @@ describe("applyEvent", () => {
 	});
 
 	it("blends the learned tendency into later events of the same kind", () => {
-		let s = applyEvent(defaultState(), ev({ shifts: { sadness: 0.4 } })); // sadness 0.55
+		let s = applyEvent(defaultState(), ev({ shifts: { sadness: 0.4 } })); // sadness 0.5
 		s = applyEvent(s, ev({ shifts: { sadness: 0.2 } })); // + (0.6*0.2 + 0.4*0.4)
-		expect(s.activations.sadness).toBeCloseTo(0.83, 5);
+		expect(s.activations.sadness).toBeCloseTo(0.78, 5);
 	});
 
 	it("never lets outlook leave -1..1 or links exceed 0.8", () => {
@@ -150,8 +150,8 @@ describe("arguing about outlook", () => {
 	});
 
 	it("nudges outlook only slightly, scaled by trust", () => {
-		const s = defaultState(); // trust 0.5
-		expect(argueOutlook(s, 1).outlook).toBeCloseTo(0.01, 5);
+		const s = defaultState(); // trust 0.65
+		expect(argueOutlook(s, 1).outlook).toBeCloseTo(0.013, 5);
 		const distrustful = { ...s, activations: { ...s.activations, trust: 0 } };
 		expect(argueOutlook(distrustful, 1).outlook).toBe(0);
 	});

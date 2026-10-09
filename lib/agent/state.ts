@@ -1,4 +1,5 @@
 import { emptyBond, sanitizeBond, type Bond } from "./bond/bond";
+import { CHARACTER_BASELINE } from "./baseline";
 
 export const EMOTIONS = [
 	"joy",
@@ -42,20 +43,8 @@ export type AgentState = {
 	mood: Mood | null;
 };
 
-export const BASELINE: Activations = {
-	joy: 0.55,
-	trust: 0.5,
-	hope: 0.45,
-	sadness: 0.15,
-	anger: 0.15,
-	fear: 0.15,
-	disgust: 0.15,
-	surprise: 0.15,
-	love: 0.15,
-	guilt: 0.15,
-	loneliness: 0.15,
-	boredom: 0.15,
-};
+// The resting mood is the character's: CHARACTER.baseline (lib/agent/character.ts) reads the same object.
+export const BASELINE: Activations = CHARACTER_BASELINE;
 
 // [valence, arousal, dominance]
 export const ANCHORS: Record<Emotion, Vec3> = {

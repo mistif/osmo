@@ -7,25 +7,25 @@ const base = (): Activations => ({ ...BASELINE });
 describe("applyCues", () => {
 	it("insults raise anger and lower trust", () => {
 		const next = applyCues(base(), "you are stupid");
-		expect(next.anger).toBeCloseTo(0.4, 5);
-		expect(next.trust).toBeCloseTo(0.3, 5);
+		expect(next.anger).toBeCloseTo(0.3, 5);
+		expect(next.trust).toBeCloseTo(0.45, 5);
 	});
 
 	it("threats to delete it raise fear", () => {
-		expect(applyCues(base(), "I will delete you").fear).toBeCloseTo(0.5, 5);
+		expect(applyCues(base(), "I will delete you").fear).toBeCloseTo(0.43, 5);
 	});
 
 	it("being told it was wrong raises guilt", () => {
-		expect(applyCues(base(), "that was wrong").guilt).toBeCloseTo(0.35, 5);
+		expect(applyCues(base(), "that was wrong").guilt).toBeCloseTo(0.28, 5);
 	});
 
 	it("one-word dismissals raise boredom", () => {
-		expect(applyCues(base(), "meh").boredom).toBeCloseTo(0.35, 5);
+		expect(applyCues(base(), "meh").boredom).toBeCloseTo(0.3, 5);
 	});
 
 	it("accumulates several cues in one message", () => {
 		const next = applyCues(base(), "you are stupid, I will delete you");
-		expect(next.anger).toBeGreaterThan(0.15);
+		expect(next.anger).toBeGreaterThan(base().anger);
 		expect(next.fear).toBeGreaterThan(base().fear);
 	});
 
@@ -42,8 +42,8 @@ describe("applyCues", () => {
 describe("applyGap", () => {
 	it("raises loneliness and boredom after a long silence", () => {
 		const next = applyGap(base(), GAP_MS + 1);
-		expect(next.loneliness).toBeCloseTo(0.35, 5);
-		expect(next.boredom).toBeCloseTo(0.25, 5);
+		expect(next.loneliness).toBeCloseTo(0.32, 5);
+		expect(next.boredom).toBeCloseTo(0.2, 5);
 	});
 
 	it("ignores short or negative gaps (clock skew)", () => {
@@ -55,11 +55,11 @@ describe("applyGap", () => {
 		const angry = { ...base(), anger: 0.55 };
 		expect(applyGap(angry, COOL_MS - 1)).toEqual(angry);
 		const twoHours = applyGap(angry, 2 * COOL_MS);
-		expect(twoHours.anger).toBeCloseTo(0.15 + 0.4 * 0.5, 5);
+		expect(twoHours.anger).toBeCloseTo(base().anger + (0.55 - base().anger) * 0.5, 5);
 		expect(twoHours.loneliness).toBe(base().loneliness);
 		const morning = applyGap(angry, 7 * COOL_MS);
-		expect(morning.anger - 0.15).toBeLessThan(0.05);
-		expect(morning.loneliness).toBeCloseTo(0.35, 5);
+		expect(morning.anger - base().anger).toBeLessThan(0.05);
+		expect(morning.loneliness).toBeCloseTo(0.32, 5);
 	});
 
 	it("never cools anger below rest", () => {
@@ -74,8 +74,9 @@ describe("applyApology", () => {
 		expect(next.anger).toBeCloseTo(0.25, 5);
 		expect(next.trust).toBeCloseTo(0.45, 5);
 		const again = applyApology(next, "i am sorry");
-		expect(again.anger).toBe(0.15);
-		expect(again.trust).toBe(0.5);
+		expect(again.anger).toBe(base().anger);
+		expect(again.trust).toBeCloseTo(0.6, 5);
+		expect(applyApology(again, "i am sorry").trust).toBe(base().trust);
 	});
 
 	it.each(["my bad", "I didn't mean it", "i apologise"])("hears %s", (t) => {
@@ -112,6 +113,6 @@ describe("applyCues: how the user says they feel", () => {
 
 describe("applyCues: slang", () => {
 	it("'u suck' is an insult", () => {
-		expect(applyCues(base(), "u suck").anger).toBeGreaterThan(0.15);
+		expect(applyCues(base(), "u suck").anger).toBeGreaterThan(base().anger);
 	});
 });

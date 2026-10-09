@@ -19,12 +19,12 @@ const noCoupling = (): Coupling =>
 describe("stepHeart", () => {
 	it("decays 5% toward baseline each turn", () => {
 		const next = stepHeart({ ...base(), sadness: 1 }, noCoupling());
-		expect(next.sadness).toBeCloseTo(1 + 0.05 * (0.15 - 1), 4);
+		expect(next.sadness).toBeCloseTo(1 + 0.05 * (BASELINE.sadness - 1), 4);
 	});
 
 	it("cools anger faster, 15% toward baseline each turn", () => {
 		const next = stepHeart({ ...base(), anger: 0.55 }, noCoupling());
-		expect(next.anger).toBeCloseTo(0.55 + 0.15 * (0.15 - 0.55), 4);
+		expect(next.anger).toBeCloseTo(0.55 + 0.15 * (BASELINE.anger - 0.55), 4);
 	});
 
 	it("leaves a baseline state unchanged when there is no coupling", () => {
