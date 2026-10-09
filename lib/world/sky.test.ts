@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { TILE, WORLD_W } from "./blueprints/types";
+import { baseZoom, newCamera, toScreen } from "./camera";
 import {
-	CLOUD_SPEED, CLOUDS, cloudWidth, cloudX, daylight, hourOf, hslCss, isNight, phaseOf, skyAt, starField, sunAt,
+	CLOUD_SPEED, CLOUDS, cloudWidth, cloudX, daylight, hourOf, hslCss, isNight, PARALLAX, phaseOf, skyAt, starField, sunAt,
 } from "./sky";
 
 describe("the clock", () => {
@@ -77,8 +79,34 @@ describe("clouds and stars", () => {
 	it("wraps round the world", () => {
 		for (const c of CLOUDS) {
 			const x = cloudX(c, 10 * 3_600_000, 1024);
-			expect(x).toBeGreaterThanOrEqual(-cloudWidth(c));
+			expect(x).toBeGreaterThanOrEqual(-Math.max(...CLOUDS.map(cloudWidth)));
 			expect(x).toBeLessThan(1024);
+		}
+	});
+	it("keeps two clouds of each layer on screen, none cut at the top, at 960 by 600 and 1200 by 800", () => {
+		for (const [w, h] of [[960, 600], [1200, 800]]) {
+			const view = { w, h };
+			const z = baseZoom(w, h);
+			const size = TILE * z;
+			for (const heX of [300, 512, 700]) {
+				const camera = newCamera(heX, view, z);
+				for (let seconds = 0; seconds <= 1200; seconds += 20) {
+					const where = `${w}x${h} heX ${heX} t ${seconds}s`;
+					const shown = [0, 0];
+					for (const c of CLOUDS) {
+						const x = cloudX(c, seconds * 1000, WORLD_W * TILE);
+						const at = c.parts.map((part) => toScreen(camera, view, 0, x + part.dx, c.y + part.dy, PARALLAX[c.layer]));
+						if (!at.some((a) => a.x + size > 0 && a.x < w)) continue;
+						shown[c.layer]++;
+						for (const a of at) {
+							expect(a.y, where).toBeGreaterThanOrEqual(0);
+							expect(a.y + size, where).toBeLessThanOrEqual(h);
+						}
+					}
+					expect(shown[0], `far, ${where}`).toBeGreaterThanOrEqual(2);
+					expect(shown[1], `near, ${where}`).toBeGreaterThanOrEqual(2);
+				}
+			}
 		}
 	});
 	it("uses only cloud tiles", () => {

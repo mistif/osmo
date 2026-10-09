@@ -95,19 +95,30 @@ const long = (middles: number, top = 0): Part[] => {
 	return parts;
 };
 const small: Part[] = [{ tile: "cloud-small", dx: 0, dy: 0 }];
+// World y 176 to 296: under the top of the framed view at every laptop size (the top is at most 148, and the tallest
+// cloud-top reaches 16 px above its row), and well above the snow at 416. Six to a layer, about 180 px apart, so a
+// 480 px window (960 wide at scale 2) always holds at least two of each as they drift.
 export const CLOUDS: readonly Cloud[] = [
-	{ parts: long(2, 1), x: 40, y: 80, layer: 0 },
-	{ parts: small, x: 400, y: 48, layer: 0 },
-	{ parts: long(1), x: 700, y: 112, layer: 0 },
-	{ parts: long(3, 2), x: 150, y: 144, layer: 1 },
-	{ parts: long(2), x: 560, y: 64, layer: 1 },
-	{ parts: small, x: 900, y: 168, layer: 1 },
+	{ parts: long(2, 1), x: 40, y: 208, layer: 0 },
+	{ parts: small, x: 220, y: 184, layer: 0 },
+	{ parts: long(1), x: 400, y: 248, layer: 0 },
+	{ parts: long(2, 1), x: 580, y: 200, layer: 0 },
+	{ parts: small, x: 760, y: 232, layer: 0 },
+	{ parts: long(1), x: 940, y: 176, layer: 0 },
+	{ parts: long(3, 2), x: 120, y: 232, layer: 1 },
+	{ parts: long(2), x: 300, y: 192, layer: 1 },
+	{ parts: small, x: 480, y: 272, layer: 1 },
+	{ parts: long(1), x: 660, y: 216, layer: 1 },
+	{ parts: long(3, 2), x: 840, y: 264, layer: 1 },
+	{ parts: small, x: 990, y: 184, layer: 1 },
 ];
 export const cloudWidth = (c: Cloud): number => Math.max(...c.parts.map((p) => p.dx)) + TILE;
-// Drifting right, wrapping round the world's width plus the cloud's own.
+// Every cloud wraps round the same length (the world's width plus the widest cloud), so the gaps between a layer's
+// clouds never close up however long the page stays open.
+const PAD = Math.max(...CLOUDS.map(cloudWidth));
+// Drifting right, wrapping round the world's width plus PAD.
 export function cloudX(c: Cloud, clockMs: number, span: number): number {
-	const w = cloudWidth(c);
-	const loop = span + w;
-	const moved = c.x + w + (CLOUD_SPEED[c.layer] * clockMs) / 1000;
-	return (((moved % loop) + loop) % loop) - w;
+	const loop = span + PAD;
+	const moved = c.x + PAD + (CLOUD_SPEED[c.layer] * clockMs) / 1000;
+	return (((moved % loop) + loop) % loop) - PAD;
 }

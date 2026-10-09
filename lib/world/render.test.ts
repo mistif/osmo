@@ -67,22 +67,45 @@ describe("the world", () => {
 		}
 		expect(changed).toBeGreaterThan(0);
 	});
-	it("draws the island's snow and stone under his feet", () => {
-		// world (450, 424): the snow tile at column 28, row 26, eight pixels down
-		const [r, g, b, a] = px(paint(scene(40)).data, 36, 160);
-		expect(a).toBe(255);
-		const ground = (["a", "b", "c", "d", "e", "n", "o", "p"] as const).map((l) => rgb(l).join());
-		expect(ground).toContain([r, g, b].join());
+	it("draws the island's snow under his feet", () => {
+		// His feet stand on screen y 184, the top edge of the snow row (row 26); its first four pixel rows are snow at scale 2.
+		const rows = { x0: 40, x1: 280, y0: 184, y1: 192 };
+		const snow = (["n", "o", "p"] as const).map((l) => rgb(l).join());
+		const withIsland = paint(scene(40)).data;
+		const without = paint({ ...scene(40), ground: [] }).data;
+		for (let y = rows.y0; y < rows.y1; y++) {
+			for (let x = rows.x0; x < rows.x1; x++) {
+				expect(px(without, x, y)[3], `nothing but the island paints ${x},${y}`).toBe(0);
+				const [r, g, b, a] = px(withIsland, x, y);
+				expect(a, `${x},${y}`).toBe(255);
+				expect(snow, `${x},${y}`).toContain([r, g, b].join());
+			}
+		}
 	});
 	it("leaves the sky transparent where nothing is built yet", () => {
 		expect(px(paint(scene(40)).data, 16, 12)[3]).toBe(0); // world (440, 350): row 21 is not laid at 40
 	});
 	it("draws him standing on the ground line", () => {
-		const data = paint(scene(40)).data;
-		let opaque = 0;
-		for (let y = 80; y < 144; y++) for (let x = 144; x < 176; x++) if (px(data, x, y)[3] === 255) opaque++;
-		expect(opaque).toBeGreaterThan(100);
-		expect(Array.from({ length: 32 }, (_, i) => px(data, 144 + i, 143)[3]).some((a) => a === 255)).toBe(true);
+		// His sprite is at screen x 144 to 175 and ends at y 183, just above the snow row at 184. His coat is navy (K, L, M),
+		// a colour nothing else in the scene uses, so it shows only where he is drawn.
+		const coat = (["K", "L", "M"] as const).map((l) => rgb(l).join());
+		const withHim = paint(scene(40)).data;
+		const s = scene(40);
+		const without = paint({ ...s, him: { ...s.him, x: -1000 } }).data;
+		let coats = 0;
+		let lowest = -1;
+		for (let y = 0; y < VIEW.h; y++) {
+			for (let x = 0; x < VIEW.w; x++) {
+				const [r, g, b] = px(without, x, y);
+				expect(coat, `the coat colour appears without him at ${x},${y}`).not.toContain([r, g, b].join());
+				if (px(withHim, x, y).join() === px(without, x, y).join()) continue;
+				lowest = Math.max(lowest, y);
+				const [wr, wg, wb] = px(withHim, x, y);
+				if (coat.includes([wr, wg, wb].join())) coats++;
+			}
+		}
+		expect(coats).toBeGreaterThan(100);
+		expect(lowest).toBe(183);
 	});
 	it("copes with a canvas of no size", () => {
 		expect(() => drawWorld(pixelPainter(0, 0, art), { ...scene(40), view: { w: 0, h: 0 } })).not.toThrow();

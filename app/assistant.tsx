@@ -71,7 +71,13 @@ type Waiting = { id: number; on: "model" | "lookup"; controller: AbortController
 
 const font = Bricolage_Grotesque({ subsets: ["latin"], display: "swap" });
 // The village loads after first paint, and only behind both switches (lib/shell/flag.ts).
-const WorldStage = dynamic(() => import("@/components/osmo/world").then((m) => m.WorldStage), { ssr: false });
+const WorldStage = dynamic(
+	() => import("@/components/osmo/world").then((m) => m.WorldStage).catch(() => {
+		console.warn("The village could not load; the room carries on without it.");
+		return () => null;
+	}),
+	{ ssr: false },
+);
 
 // How long a turn waits for the session before his own words answer; the model call keeps its own 15 s.
 const SESSION_TIMEOUT_MS = 3_000;
