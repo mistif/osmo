@@ -3,8 +3,6 @@
 import { LIMITS } from "../artifacts/compile";
 import type { Def } from "./types";
 
-export type { BuildTicket } from "./types";
-
 export const buildDef: Def = {
 	name: "build",
 	connector: "artifacts",

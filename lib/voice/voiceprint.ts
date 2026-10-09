@@ -17,7 +17,7 @@ export const LEAN_THRESHOLD = 0.35;
 // While teaching, each reading must be at least this close to the average of the others.
 const READING_AGREEMENT = 0.5;
 // Follow-ups shorter than this keep the conversation's speaker once Gur has been recognized.
-export const CARRY_OVER_SECONDS = 1.5;
+const CARRY_OVER_SECONDS = 1.5;
 
 // Read aloud while teaching: about 30 seconds in all, each with over two seconds of speech.
 export const TEACHING_SENTENCES = [

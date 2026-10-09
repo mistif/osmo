@@ -6,7 +6,7 @@ const ORDER: { id: RailId; label: string }[] = [
 	{ id: "talk", label: "Talk" }, { id: "ideas", label: "Ideas" }, { id: "goals", label: "Goals" }, { id: "library", label: "Library" },
 	{ id: "feed", label: "Feed" }, { id: "search", label: "Search" }, { id: "settings", label: "Settings" },
 ];
-export const SHIPPED: readonly RailId[] = ["talk", ...SHIPPED_PANELS];
+const SHIPPED: readonly RailId[] = ["talk", ...SHIPPED_PANELS];
 const DOTTED: readonly RailId[] = ["library", "goals"];
 
 export function railItems(route: Route, dots: Partial<Record<RailId, boolean>>, shipped: readonly RailId[] = SHIPPED): RailItem[] {

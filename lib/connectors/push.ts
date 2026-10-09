@@ -3,7 +3,7 @@
 import type { OwnerDb } from "../server/admin";
 import type { Env } from "../actions/types";
 
-export type PushSubscriptionRow = { endpoint: string; keys: { p256dh: string; auth: string } };
+type PushSubscriptionRow = { endpoint: string; keys: { p256dh: string; auth: string } };
 export type Sender = (subscription: PushSubscriptionRow, payload: string) => Promise<unknown>;
 export type PushResult = { sent: number; failed: number };
 

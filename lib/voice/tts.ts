@@ -60,8 +60,8 @@ export function cacheKey(text: string, tone: SpeechTone): string {
 }
 
 // How much of his voice one device keeps. Clips are small; these are generous.
-export const MAX_CACHE_ENTRIES = 300;
-export const MAX_CACHE_BYTES = 20 * 1024 * 1024;
+const MAX_CACHE_ENTRIES = 300;
+const MAX_CACHE_BYTES = 20 * 1024 * 1024;
 
 export type CacheEntry = { key: string; bytes: number; usedAt: number };
 

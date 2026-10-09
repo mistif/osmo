@@ -22,7 +22,7 @@ export type Profile = {
 	hideReminderText: boolean;
 	levels: Record<string, Level>;
 };
-export type CheckCtx = { now: number; timezone: string | null };
+type CheckCtx = { now: number; timezone: string | null };
 export type RunCtx = CheckCtx & { db: OwnerDb; profile: Profile; fetch: typeof fetch; env: Env };
 export type RunResult = { ok: true; say: string; result: string | null; ticket?: { brief: string } } | { ok: false; say: string };
 export type Def = {

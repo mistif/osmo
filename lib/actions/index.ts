@@ -10,7 +10,7 @@ import { todayLine } from "./time";
 import { decide } from "./tiers";
 import type { ActionContext, ActionOutcome, ActionProposal, Def, Deps, EnabledActions, Env, Level, RunCtx } from "./types";
 
-export type { ActionContext, ActionOutcome, ActionProposal, BuildTicket, EnabledActions } from "./types";
+export type { ActionContext, ActionOutcome, ActionProposal, EnabledActions } from "./types";
 
 // Bigger than any real args text (the longest is a 1,000 character note); anything over it is not parsed.
 const MAX_ARGS = 4000;

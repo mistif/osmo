@@ -6,8 +6,8 @@ import { withBaseFeelings } from "./lexicon/feelings";
 
 export const TONES = ["neutral", "happy", "excited", "grateful", "playful", "sad", "worried", "angry", "tired", "lonely"] as const;
 export type Tone = (typeof TONES)[number];
-export type About = "gur" | "someone_close" | "osmo" | "other";
-export type Wants = "listen" | "advice" | "distraction" | "nothing";
+type About = "gur" | "someone_close" | "osmo" | "other";
+type Wants = "listen" | "advice" | "distraction" | "nothing";
 export type Detection = { tones: Tone[]; intensity: 1 | 2 | 3; about: About; wants: Wants; note: string; source: "model" | "rules" };
 export type GurRead = Omit<Detection, "note" | "source">;
 

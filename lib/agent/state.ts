@@ -28,7 +28,7 @@ export type Valence = "happy" | "tragic";
 type Association = { count: number; tendencies: Partial<Record<Emotion, number>> };
 export type EventRecord = { id: string; valence: Valence };
 
-export type Cause = { tone: Emotion; because: string; at: number };
+type Cause = { tone: Emotion; because: string; at: number };
 // The slow mood (emotions spec 5): a point in mood space that fades by the clock. null means resting at the temperament point.
 export type Mood = { pad: Vec3; at: number; causes: Cause[] };
 

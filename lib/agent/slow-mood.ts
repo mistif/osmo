@@ -4,10 +4,10 @@ import { ANCHORS, EMOTIONS, type Activations, type Emotion, type Mood, type Vec3
 import { feelingWords } from "./talk";
 
 export const HALF_LIFE_MS = 12 * 3_600_000;
-export const CAUSE_TTL_MS = 36 * 3_600_000;
-export const NUDGE = 0.15;
+const CAUSE_TTL_MS = 36 * 3_600_000;
+const NUDGE = 0.15;
 // How far the slow mood must drift from rest to show (spec 5.5 says 0.08; see "Spec deviations" 1). Tuned in Task 2.11.
-export const SLOW_MIN = 0.02;
+const SLOW_MIN = 0.02;
 
 export function relaxMood(mood: Mood | null, now: number, baseline: Activations = CHARACTER.baseline): Mood {
 	const t = moodPosition(baseline);

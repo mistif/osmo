@@ -2,7 +2,7 @@
 import { transform } from "sucrase";
 
 export const LIMITS = { sourceBytes: 12_288, titleChars: 60, titleWords: 5, briefChars: 500, repairErrorChars: 300, perUser: 200, outputTokens: 4000, dailyBuilds: 30 } as const;
-export const ALLOWED_IMPORTS = ["useState", "useEffect", "useLayoutEffect", "useRef", "useMemo", "useCallback", "useReducer", "useContext", "useId", "useTransition", "useDeferredValue", "memo", "Fragment"] as const;
+const ALLOWED_IMPORTS = ["useState", "useEffect", "useLayoutEffect", "useRef", "useMemo", "useCallback", "useReducer", "useContext", "useId", "useTransition", "useDeferredValue", "memo", "Fragment"] as const;
 // Spec spec 5, plus "</script" and "<!--": the compiled code is embedded in an inline script tag (plan A2).
 const FORBIDDEN = ["fetch", "XMLHttpRequest", "WebSocket", "EventSource", "sendBeacon", "RTCPeerConnection", "webkitRTCPeerConnection", "RTCDataChannel", "RTCRtpSender", "WebTransport", "mediaDevices", "importScripts", "eval", "Function(", "import(", "window.top", "window.parent", "parent.", "top.", "document.cookie", "localStorage", "sessionStorage", "indexedDB", "location", "history", "postMessage", "navigator", "</script", "<!--"];
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

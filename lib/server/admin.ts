@@ -7,7 +7,7 @@ type Row = Record<string, unknown>;
 type SelectOptions = { head?: boolean; count?: "exact" | "planned" | "estimated" };
 type Table = ReturnType<ReturnType<typeof createClient>["from"]>;
 
-export type OwnerTable = {
+type OwnerTable = {
 	select: (columns: string, options?: SelectOptions) => ReturnType<Table["select"]>;
 	insert: (rows: Row | Row[]) => ReturnType<Table["insert"]>;
 	upsert: (rows: Row | Row[], onConflict: string) => ReturnType<Table["upsert"]>;

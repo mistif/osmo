@@ -6,8 +6,8 @@ import type { ActionRow } from "./what-i-did";
 export type ReminderFeedRow = { id: string; text: string; due_at: string; sent_at: string | null; status: "pending" | "sent" | "missed" };
 export type MoodFeedRow = { day: string; strongest: string };
 export type ForgetTarget = { table: "actions" | "reminders" | "mood_days" | "artifacts"; key: string | number; warn?: string };
-export type FeedRow = { key: string; day: string; at: string; text: string; source: "action" | "reminder" | "mood" | "build"; forget: ForgetTarget; thingId?: string };
-export type FeedDay = { day: string; heading: string; rows: FeedRow[] };
+type FeedRow = { key: string; day: string; at: string; text: string; source: "action" | "reminder" | "mood" | "build"; forget: ForgetTarget; thingId?: string };
+type FeedDay = { day: string; heading: string; rows: FeedRow[] };
 export type Feed = { comingUp: { id: string; text: string; due: string; forget: ForgetTarget }[]; days: FeedDay[]; more: boolean };
 export type FeedInput = { actions: ActionRow[]; reminders: ReminderFeedRow[]; moods: MoodFeedRow[]; things: ThingRow[] };
 

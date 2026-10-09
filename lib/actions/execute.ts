@@ -21,7 +21,7 @@ function logLine(def: Def, args: unknown, r: RunResult, rc: RunCtx): string {
 	}
 }
 
-export const STOPPED = "I stopped before doing that.";
+const STOPPED = "I stopped before doing that.";
 
 // A crisis recorded after rc.now (when this run began) stops it: before the def's run nothing is done and the log says
 // cancelled; after the run (its effect cannot be taken back) the log stays true, but no result for call 2 and no build ticket go on.

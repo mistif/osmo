@@ -2,9 +2,9 @@
 // The descriptions are the only place JSON mode says what a field means (the intensity scale above all), so they stay short and
 // carry no limit keywords: the code enforces the limits (3.1).
 
-export const TURN_TONES = ["neutral", "happy", "excited", "grateful", "playful", "sad", "worried", "angry", "tired", "lonely"] as const;
-export const TURN_ABOUT = ["gur", "someone_close", "osmo", "other"] as const;
-export const TURN_WANTS = ["listen", "advice", "distraction", "nothing"] as const;
+const TURN_TONES = ["neutral", "happy", "excited", "grateful", "playful", "sad", "worried", "angry", "tired", "lonely"] as const;
+const TURN_ABOUT = ["gur", "someone_close", "osmo", "other"] as const;
+const TURN_WANTS = ["listen", "advice", "distraction", "nothing"] as const;
 export const TURN_FORMAT = {
 	type: "json_schema",
 	name: "osmo_turn",

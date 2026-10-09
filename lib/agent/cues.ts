@@ -14,7 +14,7 @@ type Cue = { pattern: RegExp; shifts: Partial<Record<Emotion, number>> };
 export const INSULT = /\b(stupid|idiot|useless|dumb|hate you|shut up|stfu|moron|retard(?:ed)?|loser|fuck (?:you|off))\b/i;
 export const YOU_SUCK = /\b(?:you|u) suck\b/i;
 // Gur taking an insult back. Heard by applyApology, which only releases what the insult raised.
-export const APOLOGY = /\b(sorry|didn\W?t mean (?:it|that)|my bad|apologi[sz]e)\b/i;
+const APOLOGY = /\b(sorry|didn\W?t mean (?:it|that)|my bad|apologi[sz]e)\b/i;
 
 // Gur's own feelings and thanks live in detection.ts and feelings.ts.
 const CUES: Cue[] = [

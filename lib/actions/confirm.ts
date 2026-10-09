@@ -11,7 +11,7 @@ export const TTL_MS = 10 * 60_000;
 // waiting: true means the row is still pending after this answer (a spoken yes on a typing-only action), so the room keeps its flag.
 export type Answer = { handled: false } | { handled: true; reply: string; waiting?: true };
 export const EXPIRED = "That request has expired. Ask me again if you still want it.";
-export const NEEDS_TYPING = "For that one I need you to type yes.";
+const NEEDS_TYPING = "For that one I need you to type yes.";
 export const DID_NOTHING = "I did nothing, because Osmo is paused or that setting changed.";
 
 // Settle the waiting log rows that belong to pending rows which were just cancelled or expired.
