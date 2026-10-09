@@ -1,0 +1,77 @@
+/* Osmo's village: the sky canvas, the sun (his heart, figure.tsx), the world canvas, and his line above his head. */
+.world {
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	overflow: clip;
+	background: var(--base);
+}
+.layer {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	image-rendering: pixelated;
+	pointer-events: none;
+}
+/* The heart as the sun: placed by the hour (--sun-x, --sun-y), dim and low when it is down. */
+.sun {
+	--figure: clamp(4.5rem, 9vw, 7rem);
+	position: absolute;
+	left: var(--sun-x, 50%);
+	top: var(--sun-y, 30%);
+	translate: -50% -50%;
+	pointer-events: none;
+	transition: left 1s linear, top 1s linear, opacity 2s ease, filter 2s ease;
+}
+.world[data-sun="down"] .sun {
+	opacity: 0.35;
+	filter: saturate(0.6) brightness(0.7);
+}
+/* His line, over his head (--him-x, --him-y: the top of his sprite, in canvas px). */
+.bubble {
+	position: absolute;
+	left: var(--him-x, 50%);
+	top: var(--him-y, 50%);
+	translate: -50% calc(-100% - 0.75rem);
+	display: grid;
+	justify-items: center;
+	gap: 0.25rem;
+	width: max-content;
+	max-width: min(24rem, 80vw);
+	pointer-events: none;
+}
+.said,
+.heard {
+	margin: 0;
+	padding: 0.35rem 0.7rem;
+	border-radius: 0.6rem;
+	text-align: center;
+	text-wrap: balance;
+	line-height: 1.4;
+	background: color-mix(in oklab, var(--ink, #0c111b) 78%, transparent);
+}
+.said {
+	font-size: 1rem;
+	color: var(--bone);
+	transition: opacity 0.3s ease;
+}
+.said:empty {
+	padding: 0;
+	background: none;
+}
+.heard {
+	font-size: 0.9rem;
+	color: color-mix(in oklab, var(--bone) 70%, transparent);
+}
+/* With the fade setting on, his words linger after the last word, then go (as under the heart today). */
+:global([data-fade]:not([data-speaking])) .said {
+	opacity: 0;
+	transition: opacity 1.2s ease 1.4s;
+}
+@media (prefers-reduced-motion: reduce) {
+	.sun,
+	.said {
+		transition: none;
+	}
+}
