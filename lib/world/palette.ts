@@ -63,6 +63,16 @@ export const PALETTE = {
 	O: "#3b3350",
 	P: "#0d0b14",
 	Q: "#8a5a3c",
+	// added in the art pass, for the tiles only: stone mid (between c and d), warm stone base and light, deep snow
+	// shadow, roof glint, wood grain light, cloud mid, snow mid (between n and o)
+	R: "#737b8d",
+	S: "#6a6570",
+	T: "#938c90",
+	U: "#62779c",
+	V: "#eca079",
+	W: "#c8965e",
+	X: "#b6bfd4",
+	Y: "#b3c3d6",
 	// his scarf: at runtime it takes the mood's first aura colour (raster overrides); this is its dev colour
 	Z: "#3aa597",
 } as const;

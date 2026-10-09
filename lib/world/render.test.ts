@@ -44,7 +44,7 @@ describe("the world", () => {
 		const p = paint(scene(40));
 		snapshot("world-40", p);
 		expect(hashPixels(p.data)).toBe(hashPixels(paint(scene(40)).data));
-		expect(hashPixels(p.data)).toMatchInlineSnapshot(`"720c6d4d"`);
+		expect(hashPixels(p.data)).toMatchInlineSnapshot(`"4eb46685"`);
 	});
 	it("changes the picture when one more block is laid", () => {
 		expect(hashPixels(paint(scene(40)).data)).not.toBe(hashPixels(paint(scene(41)).data));

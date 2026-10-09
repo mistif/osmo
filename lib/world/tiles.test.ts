@@ -40,7 +40,7 @@ describe("the tiles", () => {
 	});
 	it("keeps Osmo's letters and the scarf out of the tiles, and draws something in each", () => {
 		for (const id of TILE_IDS) {
-			expect(TILES[id].join("")).toMatch(/^[a-zA-G.]+$/);
+			expect(TILES[id].join("")).not.toMatch(/[H-QZ]/);
 			expect(TILES[id].join("").replace(/\./g, "").length).toBeGreaterThan(20);
 		}
 	});
