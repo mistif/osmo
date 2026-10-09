@@ -132,6 +132,8 @@ export class VoiceEngine {
 	private hidden = false;
 	private spoken: Spoken | null = null;
 	private speakingNow: object | null = null;
+	// The reply being spoken contains his name, so his own voice from the speakers must not wake him.
+	private selfNamed = false;
 	private liveText: string | null = null;
 	private error: string | null = null;
 	// Bumped by dispose(), so a mic or detector still loading from before it can't land on the fresh instance.
@@ -262,7 +264,8 @@ export class VoiceEngine {
 
 	private wantsMic(state: VoiceState): boolean {
 		if (this.hidden) return false;
-		return this.exclusive ? detectorOn(state) : micOpen(state);
+		// iPhone keeps today's behaviour: its microphone cannot run under his voice.
+		return this.exclusive ? detectorOn(state) && state.mode !== "speaking" : micOpen(state);
 	}
 
 	// Opens and closes what each mode needs.
@@ -271,6 +274,8 @@ export class VoiceEngine {
 		if (inConversation(before) && !inConversation(next)) this.exclusive = false;
 		// Waiting for his name again: forget the audio that woke him, or it wakes him twice.
 		if (next.mode === "sleeping" && before.mode !== "sleeping") this.detector?.reset();
+		// Same for the start of his speech: audio from before he began must not count toward waking him.
+		if (next.mode === "speaking" && before.mode !== "speaking") this.detector?.reset();
 		if (this.wantsMic(next)) {
 			if (!this.mic && !this.micOpening) void this.openMic();
 		} else if (this.mic) {
@@ -329,7 +334,9 @@ export class VoiceEngine {
 	}
 
 	private onWake(): void {
-		if (this.state.mode !== "sleeping" || this.hidden) return;
+		if (this.hidden) return;
+		const mode = this.state.mode;
+		if (mode !== "sleeping" && !(mode === "speaking" && !this.selfNamed)) return;
 		this.deps.chime();
 		const mark = this.mic ? Math.max(0, this.mic.ring.total - WAKE_AUDIO_SAMPLES) : 0;
 		this.send({ type: "wake", now: this.deps.now() });
@@ -475,6 +482,8 @@ export class VoiceEngine {
 		if (!speech) return;
 		const token = {};
 		this.speakingNow = token;
+		// His own reply coming out of the speakers must not wake him when it says his name.
+		this.selfNamed = /\bosmo\b/i.test(text);
 		let timed = false;
 		speech.onSpeechStart();
 		const cancelWait = this.deps.later(() => {

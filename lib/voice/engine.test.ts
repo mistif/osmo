@@ -459,6 +459,50 @@ describe("VoiceEngine", () => {
 		expect(h.mode()).toBe("speaking");
 	});
 
+	it("stops him and starts listening when his name is said while he speaks", async () => {
+		const h = harness();
+		await h.flush();
+		await converse(h, "Osmo, hello");
+		h.engine.onReply("Good evening.", "voice");
+		expect(h.mode()).toBe("speaking");
+		const chimes = h.chimes.count;
+		const hearings = h.hearings.length;
+		h.wake();
+		expect(h.said[0].cancelled).toBe(true);
+		expect(h.chimes.count).toBe(chimes + 1);
+		expect(h.mode()).toBe("awake");
+		expect(h.hearings).toHaveLength(hearings + 1);
+	});
+
+	it("ignores the detector while his own reply says his name", async () => {
+		const h = harness();
+		await h.flush();
+		await converse(h, "Osmo, hello");
+		h.engine.onReply("I am Osmo.", "voice");
+		const chimes = h.chimes.count;
+		h.wake();
+		expect(h.said[0].cancelled).toBe(false);
+		expect(h.chimes.count).toBe(chimes);
+		expect(h.mode()).toBe("speaking");
+	});
+
+	it("does not open the microphone under his voice in exclusive mode", async () => {
+		const h = harness();
+		await h.flush();
+		h.talk(16000);
+		h.wake();
+		await h.flush();
+		h.hearings[0].hooks.onProblem("audio");
+		h.hearings[1].hooks.onSpeech();
+		h.hearings[1].hooks.onDone("what's up");
+		await h.flush();
+		const opened = h.mics.length;
+		h.engine.onReply("Not much.", "voice");
+		await h.flush();
+		expect(h.mode()).toBe("speaking");
+		expect(h.mics).toHaveLength(opened);
+	});
+
 	it("listening needs a taught voice", async () => {
 		const h = harness({ prints: [] });
 		await h.flush();
