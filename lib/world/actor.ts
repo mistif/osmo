@@ -81,7 +81,7 @@ export function step(a: Actor, e: ActorEvent, w: ActorWorld): Step {
 		case "rest":
 			return to(facingViewer(a) && a.talk !== "speaking" && !w.held ? turn({ ...a, talk: "quiet" }, "work", e.now) : a);
 		case "tick":
-			return tick(a, e.now, Math.min(MAX_DT, Math.max(0, e.dt)), w);
+			return tick(a, e.now, Number.isFinite(e.dt) ? Math.min(MAX_DT, Math.max(0, e.dt)) : 0, w);
 	}
 }
 

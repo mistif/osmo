@@ -11,7 +11,7 @@ import { blocksOf, REST_X, standX, START_X } from "@/lib/world/blueprints";
 import { HALL } from "@/lib/world/blueprints/hall";
 import { ISLAND } from "@/lib/world/blueprints/island";
 import { GROUND_Y, TILE } from "@/lib/world/blueprints/types";
-import { baseZoom, easing, follow, newCamera, toScreen, zoomAt, zoomTo, ZOOM_IN, type Camera, type View } from "@/lib/world/camera";
+import { baseZoom, easing, follow, newCamera, settling, toScreen, zoomAt, zoomTo, ZOOM_IN, type Camera, type View } from "@/lib/world/camera";
 import { canvasPainter, loadSheets, type Overrides } from "@/lib/world/canvas-painter";
 import { bearing } from "@/lib/world/face";
 import { FRAME_H } from "@/lib/world/osmo-sprite";
@@ -39,7 +39,22 @@ export type WorldProps = {
 type Engine = { send(e: ActorEvent): void; refresh(): void; takeNews(): VillageNews | null; dispose(): void };
 
 // The loop, outside React: it reads the latest props through `live` and writes the canvases and a few CSS variables.
+// Nothing in it may throw into React (a throw inside useEffect would unmount the room): a failure stops the world and
+// logs one warning. `g` is shared with the wrapper so that a throw while starting can undo what was already set up.
+type Guard = { dead: boolean; undo: (() => void)[] };
 function startWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: HTMLCanvasElement, live: { current: WorldProps }): Engine | null {
+	const g: Guard = { dead: false, undo: [] };
+	try {
+		return buildWorld(root, skyCanvas, canvas, live, g);
+	} catch (err) {
+		g.dead = true;
+		for (const u of g.undo) u();
+		console.warn("[village] The world could not start and has stopped.", err);
+		return null;
+	}
+}
+
+function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: HTMLCanvasElement, live: { current: WorldProps }, g: Guard): Engine | null {
 	const ctx = canvas.getContext("2d");
 	const skyCtx = skyCanvas.getContext("2d");
 	if (!ctx || !skyCtx) return null;
@@ -52,7 +67,6 @@ function startWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 	const hourNow = () => live.current.fixed?.hour ?? hourOf(new Date());
 	const fixedLaid = () => live.current.fixed?.laid;
 
-	let alive = true;
 	let view: View = { w: 0, h: 0 };
 	let actor: Actor = newActor(START_X, clock(), hourNow());
 	let camera: Camera = newCamera(actor.x, view, 2);
@@ -71,7 +85,6 @@ function startWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 	let lastHour = Math.floor(hourNow());
 	let last = clock();
 	let timer: ReturnType<typeof setTimeout> | null = null;
-	let raf: number | null = null;
 
 	const laidCount = () => fixedLaid() ?? progress?.laid ?? 0;
 	// The block he works on next: none while the count is pinned, before the read answers, or once the hall is done.
@@ -94,9 +107,12 @@ function startWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 		if (!progress || !canSave || saving) return;
 		saving = true;
 		const snap = progress;
-		const ok = await saveRoom(snap);
-		saving = false;
-		if (ok && progress) progress = markSaved(progress, snap.laid);
+		try {
+			const ok = await saveRoom(snap);
+			if (ok && progress) progress = markSaved(progress, snap.laid);
+		} finally {
+			saving = false;
+		}
 	};
 	const onLaid = () => {
 		if (!progress || fixedLaid() !== undefined) return;
@@ -110,15 +126,31 @@ function startWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 		actor = r.actor;
 		if (r.laid) onLaid();
 	};
+	// One timer, never faster than FRAME_MS (30 frames a second): a request for "the next frame" waits out what is
+	// left of the frame since the last draw, and a longer request waits as asked.
 	const schedule = (ms: number | null) => {
 		if (timer !== null) clearTimeout(timer);
-		if (raf !== null) cancelAnimationFrame(raf);
 		timer = null;
-		raf = null;
-		if (!alive || ms === null) return;
-		if (ms <= FRAME_MS) raf = requestAnimationFrame(frame);
-		else timer = setTimeout(frame, ms);
+		if (g.dead || ms === null) return;
+		timer = setTimeout(frame, ms <= FRAME_MS ? Math.max(0, FRAME_MS - (clock() - last)) : ms);
 	};
+	// A throw stops the world for good: the loop is cancelled and one warning says why.
+	const fail = (err: unknown) => {
+		if (g.dead) return;
+		g.dead = true;
+		schedule(null);
+		console.warn("[village] The world has stopped.", err);
+	};
+	const guarded =
+		<A extends unknown[]>(fn: (...args: A) => void) =>
+		(...args: A): void => {
+			if (g.dead) return;
+			try {
+				fn(...args);
+			} catch (err) {
+				fail(err);
+			}
+		};
 	const measure = (): boolean => {
 		const box = root.getBoundingClientRect();
 		const w = Math.max(0, Math.round(box.width));
@@ -145,9 +177,8 @@ function startWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 		root.style.setProperty("--sun-y", `${(sun.fy * 100).toFixed(2)}%`);
 		root.dataset.sun = sun.up ? "up" : "down";
 	};
-	const frame = (): void => {
+	const frame = guarded((): void => {
 		timer = null;
-		raf = null;
 		const now = clock();
 		const dt = now - last;
 		last = now;
@@ -169,16 +200,15 @@ function startWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 			painter = canvasPainter(ctx, artFor(scarf), overrides);
 			drawn = null;
 		}
-		measure();
 		const close = facingViewer(actor);
-		const base = baseZoom(view.w);
+		const base = baseZoom(view.w, view.h);
 		camera = zoomTo(camera, close ? base + ZOOM_IN : base, now, reduced);
 		camera = follow(camera, actor.x, view, now, dt, close);
 		paintSky(hour);
 		const laid = laidCount();
 		const next = nextBlock();
 		const ghost = fixedLaid() !== undefined ? (hall[laid] ?? null) : next;
-		const key: DrawKey = { laid, kind: actor.kind, phase: phaseOf(hour), zoom: zoomAt(camera, now) };
+		const key: DrawKey = { laid, kind: actor.kind, phase: phaseOf(hour), zoom: zoomAt(camera, now), tx: Math.floor(actor.x / TILE) };
 		if (shouldDraw(reduced, drawn, key)) {
 			drawn = key;
 			const face = bearing(live.current.agent, Date.now(), hour).face;
@@ -187,10 +217,11 @@ function startWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 			root.style.setProperty("--him-x", `${head.x}px`);
 			root.style.setProperty("--him-y", `${head.y}px`);
 		}
-		schedule(nextTickIn({ actor, now, easing: easing(camera, now), hasWork: next !== null || actor.night, reducedMotion: reduced }));
-	};
+		const moving = easing(camera, now) || settling(camera, actor.x, view, now, close);
+		schedule(nextTickIn({ actor, now, easing: moving, hasWork: next !== null || actor.night, reducedMotion: reduced }));
+	});
 
-	const onVisibility = () => {
+	const onVisibility = guarded(() => {
 		const now = clock();
 		if (document.hidden) {
 			apply({ type: "hidden", now });
@@ -198,18 +229,24 @@ function startWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 			schedule(null);
 		} else {
 			last = now;
+			measure();
 			apply({ type: "visible", now });
 			schedule(0);
 		}
-	};
-	document.addEventListener("visibilitychange", onVisibility);
-	const resize = new ResizeObserver(() => {
-		if (measure()) schedule(0);
 	});
+	document.addEventListener("visibilitychange", onVisibility);
+	g.undo.push(() => document.removeEventListener("visibilitychange", onVisibility));
+	// The size is read on mount and when the box changes, not every frame.
+	const resize = new ResizeObserver(
+		guarded(() => {
+			if (measure() && !document.hidden) schedule(0);
+		}),
+	);
 	resize.observe(root);
+	g.undo.push(() => resize.disconnect());
 	if (persist) {
 		void loadVillage().then(({ rows, ok }) => {
-			if (!alive) return;
+			if (g.dead) return;
 			if (!ok) {
 				console.warn("[village] Could not read the village, so he will not build this visit.");
 				return;
@@ -220,37 +257,36 @@ function startWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 		});
 	}
 	void loadSheets().then((found) => {
-		if (!alive) return;
+		if (g.dead) return;
 		overrides = found;
 		painter = canvasPainter(ctx, artFor(scarf), overrides);
 		drawn = null;
 		schedule(0);
 	});
 	measure();
-	camera = newCamera(actor.x, view, baseZoom(view.w));
+	camera = newCamera(actor.x, view, baseZoom(view.w, view.h));
 	if (document.hidden) apply({ type: "hidden", now: clock() });
 	schedule(document.hidden ? null : 0);
 
 	return {
-		send(e) {
+		send: guarded((e: ActorEvent) => {
 			apply(e);
 			if (!document.hidden) schedule(0);
-		},
-		refresh() {
+		}),
+		refresh: guarded(() => {
 			drawn = null;
 			skyKey = "";
 			if (!document.hidden) schedule(0);
-		},
+		}),
 		takeNews() {
 			const n = news;
 			news = null;
 			return n;
 		},
 		dispose() {
-			alive = false;
+			g.dead = true;
 			schedule(null);
-			document.removeEventListener("visibilitychange", onVisibility);
-			resize.disconnect();
+			for (const u of g.undo) u();
 			if (progress && needsSave(progress, "hidden")) void save();
 		},
 	};

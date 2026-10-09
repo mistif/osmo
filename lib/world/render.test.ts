@@ -15,7 +15,7 @@ import { hslCss, skyAt, starField } from "./sky";
 const art = artFor("hsl(172 38% 50%)");
 const VIEW = { w: 320, h: 200 };
 const hall = blocksOf(HALL);
-// He stands at x 512; the camera starts on him: world x 432 to 592 and y 344 to 444 are on screen at zoom 2.
+// He stands at x 512; the camera starts on him: world x 432 to 592 and y 324 to 424 are on screen at zoom 2.
 function scene(laid: number): WorldScene {
 	const him = newActor(32 * TILE, 0, 12);
 	return {
@@ -44,7 +44,7 @@ describe("the world", () => {
 		const p = paint(scene(40));
 		snapshot("world-40", p);
 		expect(hashPixels(p.data)).toBe(hashPixels(paint(scene(40)).data));
-		expect(hashPixels(p.data)).toMatchInlineSnapshot(`"930153fd"`);
+		expect(hashPixels(p.data)).toMatchInlineSnapshot(`"720c6d4d"`);
 	});
 	it("changes the picture when one more block is laid", () => {
 		expect(hashPixels(paint(scene(40)).data)).not.toBe(hashPixels(paint(scene(41)).data));

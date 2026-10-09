@@ -29,14 +29,15 @@ describe("the redraw pace", () => {
 	it("slows the frames under reduced motion", () => {
 		expect(nextTickIn(input({ ...a, kind: "walking" }, { reducedMotion: true }))).toBe(CALM_FRAME_MS);
 	});
-	it("redraws a still frame only on a new block, mode, sky phase or zoom", () => {
-		const k = { laid: 3, kind: "idle", phase: "day", zoom: 2 };
+	it("redraws a still frame only on a new block, mode, sky phase, zoom or tile", () => {
+		const k = { laid: 3, kind: "idle", phase: "day", zoom: 2, tx: 10 };
 		expect(shouldDraw(true, null, k)).toBe(true);
 		expect(shouldDraw(true, k, { ...k })).toBe(false);
 		expect(shouldDraw(true, k, { ...k, laid: 4 })).toBe(true);
 		expect(shouldDraw(true, k, { ...k, kind: "facing" })).toBe(true);
 		expect(shouldDraw(true, k, { ...k, phase: "dusk" })).toBe(true);
 		expect(shouldDraw(true, k, { ...k, zoom: 4 })).toBe(true);
+		expect(shouldDraw(true, k, { ...k, tx: 11 })).toBe(true); // he walks tile by tile, not in one jump on arrival
 		expect(shouldDraw(false, k, { ...k })).toBe(true);
 	});
 });

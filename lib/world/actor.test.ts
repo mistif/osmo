@@ -110,6 +110,20 @@ describe("the tab and the clock", () => {
 	});
 });
 
+describe("a bad dt", () => {
+	it("counts a NaN, infinite or negative dt as 0, so he never stalls on it", () => {
+		const walking = run(newActor(100, 0, 12), 0, 100).a;
+		for (const dt of [Number.NaN, Number.POSITIVE_INFINITY, -50]) {
+			const s = step(walking, { type: "tick", now: 150, dt }, W);
+			expect(s.actor.x).toBe(walking.x);
+			expect(s.laid).toBe(false);
+		}
+		const next = run(step(walking, { type: "tick", now: 150, dt: Number.NaN }, W).actor, 150, 400).a;
+		expect(Number.isFinite(next.x)).toBe(true);
+		expect(next.x).toBeGreaterThan(walking.x);
+	});
+});
+
 describe("night", () => {
 	it("walks to the bench and rests when nobody has spoken", () => {
 		const night = newActor(700, 0, 23);
