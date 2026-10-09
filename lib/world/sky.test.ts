@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { TILE, WORLD_W } from "./blueprints/types";
 import { baseZoom, newCamera, toScreen } from "./camera";
+import { CLOUD_SHAPES } from "./backdrop";
 import {
-	CLOUD_SPEED, CLOUDS, cloudWidth, cloudX, daylight, hourOf, hslCss, isNight, PARALLAX, phaseOf, skyAt, starField, sunAt,
+	CLOUD_SPAN, CLOUD_SPEED, CLOUDS, cloudX, daylight, hourOf, hslCss, isNight, PARALLAX, phaseOf, SKY_STOPS, skyAt, skyHslAt, starField, sunAt,
 } from "./sky";
 
 describe("the clock", () => {
@@ -48,6 +49,18 @@ describe("the sky", () => {
 	it("warms the horizon at sunset", () => {
 		expect(Math.abs(skyAt(A, B, 20).bottom[0] - 24)).toBeLessThan(Math.abs(82 - 24));
 	});
+	it("runs in three stops, lightest at the horizon, within the caps", () => {
+		for (const hour of [0, 6, 12, 20]) {
+			const sky = skyAt(A, B, hour);
+			expect(sky.top[2]).toBeLessThanOrEqual(sky.mid[2]);
+			expect(sky.mid[2]).toBeLessThanOrEqual(sky.bottom[2]);
+			expect(sky.mid[1]).toBeLessThanOrEqual(55);
+		}
+		const noon = skyAt(A, B, 12);
+		expect(skyHslAt(noon, 0)).toEqual(noon.top);
+		expect(skyHslAt(noon, SKY_STOPS.mid)).toEqual(noon.mid);
+		expect(skyHslAt(noon, 1)).toEqual(noon.bottom);
+	});
 	it("falls back to calm for a colour it cannot read", () => {
 		expect(skyAt("#123456", "nope", 12).top[0]).toBe(172);
 	});
@@ -71,36 +84,36 @@ describe("the sun", () => {
 
 describe("clouds and stars", () => {
 	it("starts each cloud where it is placed and drifts it right, the near layer faster", () => {
-		for (const c of CLOUDS) expect(cloudX(c, 0, 1024)).toBe(c.x);
+		for (const c of CLOUDS) expect(cloudX(c, 0)).toBe(c.x);
 		const [far] = CLOUDS.filter((c) => c.layer === 0);
-		expect(cloudX(far, 1000, 1024) - far.x).toBeCloseTo(CLOUD_SPEED[0]);
+		expect(cloudX(far, 1000) - far.x).toBeCloseTo(CLOUD_SPEED[0]);
 		expect(CLOUD_SPEED[1]).toBeGreaterThan(CLOUD_SPEED[0]);
 	});
-	it("wraps round the world", () => {
+	it("wraps round the span, which is wider than the world", () => {
+		expect(CLOUD_SPAN).toBeGreaterThan(WORLD_W * TILE);
 		for (const c of CLOUDS) {
-			const x = cloudX(c, 10 * 3_600_000, 1024);
-			expect(x).toBeGreaterThanOrEqual(-Math.max(...CLOUDS.map(cloudWidth)));
-			expect(x).toBeLessThan(1024);
+			const x = cloudX(c, 10 * 3_600_000);
+			expect(x).toBeGreaterThanOrEqual(0);
+			expect(x).toBeLessThan(CLOUD_SPAN);
 		}
 	});
-	it("keeps two clouds of each layer on screen, none cut at the top, at 960 by 600 and 1200 by 800", () => {
-		for (const [w, h] of [[960, 600], [1200, 800]]) {
+	// Since the look pass the clouds are big shapes at fixed heights and the view at scale 1 is taller than the world, so
+	// a cloud may be cut by the top edge on a short view; what must hold is that whole clouds of both layers are in view.
+	it("keeps two whole clouds of each layer in view at 960 by 600, 1200 by 800 and 1920 by 1080", () => {
+		for (const [w, h] of [[960, 600], [1200, 800], [1920, 1080]]) {
 			const view = { w, h };
 			const z = baseZoom(w, h);
-			const size = TILE * z;
 			for (const heX of [300, 512, 700]) {
 				const camera = newCamera(heX, view, z);
 				for (let seconds = 0; seconds <= 1200; seconds += 20) {
 					const where = `${w}x${h} heX ${heX} t ${seconds}s`;
 					const shown = [0, 0];
 					for (const c of CLOUDS) {
-						const x = cloudX(c, seconds * 1000, WORLD_W * TILE);
-						const at = c.parts.map((part) => toScreen(camera, view, 0, x + part.dx, c.y + part.dy, PARALLAX[c.layer]));
-						if (!at.some((a) => a.x + size > 0 && a.x < w)) continue;
-						shown[c.layer]++;
-						for (const a of at) {
-							expect(a.y, where).toBeGreaterThanOrEqual(0);
-							expect(a.y + size, where).toBeLessThanOrEqual(h);
+						const shape = CLOUD_SHAPES[c.shape];
+						for (let k = -2; k <= 2; k++) {
+							const at = toScreen(camera, view, 0, cloudX(c, seconds * 1000) + k * CLOUD_SPAN, c.y, PARALLAX[c.layer]);
+							const whole = at.x + shape.x0 * z >= 0 && at.x + shape.x1 * z <= w && at.y + shape.y0 * z >= 0 && at.y + shape.y1 * z <= h;
+							if (whole) shown[c.layer]++;
 						}
 					}
 					expect(shown[0], `far, ${where}`).toBeGreaterThanOrEqual(2);
@@ -109,8 +122,8 @@ describe("clouds and stars", () => {
 			}
 		}
 	});
-	it("uses only cloud tiles", () => {
-		expect(CLOUDS.flatMap((c) => c.parts).every((p) => p.tile.startsWith("cloud-"))).toBe(true);
+	it("draws every cloud from the cloud sheet", () => {
+		for (const c of CLOUDS) expect(CLOUD_SHAPES[c.shape]).toBeDefined();
 	});
 	it("places the same stars every time, in the upper sky", () => {
 		expect(starField(20, 3)).toEqual(starField(20, 3));

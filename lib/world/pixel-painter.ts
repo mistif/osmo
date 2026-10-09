@@ -1,7 +1,7 @@
 // A Painter over a plain RGBA buffer, with a canvas's source-over blending. The tests draw with it (node has no
 // canvas, and no package for one is added) and hash the pixels.
 import { parseColor, type Bitmap } from "./raster";
-import { CELL, sheetBitmap, type Art, type Painter } from "./render";
+import { CELL, GLOW_STOPS, sheetBitmap, type Art, type Painter } from "./render";
 
 export type PixelPainter = Painter & { readonly data: Uint8ClampedArray<ArrayBuffer> };
 
@@ -23,12 +23,16 @@ export function pixelPainter(w: number, h: number, art: Art): PixelPainter {
 		clear: () => {
 			data.fill(0);
 		},
-		gradient(top, bottom) {
-			const t = parseColor(top) ?? [0, 0, 0, 255];
-			const b = parseColor(bottom) ?? t;
+		gradient(stops) {
+			const cs = stops.map(([at, color]) => [at, parseColor(color) ?? [0, 0, 0, 255]] as const);
 			for (let y = 0; y < h; y++) {
 				const k = h > 1 ? y / (h - 1) : 0;
-				const c = [0, 1, 2].map((i) => Math.round(t[i] + (b[i] - t[i]) * k));
+				let i = 0;
+				while (i < cs.length - 2 && k > cs[i + 1][0]) i++;
+				const [a0, c0] = cs[i];
+				const [a1, c1] = cs[Math.min(i + 1, cs.length - 1)];
+				const t = a1 > a0 ? Math.min(1, Math.max(0, (k - a0) / (a1 - a0))) : 0;
+				const c = [0, 1, 2].map((j) => Math.round(c0[j] + (c1[j] - c0[j]) * t));
 				for (let x = 0; x < w; x++) {
 					const o = (y * w + x) * 4;
 					data[o] = c[0];
@@ -65,7 +69,36 @@ export function pixelPainter(w: number, h: number, art: Art): PixelPainter {
 				}
 			}
 		},
+		// Like the canvas's "lighter": premultiplied colours add, and so do the alphas.
+		glow(cx, cy, r, color, alpha) {
+			const c = parseColor(color);
+			if (!c || r <= 0) return;
+			for (let y = Math.max(0, Math.floor(cy - r)); y < Math.min(h, Math.ceil(cy + r)); y++) {
+				for (let x = Math.max(0, Math.floor(cx - r)); x < Math.min(w, Math.ceil(cx + r)); x++) {
+					const a = alpha * glowAt(Math.hypot(x + 0.5 - cx, y + 0.5 - cy) / r);
+					if (a <= 0) continue;
+					const o = (y * w + x) * 4;
+					const da = data[o + 3] / 255;
+					const oa = Math.min(1, da + a);
+					for (let i = 0; i < 3; i++) data[o + i] = Math.min(255, Math.round((data[o + i] * da + c[i] * a) / oa));
+					data[o + 3] = Math.round(oa * 255);
+				}
+			}
+		},
 	};
+}
+
+// The glow's strength at a share d of its radius, between the shared stops.
+export function glowAt(d: number): number {
+	if (d >= 1) return 0;
+	for (let i = 1; i < GLOW_STOPS.length; i++) {
+		const [a1, s1] = GLOW_STOPS[i];
+		if (d <= a1) {
+			const [a0, s0] = GLOW_STOPS[i - 1];
+			return s0 + ((s1 - s0) * (d - a0)) / (a1 - a0);
+		}
+	}
+	return 0;
 }
 
 // FNV-1a over the bytes, as 8 hex digits.

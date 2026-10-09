@@ -19,7 +19,7 @@ import { FRAME_MS, nextTickIn, shouldDraw, type DrawKey } from "@/lib/world/pace
 import { lay, markSaved, needsSave, nextIndex, resume, type RoomProgress, type VillageNews } from "@/lib/world/progress";
 import { artFor, drawSky, drawWorld } from "@/lib/world/render";
 import { roomEvents, type RoomSignals } from "@/lib/world/signals";
-import { hourOf, phaseOf, skyAt, starField, sunAt } from "@/lib/world/sky";
+import { daylight, hourOf, phaseOf, skyAt, starField, sunAt } from "@/lib/world/sky";
 import { loadVillage, saveRoom } from "@/lib/world/village-data";
 import s from "./world.module.css";
 
@@ -77,7 +77,10 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 	let news: VillageNews | null = null;
 	let overrides: Overrides = {};
 	let scarf = live.current.colorA;
-	let painter = canvasPainter(ctx, artFor(scarf), overrides);
+	// How dark it is, in eighths: the world's art is graded toward night by it (artFor), so a step rebuilds the atlases.
+	const darkAt = (hour: number) => Math.round((1 - daylight(hour)) * 8) / 8;
+	let dark = darkAt(hourNow());
+	let painter = canvasPainter(ctx, artFor(scarf, dark), overrides);
 	const skyPainter = canvasPainter(skyCtx, artFor(scarf));
 	let skyKey = "";
 	let drawn: DrawKey | null = null;
@@ -195,9 +198,10 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 			posed = null;
 			apply({ type: "tick", now, dt });
 		}
-		if (live.current.colorA !== scarf) {
+		if (live.current.colorA !== scarf || darkAt(hour) !== dark) {
 			scarf = live.current.colorA;
-			painter = canvasPainter(ctx, artFor(scarf), overrides);
+			dark = darkAt(hour);
+			painter = canvasPainter(ctx, artFor(scarf, dark), overrides);
 			drawn = null;
 		}
 		const close = facingViewer(actor);
@@ -212,7 +216,8 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 		if (shouldDraw(reduced, drawn, key)) {
 			drawn = key;
 			const face = bearing(live.current.agent, Date.now(), hour).face;
-			drawWorld(painter, { camera, view, now, clock: now, ground, laid: hall.slice(0, laid), ghost, him: { x: actor.x, look: look(actor, now, face) } });
+			const sky = skyAt(live.current.colorA, live.current.colorB, hour);
+			drawWorld(painter, { camera, view, now, clock: now, ground, laid: hall.slice(0, laid), ghost, him: { x: actor.x, look: look(actor, now, face) }, sky, dark });
 			const head = toScreen(camera, view, now, actor.x, GROUND_Y * TILE - FRAME_H);
 			root.style.setProperty("--him-x", `${head.x}px`);
 			root.style.setProperty("--him-y", `${head.y}px`);
@@ -259,7 +264,7 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 	void loadSheets().then((found) => {
 		if (g.dead) return;
 		overrides = found;
-		painter = canvasPainter(ctx, artFor(scarf), overrides);
+		painter = canvasPainter(ctx, artFor(scarf, dark), overrides);
 		drawn = null;
 		schedule(0);
 	});

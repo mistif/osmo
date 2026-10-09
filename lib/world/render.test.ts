@@ -3,14 +3,16 @@ import { look, newActor } from "./actor";
 import { blocksOf } from "./blueprints";
 import { HALL } from "./blueprints/hall";
 import { ISLAND } from "./blueprints/island";
-import { TILE } from "./blueprints/types";
+import { GROUND_Y, TILE } from "./blueprints/types";
 import { newCamera, toScreen } from "./camera";
 import { PALETTE } from "./palette";
 import { hashPixels, pixelPainter } from "./pixel-painter";
 import { snapshot } from "./png";
-import { parseColor } from "./raster";
+import { colours, parseColor } from "./raster";
 import { artFor, drawSky, drawWorld, sheetBitmap, type WorldScene } from "./render";
+import { CLOUD_CELL, CLOUD_GRIDS } from "./backdrop";
 import { hslCss, skyAt, starField } from "./sky";
+import { TILE_IDS, TILES } from "./tiles";
 
 const art = artFor("hsl(172 38% 50%)");
 const VIEW = { w: 320, h: 200 };
@@ -33,7 +35,8 @@ const rgb = (letter: keyof typeof PALETTE) => (parseColor(PALETTE[letter]) ?? [0
 
 describe("the atlas", () => {
 	it("lays each sheet out in one strip per scale", () => {
-		expect([sheetBitmap(art, "tiles", 2).w, sheetBitmap(art, "tiles", 2).h]).toEqual([38 * 32, 32]);
+		expect([sheetBitmap(art, "tiles", 2).w, sheetBitmap(art, "tiles", 2).h]).toEqual([TILE_IDS.length * 32, 32]);
+		expect([sheetBitmap(art, "clouds", 1).w, sheetBitmap(art, "clouds", 1).h]).toEqual([CLOUD_GRIDS.length * CLOUD_CELL.w, CLOUD_CELL.h]);
 		expect([sheetBitmap(art, "sprite", 3).w, sheetBitmap(art, "sprite", 3).h]).toEqual([18 * 48, 96]);
 		expect([sheetBitmap(art, "faces", 2).w, sheetBitmap(art, "faces", 2).h]).toEqual([9 * 16, 8]);
 	});
@@ -44,7 +47,7 @@ describe("the world", () => {
 		const p = paint(scene(40));
 		snapshot("world-40", p);
 		expect(hashPixels(p.data)).toBe(hashPixels(paint(scene(40)).data));
-		expect(hashPixels(p.data)).toMatchInlineSnapshot(`"4eb46685"`);
+		expect(hashPixels(p.data)).toMatchInlineSnapshot(`"d498b675"`);
 	});
 	it("changes the picture when one more block is laid", () => {
 		expect(hashPixels(paint(scene(40)).data)).not.toBe(hashPixels(paint(scene(41)).data));
@@ -72,10 +75,17 @@ describe("the world", () => {
 		const rows = { x0: 40, x1: 280, y0: 184, y1: 192 };
 		const snow = (["n", "o", "p"] as const).map((l) => rgb(l).join());
 		const withIsland = paint(scene(40)).data;
-		const without = paint({ ...scene(40), ground: [] }).data;
+		// Since the look pass a near cloud drifts behind the island here, so rather than "nothing else paints these rows" the
+		// test is that each pixel is exactly the snow tile's own pixel at that spot.
+		const s = scene(40);
+		const cols = colours();
 		for (let y = rows.y0; y < rows.y1; y++) {
 			for (let x = rows.x0; x < rows.x1; x++) {
-				expect(px(without, x, y)[3], `nothing but the island paints ${x},${y}`).toBe(0);
+				const wx = Math.floor((x - VIEW.w / 2) / 2 + s.camera.x);
+				const block = s.ground.find((b) => b.y === GROUND_Y && b.x === Math.floor(wx / TILE));
+				expect(block?.tile, `${x},${y}`).toBe("snow");
+				const letter = TILES.snow[(y - rows.y0) >> 1][wx % TILE];
+				expect(px(withIsland, x, y), `the island's snow at ${x},${y}`).toEqual([...cols[letter]]);
 				const [r, g, b, a] = px(withIsland, x, y);
 				expect(a, `${x},${y}`).toBe(255);
 				expect(snow, `${x},${y}`).toContain([r, g, b].join());
@@ -106,6 +116,34 @@ describe("the world", () => {
 		}
 		expect(coats).toBeGreaterThan(100);
 		expect(lowest).toBe(183);
+	});
+	it("after dark lights the windows and lays a warm glow round the lamps, which daylight does not", () => {
+		const done = scene(hall.length);
+		const lantern = done.laid.find((b) => b.tile === "lantern");
+		expect(lantern).toBeDefined();
+		if (!lantern) return;
+		const c = toScreen(done.camera, VIEW, 0, lantern.x * TILE + 8, lantern.y * TILE + 8);
+		const near = { x: c.x - 30, y: c.y - 6 }; // beside the lantern, on the wall, inside the glow
+		const bright = (d: Uint8ClampedArray) => px(d, near.x, near.y).slice(0, 3).reduce((a, b) => a + b, 0);
+		const night = pixelPainter(VIEW.w, VIEW.h, artFor("hsl(172 38% 50%)", 1));
+		drawWorld(night, { ...done, dark: 1 });
+		const unlit = pixelPainter(VIEW.w, VIEW.h, artFor("hsl(172 38% 50%)", 1));
+		drawWorld(unlit, { ...done, dark: 0 });
+		expect(bright(night.data)).toBeGreaterThan(bright(unlit.data) + 20);
+	});
+	it("draws the far islands only when given the sky, behind everything", () => {
+		const s = { ...scene(40), sky: skyAt("hsl(172 38% 50%)", "hsl(212 38% 50%)", 12) };
+		const wide = { w: 640, h: 400 };
+		const draw = (sc: WorldScene) => {
+			const p = pixelPainter(wide.w, wide.h, art);
+			drawWorld(p, { ...sc, view: wide, camera: newCamera(sc.him.x, wide, 1) });
+			return p.data;
+		};
+		let differ = 0;
+		const a = draw(s);
+		const b = draw({ ...s, sky: undefined });
+		for (let i = 0; i < a.length; i += 4) if (a[i + 3] !== b[i + 3]) differ++;
+		expect(differ).toBeGreaterThan(500);
 	});
 	it("copes with a canvas of no size", () => {
 		expect(() => drawWorld(pixelPainter(0, 0, art), { ...scene(40), view: { w: 0, h: 0 } })).not.toThrow();

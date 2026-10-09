@@ -64,9 +64,11 @@ describe("the hall", () => {
 
 describe("the island", () => {
 	const ground = blocksOf(ISLAND);
-	it("has snow along its whole top row", () => {
+	it("has snow along its whole top row, 58 wide since the look pass, with a flagstone path in it", () => {
 		const top = ground.filter((b) => b.y === GROUND_Y);
-		expect(top).toHaveLength(48);
+		expect(top).toHaveLength(58);
+		expect(top.every((b) => b.tile.startsWith("snow") || b.tile === "path")).toBe(true);
+		expect(top.filter((b) => b.tile === "path").every((b) => b.x < HALL.x + 1)).toBe(true);
 		expect(top.find((b) => b.x === ISLAND_LEFT)?.tile).toBe("snow-edge-l");
 		expect(top.find((b) => b.x === ISLAND_RIGHT)?.tile).toBe("snow-edge-r");
 	});
@@ -75,6 +77,18 @@ describe("the island", () => {
 		expect(ground.find((b) => b.tile === "lantern-post")).toMatchObject({ x: 49, y: 25 });
 		expect(ground.find((b) => b.tile === "lantern")).toMatchObject({ x: 49, y: 24 });
 		expect(REST_X).toBe(47.5 * TILE);
+	});
+	it("is wider than the hall by a good margin on both sides, and tapers below", () => {
+		expect(HALL.x - ISLAND_LEFT).toBeGreaterThanOrEqual(15);
+		expect(ISLAND_RIGHT - (HALL.x + HALL.map[0].length - 1)).toBeGreaterThanOrEqual(15);
+		const widthAt = (y: number) => ground.filter((b) => b.y === y && b.layer === "ground" && !b.tile.startsWith("root")).length;
+		expect(widthAt(GROUND_Y + 1)).toBeGreaterThan(widthAt(GROUND_Y + 5));
+		expect(widthAt(GROUND_Y + 5)).toBeGreaterThan(widthAt(GROUND_Y + 9));
+	});
+	it("keeps the scenery off the hall's footprint, so the hall is never drawn over a tree", () => {
+		const scenery = ground.filter((b) => b.y < GROUND_Y && b.tile !== "lantern" && b.tile !== "lantern-post" && b.tile !== "bench");
+		expect(scenery.length).toBeGreaterThan(20);
+		for (const b of scenery) expect(b.x < HALL.x || b.x >= HALL.x + HALL.map[0].length, `${b.tile} at ${b.x}`).toBe(true);
 	});
 	it("lets him stand only on the island", () => {
 		expect(standX({ x: 0, y: 20, tile: "brick", layer: "walls" })).toBe((ISLAND_LEFT + 1.5) * TILE);

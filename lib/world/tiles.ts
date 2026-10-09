@@ -1,6 +1,6 @@
 // Credit: the roof shingles (roof-flat, roof-left, roof-right, roof-peak) and brick-dark adapt Tiny Town by Kenney (kenney.nl), CC0.
 // The village tiles (spec 2): 16 by 16 grids of palette letters, light from the top left (see palette.ts).
-// TILE_IDS is the cell order of the atlas and of the optional public/village/tiles.png (608 by 16).
+// TILE_IDS is the cell order of the atlas and of the optional public/village/tiles.png (16 px per cell, by 16).
 // Brick is shaded by a small helper from hand-laid maps (one letter per brick); the rest is drawn from per-pixel
 // rules and a few hand-drawn grids. Texture comes from a fixed hash, so every run draws the same pixels.
 import type { Grid } from "./raster";
@@ -10,6 +10,9 @@ export const TILE_IDS = [
 	"root", "root-end", "grass", "brick", "brick-dark", "plank", "beam", "beam-h", "glass", "window", "window-top",
 	"door", "door-top", "roof-left", "roof-right", "roof-flat", "roof-peak", "battlement", "lantern", "lantern-post",
 	"banner", "banner-end", "step", "pillar", "bench", "cloud-l", "cloud-m", "cloud-r", "cloud-top", "cloud-small",
+	// Appended in the look pass; the 38 above keep their cells.
+	"window-lit", "window-top-lit", "stone-under-l", "stone-under-r", "stone-hang", "trunk", "trunk-base", "pine-tip",
+	"pine-small", "pine-l", "pine-c", "pine-r", "bush", "tuft", "path", "sign", "fence",
 ] as const;
 export type TileId = (typeof TILE_IDS)[number];
 
@@ -413,7 +416,7 @@ function pane(x: number, wy: number, lit: boolean): string {
 	// The sky's reflection: the upper glass lighter, the lower in the room's dark, split on a slant.
 	return wy + (x > 8 ? 4 : 0) - (x % 4) < 23 ? "r" : "q";
 }
-function windowShape(x: number, y: number, top: boolean): string {
+function windowShape(x: number, y: number, top: boolean, lit = false): string {
 	const open = top ? winOpenTop(x, y) : winOpenLow(x, y);
 	const wy = top ? y : y + 16;
 	if (open) {
@@ -423,7 +426,7 @@ function windowShape(x: number, y: number, top: boolean): string {
 		if (edge) return "a";
 		// The reveal: one pixel of shadow inside the top and left of the opening.
 		if ((top && !winOpenTop(x, y - 2) && x < 8) || x === WIN.x0 + 1) return "q";
-		return pane(x, wy, false);
+		return pane(x, wy, lit);
 	}
 	if (top) {
 		const v = voussoir(WIN, x, y);
@@ -604,6 +607,179 @@ const BANNER_TOP = [
 	"...yxxyxuwxxxw..",
 	"...yxxyxxwxxxw..",
 	"...yxxyxxwxxxw..",
+];
+
+// --- Added in the look pass: the island's organic underside, its scenery, and the lit windows. ---
+
+// The underside where it slopes up toward the island's ends: rock on one side of a slightly ragged diagonal,
+// outlined along it with a shaded lip (the underside faces down, away from the light). "l" is the left end of the
+// island (rock in the upper right), "r" the right end (rock in the upper left, deeper in shadow).
+const SLOPE_JITTER = [0, 0, 1, 1, 0, -1, 0, 0, 1, 0, 0, -1, -1, 0, 0, 0];
+function underSlope(x: number, y: number, side: "l" | "r"): string {
+	const u = side === "l" ? x : 15 - x; // distance in from the open side
+	const cut = y + SLOPE_JITTER[y];
+	if (u < cut) return ".";
+	if (u === cut) return "a";
+	const s = stoneDark[y][x];
+	if (u === cut + 1) return side === "l" ? "b" : "a";
+	if (u === cut + 2) return darker(s);
+	return side === "r" && u <= cut + 4 ? darker(s) : s;
+}
+// A stone that juts down from the underside: a wedge ending in a point, lit on its left side.
+const HANG: readonly (readonly [number, number])[] = [
+	[1, 14], [2, 13], [2, 13], [3, 12], [3, 12], [4, 11], [5, 11], [5, 10], [6, 10], [6, 9], [7, 9], [7, 8], [8, 8],
+];
+function hangingStone(x: number, y: number): string {
+	const row = HANG[y];
+	if (!row || x < row[0] || x > row[1]) return ".";
+	const below = HANG[y + 1];
+	if (x === row[1] || !below || x < below[0] || x > below[1]) return "a";
+	if (x === row[0]) return y < 4 ? "R" : "c";
+	if (x === row[1] - 1) return "b";
+	const s = stoneDark[y][x];
+	return y >= 7 ? darker(s) : s;
+}
+
+// A tree trunk: bark five wide, lit on its left, with knots; the base flares into roots, with snow drifted at its foot.
+function bark(x: number, y: number, left: number, w: number): string | null {
+	const i = x - left;
+	if (i < 0 || i >= w) return null;
+	if (i === w - 1) return "j";
+	if (i === 0) return "l";
+	if (noise(x, y >> 1, 90) > 0.82) return "j";
+	return i === 1 ? (noise(x, y, 91) > 0.6 ? "m" : "l") : "k";
+}
+function trunk(x: number, y: number, base: boolean): string {
+	if (!base) return bark(x, y, 6, 5) ?? ".";
+	const flare = y >= 12 ? y - 11 : 0; // rows 12 to 15 spread out by 1 to 4 pixels each side
+	const b = bark(x, y, 6 - flare, 5 + 2 * flare);
+	if (y === 15 && (x === 1 || x === 14)) return "o";
+	if (y === 15 && (x === 0 || x === 15)) return "Y";
+	return b ?? ".";
+}
+
+// Snowy pines. A tier is a skirt of boughs in a cell 16 rows tall and `w` wide, narrow at its top and wide at its
+// bottom, with snow along the top of every bough. Big pines are three cells wide (pine-l, pine-c, pine-r), small
+// ones a single cell (pine-small); pine-tip is the point of either.
+type Tier = { w: number; top: number; bottom: number; from: number; seed: number };
+const tierHalf = (t: Tier, y: number) => t.top / 2 + ((t.bottom - t.top) / 2) * ((y - t.from) / (15 - t.from));
+function inTier(t: Tier, x: number, y: number): boolean {
+	if (y < t.from || y > 15 || x < 0 || x >= t.w) return false;
+	const off = Math.abs(x + 0.5 - t.w / 2);
+	// The bough tips droop along the bottom: every five pixels out from the trunk the skirt dips a row.
+	const dip = y === 15 && Math.floor(off) % 5 === 2 ? 1 : 0;
+	const notch = y >= 13 && off > tierHalf(t, y) - 2 && Math.floor(off) % 4 === 0;
+	return off <= tierHalf(t, y) - dip && !notch;
+}
+function pine(t: Tier, x: number, y: number): string {
+	if (!inTier(t, x, y)) return ".";
+	const c = t.w / 2;
+	if (!inTier(t, x, y + 1)) return "a";
+	if (!inTier(t, x + 1, y) && x + 0.5 > c) return "a";
+	// Snow on the boughs: the top surface of the skirt, one or two pixels thick, bluer on the shaded right.
+	const snowTop = !inTier(t, x, y - 1);
+	const snowTwo = !inTier(t, x, y - 2) && noise(x, 0, t.seed) > 0.35;
+	const right = x + 0.5 > c + 2;
+	if (snowTop) return right ? "o" : "p";
+	if (snowTwo) return right ? "Y" : "o";
+	if (!inTier(t, x - 1, y) && x + 0.5 < c) return "C";
+	if (!inTier(t, x, y + 2)) return "C"; // the shade under each bough
+	// Needles: lit left of the trunk, deep on the right, with a few branch streaks running down and out.
+	const streak = (Math.floor(Math.abs(x + 0.5 - c)) + y + t.seed) % 6 === 0;
+	if (streak) return "C";
+	const v = 0.62 - ((x + 0.5 - c) / (t.w / 2)) * 0.45 - (y - t.from) * 0.012 + (noise(x, y, t.seed + 1) - 0.5) * 0.3;
+	return ramp("CDE", v, x, y);
+}
+const BIG_TIER: Tier = { w: 48, top: 12, bottom: 46, from: 0, seed: 100 };
+const SMALL_TIER: Tier = { w: 16, top: 3, bottom: 15, from: 0, seed: 104 };
+const TIP_TIER: Tier = { w: 16, top: 1, bottom: 12, from: 3, seed: 106 };
+const bigPine = (cell: number) => make((x, y) => pine(BIG_TIER, x + cell * 16, y));
+
+// A low shrub, rounded, dusted with snow on top.
+const BUSH_TOP = [11, 8, 7, 6, 6, 7, 6, 6, 6, 7, 7, 8, 8, 9, 10, 12];
+function bush(x: number, y: number): string {
+	const top = BUSH_TOP[x];
+	if (y < top) return ".";
+	if (x === 15 || y === 15) return "a";
+	if (y === top) return x < 9 ? "p" : "o";
+	if (y === top + 1 && noise(x, 0, 110) > 0.4) return x < 9 ? "o" : "Y";
+	if (x === 14 || y === 14) return "C";
+	const v = 0.7 - x * 0.03 - (y - top) * 0.05 + (noise(x, y, 111) - 0.5) * 0.35;
+	return ramp("CDE", v, x, y);
+}
+
+// Grass tufts poking through the snow, and two small flowers.
+const TUFT = [
+	"................",
+	"................",
+	"................",
+	"................",
+	"................",
+	"................",
+	"................",
+	"................",
+	"................",
+	"................",
+	"......V.........",
+	".....ViV....E...",
+	"..E...g...E.DE..",
+	"..DE..D..EDCD.E.",
+	".EDC.EDC.DCCDCD.",
+	"CDCCDCCCCCCCCCCC",
+];
+
+// A flagstone path laid into the snow: two pale slabs set flush with its top, lit along their top and left, with
+// packed snow between them and the snow's own cap and rock below.
+const SLABS: readonly (readonly [number, number])[] = [[1, 6], [9, 14]];
+function path(x: number, y: number): string {
+	const slab = SLABS.find(([a, b]) => x >= a && x <= b);
+	if (slab && y <= 3) {
+		const [a, b] = slab;
+		if (y === 3 || x === b) return "c";
+		if (y === 0 || x === a) return x === a && y === 0 ? "p" : "e";
+		return noise(x, y, 120) > 0.75 ? "R" : "d";
+	}
+	return snowCap(x, y);
+}
+
+// A signpost pointing right, to the hall: a board with an arrow end, snow on its top, on a post.
+const SIGN = [
+	"................",
+	"................",
+	"................",
+	"..ppppppppoo....",
+	".jmmmmmmmmmml...",
+	".jmWmmWmmmmmlj..",
+	".jlkkkklkkklllj.",
+	".jllllllllllkj..",
+	".jkkkkkkkkkkj...",
+	"......lkj.......",
+	"......lkj.......",
+	"......lkj.......",
+	"......lkj.......",
+	"......lkj.......",
+	".....olkjo......",
+	"....oYYYYYo.....",
+];
+
+// A fence piece: a post at its left and two rails running through, snow on the post's cap and the top rail.
+const FENCE = [
+	"................",
+	"................",
+	"................",
+	"................",
+	".pp.............",
+	"lmmj............",
+	"lmkj............",
+	"lmkjpppppoooooop",
+	"lmkjmmmWmmmmmWmm",
+	"lmkjkkkkkkkkkkkk",
+	"lmkjjjjjjjjjjjjj",
+	"lmkj............",
+	"lmkjmmmmmWmmmmmm",
+	"lmkjkkkkkkkkkkkk",
+	"lmkjjjjjjjjjjjjj",
+	"lmkj............",
 ];
 
 export const TILES: Readonly<Record<TileId, Grid>> = {
@@ -813,6 +989,23 @@ export const TILES: Readonly<Record<TileId, Grid>> = {
 		cols(2, [[10, 12], [8, 13], [7, 13], [6, 13], [7, 13], [7, 13], [6, 13], [6, 13], [7, 13], [8, 13], [9, 13], [11, 12]]),
 		{ under: 2 },
 	),
+	"window-lit": make((x, y) => windowShape(x, y, false, true)),
+	"window-top-lit": make((x, y) => windowShape(x, y, true, true)),
+	"stone-under-l": make((x, y) => underSlope(x, y, "l")),
+	"stone-under-r": make((x, y) => underSlope(x, y, "r")),
+	"stone-hang": make(hangingStone),
+	trunk: make((x, y) => trunk(x, y, false)),
+	"trunk-base": make((x, y) => trunk(x, y, true)),
+	"pine-tip": make((x, y) => pine(TIP_TIER, x, y)),
+	"pine-small": make((x, y) => pine(SMALL_TIER, x, y)),
+	"pine-l": bigPine(0),
+	"pine-c": bigPine(1),
+	"pine-r": bigPine(2),
+	bush: make(bush),
+	tuft: TUFT,
+	path: make(path),
+	sign: SIGN,
+	fence: FENCE,
 };
 
 const INDEX = new Map<TileId, number>(TILE_IDS.map((id, i) => [id, i]));

@@ -66,10 +66,27 @@ describe("framing the hall", () => {
 		expect(toScreen(c, V, 0, START_X, hallTop).y).toBeGreaterThanOrEqual(0);
 		expect(toScreen(c, V, 0, START_X, islandTwo).y).toBeLessThanOrEqual(V.h);
 	});
-	it("drops the base scale to 2 when scale 3 would crop the hall or the island", () => {
-		expect(baseZoom(1500, 1000)).toBe(3);
-		expect(baseZoom(1500, 900)).toBe(2);
-		expect(baseZoom(1920, 700)).toBe(2);
+	it("uses scale 1 from 900 px wide, and 2 below unless the hall would not fit at 2", () => {
+		expect([baseZoom(1920, 1080), baseZoom(1200, 800), baseZoom(960, 600), baseZoom(900, 500)]).toEqual([1, 1, 1, 1]);
+		expect([baseZoom(899, 900), baseZoom(375, 700), baseZoom(375, 608)]).toEqual([2, 2, 2]);
+		expect(baseZoom(800, 400)).toBe(1); // a landscape phone: 200 world px tall at 2 would crop the hall
+	});
+	it.each([
+		[1200, 800],
+		[1920, 1080],
+		[1366, 768],
+	])("puts the ground 70 to 75%% down at scale 1 at %i by %i, with the hall and two tiles of sky above it", (w, h) => {
+		const v = { w, h };
+		const c = newCamera(START_X, v, baseZoom(w, h));
+		const ground = toScreen(c, v, 0, START_X, GROUND).y / h;
+		expect(ground).toBeGreaterThanOrEqual(0.7);
+		expect(ground).toBeLessThanOrEqual(0.75);
+		expect(toScreen(c, v, 0, START_X, hallTop).y).toBeGreaterThanOrEqual(SKY_TILES * TILE);
+	});
+	it("does not clamp up and down: above and below the world there is only sky", () => {
+		const v = { w: 1920, h: 1080 };
+		const c = newCamera(START_X, v, 1);
+		expect(c.y - v.h / 2).toBeLessThan(0); // the top of the view is above the world's top
 	});
 	it("puts the ground at 72% when there is room, and keeps it finite for a view of no size", () => {
 		expect(groundAbove(500)).toBeCloseTo(360);
@@ -112,8 +129,9 @@ describe("coming in on him", () => {
 	it("centres on him when close", () => {
 		expect(settle(zoomTo(newCamera(512, V, 2), 4, 0), 540, V, true).x).toBeCloseTo(540, 1);
 	});
-	it("uses scale 3 only above 1400 px", () => {
-		expect(baseZoom(1400, 2000)).toBe(2);
-		expect(baseZoom(1401, 2000)).toBe(3);
+	it("comes in from 1 to 2 to 3 on a desktop, a real step when he turns", () => {
+		const v = { w: 1920, h: 1080 };
+		const c = zoomTo(newCamera(START_X, v, baseZoom(v.w, v.h)), baseZoom(v.w, v.h) + 2, 0);
+		expect([0, 200, 400].map((t) => zoomAt(c, t))).toEqual([1, 2, 3]);
 	});
 });

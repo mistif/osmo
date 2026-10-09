@@ -32,8 +32,22 @@ export function parseColor(css: string): Rgba | null {
 	return [Math.round(r), Math.round(g), Math.round(b), 255];
 }
 
-// The palette as RGBA, with overrides (the scarf); an override that cannot be read keeps the palette's colour.
-export function colours(overrides: Readonly<Record<string, string>> = {}): Colours {
+// Night on the world (the look pass): at full dark each channel keeps this share, a cold moonlit blue, after a little
+// of the colour is drained toward grey. The lamp letters (t, u, v) are light themselves and stay as they are.
+export const NIGHT_KEEP = [0.36, 0.4, 0.56] as const;
+const NIGHT_GREY = 0.3;
+const LAMP = new Set(["t", "u", "v"]);
+export function nightColour(c: Rgba, dark: number): Rgba {
+	const k = Math.min(1, Math.max(0, dark));
+	if (k === 0) return c;
+	const grey = 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2];
+	const ch = (i: 0 | 1 | 2) => Math.round((c[i] + (grey - c[i]) * NIGHT_GREY * k) * (1 - k * (1 - NIGHT_KEEP[i])));
+	return [ch(0), ch(1), ch(2), c[3]];
+}
+
+// The palette as RGBA, with overrides (the scarf); an override that cannot be read keeps the palette's colour. dark,
+// 0 by day to 1 at night, grades every colour but the lamp light toward night.
+export function colours(overrides: Readonly<Record<string, string>> = {}, dark = 0): Colours {
 	const out: Record<string, Rgba> = {};
 	for (const [k, v] of Object.entries(PALETTE)) {
 		const c = parseColor(v);
@@ -43,6 +57,7 @@ export function colours(overrides: Readonly<Record<string, string>> = {}): Colou
 		const c = parseColor(v);
 		if (c) out[k] = c;
 	}
+	if (dark > 0) for (const k of Object.keys(out)) if (!LAMP.has(k)) out[k] = nightColour(out[k], dark);
 	return out;
 }
 

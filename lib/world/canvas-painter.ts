@@ -2,8 +2,8 @@
 // sheet and scale, from the drawn art, or from a PNG that is present and exactly the right size.
 import { TILE } from "./blueprints/types";
 import { FRAME_H, FRAME_NAMES, FRAME_W } from "./osmo-sprite";
-import { sheetProblem } from "./raster";
-import { CELL, sheetBitmap, type Art, type Painter, type Sheet } from "./render";
+import { parseColor, sheetProblem } from "./raster";
+import { CELL, GLOW_STOPS, sheetBitmap, type Art, type Painter, type Sheet } from "./render";
 import { TILE_IDS } from "./tiles";
 
 export type Overrides = Partial<Record<"tiles" | "sprite", CanvasImageSource>>;
@@ -20,7 +20,7 @@ export function canvasPainter(ctx: CanvasRenderingContext2D, art: Art, overrides
 		c.height = bmp.h;
 		const g = c.getContext("2d");
 		if (g) {
-			const png = sheet === "faces" ? undefined : overrides[sheet];
+			const png = sheet === "tiles" || sheet === "sprite" ? overrides[sheet] : undefined;
 			if (png) {
 				g.imageSmoothingEnabled = false;
 				g.drawImage(png, 0, 0, bmp.w, bmp.h);
@@ -41,10 +41,9 @@ export function canvasPainter(ctx: CanvasRenderingContext2D, art: Art, overrides
 		clear() {
 			ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 		},
-		gradient(top, bottom) {
+		gradient(stops) {
 			const g = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
-			g.addColorStop(0, top);
-			g.addColorStop(1, bottom);
+			for (const [at, color] of stops) g.addColorStop(at, color);
 			ctx.globalAlpha = 1;
 			ctx.fillStyle = g;
 			ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -71,6 +70,18 @@ export function canvasPainter(ctx: CanvasRenderingContext2D, art: Art, overrides
 				ctx.drawImage(src, cell * cw, 0, cw, ch, x, y, cw, ch);
 			}
 			ctx.globalAlpha = 1;
+		},
+		glow(x, y, r, color, alpha) {
+			const c = parseColor(color);
+			if (!c || r <= 0) return;
+			const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+			for (const [at, k] of GLOW_STOPS) g.addColorStop(at, `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${k})`);
+			ctx.save();
+			ctx.globalCompositeOperation = "lighter";
+			ctx.globalAlpha = Math.min(1, Math.max(0, alpha));
+			ctx.fillStyle = g;
+			ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+			ctx.restore();
 		},
 	};
 }

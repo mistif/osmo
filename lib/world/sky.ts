@@ -1,8 +1,8 @@
-// The sky (spec 2): a gradient from the mood's two aura colours, shifted by Gur's clock through dawn, day, dusk and
-// night; the sun (his heart) by the hour; stars at night; two layers of drifting clouds. Pure.
-import { TILE } from "./blueprints/types";
+// The sky (spec 2, three stops since the look pass): a gradient from the mood's two aura colours, zenith to a mid
+// band to a horizon band that warms at dawn and dusk, shifted by Gur's clock through dawn, day, dusk and night; the sun
+// (his heart) by the hour; stars at night; two layers of drifting clouds. Pure.
+import { CLOUD_SHAPES } from "./backdrop";
 import { parseHsl } from "./raster";
-import type { TileId } from "./tiles";
 
 export type Hsl = [number, number, number];
 export type SkyPhase = "dawn" | "day" | "dusk" | "night";
@@ -48,19 +48,40 @@ const mixHue = (from: number, to: number, t: number) => {
 	return (from + diff * t + 360) % 360;
 };
 
-export type Sky = { top: Hsl; bottom: Hsl; stars: number };
+// top: the zenith; mid: the band half way down, between the two hues; bottom: the horizon band, warmed toward dusk orange
+// around sunrise and sunset. Lightness rises from the top to the horizon, all inside the caps above.
+export type Sky = { top: Hsl; mid: Hsl; bottom: Hsl; stars: number };
+export const SKY_STOPS = { mid: 0.45, horizon: 0.8 }; // where the mid and horizon bands sit, as a share of the height
 export function skyAt(colorA: string, colorB: string, hour: number): Sky {
 	const a = parseHsl(colorA) ?? CALM_A;
 	const b = parseHsl(colorB) ?? CALM_B;
 	const d = daylight(hour);
 	const w = warmth(hour);
+	const topL = lerp(SKY_TOP_L.night, SKY_TOP_L.day, d);
+	const bottomL = lerp(SKY_BOTTOM_L.night, SKY_BOTTOM_L.day, d);
 	return {
-		top: [Math.round(a[0]), Math.round(Math.min(a[1], MAX_SAT)), Math.round(lerp(SKY_TOP_L.night, SKY_TOP_L.day, d))],
-		bottom: [Math.round(mixHue(b[0], DUSK_HUE, w * 0.6)), Math.round(Math.min(b[1], MAX_SAT)), Math.round(lerp(SKY_BOTTOM_L.night, SKY_BOTTOM_L.day, d) + w * 4)],
+		top: [Math.round(a[0]), Math.round(Math.min(a[1], MAX_SAT)), Math.round(topL)],
+		mid: [
+			Math.round(mixHue(a[0], b[0], 0.5)),
+			Math.round(Math.min((a[1] + b[1]) / 2, MAX_SAT)),
+			Math.round(lerp(topL, bottomL, 0.55) + w * 2),
+		],
+		bottom: [Math.round(mixHue(b[0], DUSK_HUE, w * 0.7)), Math.round(Math.min(b[1], MAX_SAT)), Math.round(bottomL + w * 4)],
 		stars: clamp01((0.35 - d) / 0.35),
 	};
 }
 export const hslCss = ([h, s, l]: Hsl): string => `hsl(${h} ${s}% ${l}%)`;
+// The sky's colour a share of the way down it, between its stops, as drawn.
+export function skyHslAt(sky: Sky, at: number): Hsl {
+	const stops: [number, Hsl][] = [[0, sky.top], [SKY_STOPS.mid, sky.mid], [SKY_STOPS.horizon, sky.bottom]];
+	const k = clamp01(at);
+	let i = 0;
+	while (i < stops.length - 2 && k > stops[i + 1][0]) i++;
+	const [a0, c0] = stops[i];
+	const [a1, c1] = stops[i + 1];
+	const t = clamp01((k - a0) / (a1 - a0));
+	return [mixHue(c0[0], c1[0], t), lerp(c0[1], c1[1], t), lerp(c0[2], c1[2], t)];
+}
 
 // Fractions of the sky's width and height. Up from 06:00 to 20:00 on an arc, highest at 13:00; otherwise a dim
 // heart low in the middle, behind the island and the castle.
@@ -82,43 +103,41 @@ export function starField(count = 48, seed = 7): Star[] {
 	return Array.from({ length: count }, () => ({ fx: next(), fy: next() * 0.55, big: next() < 0.15 }));
 }
 
-type Part = { tile: TileId; dx: number; dy: number };
-// x, y in world px of the cloud's left cell; layer 0 is far (slow, little parallax), 1 is near.
-export type Cloud = { parts: readonly Part[]; x: number; y: number; layer: 0 | 1 };
+// The clouds: big soft shapes from the cloud sheet (backdrop.ts), in two layers. x, y in world px of the shape's cell's
+// top-left; layer 0 is far (slow, little parallax, drawn fainter), 1 is near. They drift right and wrap round
+// CLOUD_SPAN, wider than any view, so a layer's spacing never changes; the renderer draws each cloud again one span
+// over wherever the view needs it.
+export type Cloud = { shape: number; x: number; y: number; layer: 0 | 1 };
 export const CLOUD_SPEED = [3, 7] as const; // world px per second
 export const PARALLAX = [0.3, 0.6] as const;
-const long = (middles: number, top = 0): Part[] => {
-	const parts: Part[] = [{ tile: "cloud-l", dx: 0, dy: 0 }];
-	for (let i = 1; i <= middles; i++) parts.push({ tile: "cloud-m", dx: i * TILE, dy: 0 });
-	parts.push({ tile: "cloud-r", dx: (middles + 1) * TILE, dy: 0 });
-	if (top >= 1 && top <= middles) parts.push({ tile: "cloud-top", dx: top * TILE, dy: -TILE });
-	return parts;
-};
-const small: Part[] = [{ tile: "cloud-small", dx: 0, dy: 0 }];
-// World y 176 to 296: under the top of the framed view at every laptop size (the top is at most 148, and the tallest
-// cloud-top reaches 16 px above its row), and well above the snow at 416. Six to a layer, about 180 px apart, so a
-// 480 px window (960 wide at scale 2) always holds at least two of each as they drift.
+export const CLOUD_SPAN = 2048;
+// World y from -320 (seen only on a tall view) to 470 (below the island's snow at 416, behind its underside): every
+// view has clouds in its sky, and a few drift below the island so it reads as floating.
 export const CLOUDS: readonly Cloud[] = [
-	{ parts: long(2, 1), x: 40, y: 208, layer: 0 },
-	{ parts: small, x: 220, y: 184, layer: 0 },
-	{ parts: long(1), x: 400, y: 248, layer: 0 },
-	{ parts: long(2, 1), x: 580, y: 200, layer: 0 },
-	{ parts: small, x: 760, y: 232, layer: 0 },
-	{ parts: long(1), x: 940, y: 176, layer: 0 },
-	{ parts: long(3, 2), x: 120, y: 232, layer: 1 },
-	{ parts: long(2), x: 300, y: 192, layer: 1 },
-	{ parts: small, x: 480, y: 272, layer: 1 },
-	{ parts: long(1), x: 660, y: 216, layer: 1 },
-	{ parts: long(3, 2), x: 840, y: 264, layer: 1 },
-	{ parts: small, x: 990, y: 184, layer: 1 },
+	{ shape: 2, x: 40, y: 150, layer: 0 },
+	{ shape: 3, x: 300, y: -250, layer: 0 },
+	{ shape: 5, x: 520, y: 40, layer: 0 },
+	{ shape: 1, x: 760, y: 380, layer: 0 },
+	{ shape: 4, x: 1010, y: -120, layer: 0 },
+	{ shape: 3, x: 1260, y: 230, layer: 0 },
+	{ shape: 0, x: 1500, y: 10, layer: 0 },
+	{ shape: 2, x: 1780, y: 420, layer: 0 },
+	{ shape: 3, x: 880, y: 90, layer: 0 },
+	{ shape: 5, x: 1640, y: 280, layer: 0 },
+	{ shape: 0, x: 60, y: 30, layer: 1 },
+	{ shape: 1, x: 420, y: 250, layer: 1 },
+	{ shape: 4, x: 760, y: -280, layer: 1 },
+	{ shape: 5, x: 980, y: 110, layer: 1 },
+	{ shape: 3, x: 1300, y: 440, layer: 1 },
+	{ shape: 1, x: 1560, y: 190, layer: 1 },
+	{ shape: 2, x: 1840, y: -150, layer: 1 },
+	{ shape: 3, x: 250, y: 330, layer: 1 },
+	{ shape: 3, x: 1140, y: -40, layer: 1 },
+	{ shape: 5, x: 1720, y: 360, layer: 1 },
 ];
-export const cloudWidth = (c: Cloud): number => Math.max(...c.parts.map((p) => p.dx)) + TILE;
-// Every cloud wraps round the same length (the world's width plus the widest cloud), so the gaps between a layer's
-// clouds never close up however long the page stays open.
-const PAD = Math.max(...CLOUDS.map(cloudWidth));
-// Drifting right, wrapping round the world's width plus PAD.
-export function cloudX(c: Cloud, clockMs: number, span: number): number {
-	const loop = span + PAD;
-	const moved = c.x + PAD + (CLOUD_SPEED[c.layer] * clockMs) / 1000;
-	return (((moved % loop) + loop) % loop) - PAD;
+export const cloudWidth = (c: Cloud): number => CLOUD_SHAPES[c.shape].x1;
+// Drifting right, wrapping round the span.
+export function cloudX(c: Cloud, clockMs: number, span = CLOUD_SPAN): number {
+	const moved = c.x + (CLOUD_SPEED[c.layer] * clockMs) / 1000;
+	return ((moved % span) + span) % span;
 }

@@ -101,7 +101,8 @@ export default function WorldPage() {
 				</div>
 				<p className={dev.note}>
 					Live: he builds a local hall from nothing (nothing is saved). Message and Speaking turn him to you; he turns back six
-					seconds after Speaking is off. Set prefers-reduced-motion in devtools for still frames.
+					seconds after Speaking is off. Set prefers-reduced-motion in devtools for still frames. The world is drawn at pixel
+					scale 1 from 900 px wide and 2 below; the Phone box (375 by 700) shows scale 2, coming in to 3 and 4 when he turns.
 				</p>
 				{phone && <div className={dev.phone}>{world}</div>}
 			</div>

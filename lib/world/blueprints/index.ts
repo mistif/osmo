@@ -17,8 +17,8 @@ export function blocksOf(bp: Blueprint): Block[] {
 	return cells.sort((a, b) => rank(a.layer) - rank(b.layer) || b.y - a.y || a.x - b.x);
 }
 
-export const ISLAND_LEFT = 8; // tile columns of the island's two ends
-export const ISLAND_RIGHT = 55;
+export const ISLAND_LEFT = 3; // tile columns of the island's two ends
+export const ISLAND_RIGHT = 60;
 // Where he stands to lay a block (world px): under it, but never off the island's ends.
 export const standX = (b: Block): number => (Math.min(ISLAND_RIGHT - 1, Math.max(ISLAND_LEFT + 1, b.x)) + 0.5) * TILE;
 export const REST_X = (47 + 0.5) * TILE; // the bench by the lantern (island.ts)
