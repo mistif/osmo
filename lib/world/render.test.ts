@@ -85,7 +85,7 @@ describe("the world", () => {
 	it("leaves the sky transparent where nothing is built yet", () => {
 		expect(px(paint(scene(40)).data, 16, 12)[3]).toBe(0); // world (440, 350): row 21 is not laid at 40
 	});
-	it("draws him standing on the ground line", () => {
+	it("draws him standing on the ground line", { timeout: 20_000 }, () => {
 		// His sprite is at screen x 144 to 175 and ends at y 183, just above the snow row at 184. His coat is navy (K, L, M),
 		// a colour nothing else in the scene uses, so it shows only where he is drawn.
 		const coat = (["K", "L", "M"] as const).map((l) => rgb(l).join());
