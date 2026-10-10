@@ -10,8 +10,10 @@ import { listDevices } from "@/lib/shell/passkeys";
 import type { SETTINGS_PAGES } from "@/lib/shell/route";
 import { devicesLine, mayDoLine, placeLine, voiceLine } from "@/lib/shell/settings-lines";
 import { storyLines } from "@/lib/shell/story";
+import { WORLD } from "@/lib/shell/flag";
 import { OSMO_BUILD, OSMO_BUILT_AT, OSMO_VERSION, versionLine } from "@/lib/shell/version";
 import { CONNECTORS, ConnectorsSettings } from "./connectors-settings";
+import { VillageClear } from "./village-clear";
 import { AiLine, DevicesBlock, LockBlock } from "./devices-lock";
 import { VoiceSettings } from "./voice-settings";
 import type { VoiceControls } from "./use-voice";
@@ -140,6 +142,8 @@ export function SettingsPage({ page, voice, aiUsage, agent }: { page: SettingsPa
 					</ol>
 				)}
 			</section>
+
+			{WORLD && <VillageClear />}
 		</>
 	);
 }
