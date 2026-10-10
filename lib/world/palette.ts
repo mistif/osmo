@@ -75,6 +75,14 @@ export const PALETTE = {
 	Y: "#b3c3d6",
 	// his scarf: at runtime it takes the mood's first aura colour (raster overrides); this is its dev colour
 	Z: "#3aa597",
+	// Added in the polish pass. No letter was free, so these keys are digits: the brick's grout (darker than the stone
+	// outline a), his eye glint, his trousers' base and shadow (apart from his outline H and his coat), and the lit
+	// edge of his coat.
+	"0": "#15171d",
+	"1": "#fffaf0",
+	"2": "#56546a",
+	"3": "#3a3949",
+	"4": "#7d9ad8",
 } as const;
 
 export type Letter = keyof typeof PALETTE;

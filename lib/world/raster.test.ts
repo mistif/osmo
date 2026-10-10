@@ -4,9 +4,9 @@ import { encodePng } from "./png";
 import { colours, gridProblems, parseColor, parseHsl, rasterize, sheetProblem } from "./raster";
 
 describe("the palette", () => {
-	it("has single-letter ASCII keys, six-digit hex values, and no dot", () => {
+	it("has one ASCII letter or digit per key, six-digit hex values, and no dot", () => {
 		for (const [k, v] of Object.entries(PALETTE)) {
-			expect(k).toMatch(/^[a-zA-Z]$/);
+			expect(k).toMatch(/^[a-zA-Z0-9]$/);
 			expect(v).toMatch(/^#[0-9a-f]{6}$/);
 		}
 		expect(Object.keys(PALETTE)).not.toContain(".");
@@ -43,6 +43,12 @@ describe("rasterize", () => {
 		expect(px(2, 0)).toEqual([0, 0, 0, 0]);
 		expect(px(3, 3)).toEqual([...cols.p]);
 		expect(px(4, 0)).toEqual([...cols.p]);
+	});
+	it("reads the digit letters of the polish pass like any other", () => {
+		const bmp = rasterize([["01", "34"]], 2, 2, 1, cols);
+		expect(Array.from(bmp.data.slice(0, 4))).toEqual([...(parseColor(PALETTE["0"]) ?? [])]);
+		expect(Array.from(bmp.data.slice(12, 16))).toEqual([...(parseColor(PALETTE["4"]) ?? [])]);
+		expect(gridProblems(["0123", "4..."], 4, 2)).toEqual([]);
 	});
 	it("takes an override for the scarf, and ignores one it cannot read", () => {
 		expect(colours({ Z: "hsl(0 100% 50%)" }).Z).toEqual([255, 0, 0, 255]);

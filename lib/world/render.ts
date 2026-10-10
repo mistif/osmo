@@ -30,8 +30,11 @@ export const sheetBitmap = (art: Art, sheet: Sheet, scale: number): Bitmap =>
 	rasterize(art.grids[sheet], CELL[sheet].w, CELL[sheet].h, scale, art.colours);
 
 // What the renderer draws with. Coordinates are whole canvas pixels; stamp draws cell `cell` of a sheet at `scale`
-// with its top-left at (x, y), mirrored left to right when flip is set. gradient fills the canvas top to bottom through
-// its stops (a share of the height, a colour); glow adds a warm light that falls off from (x, y) to radius r.
+// with its top-left at (x, y), mirrored left to right when flip is set; given w and h it fills that box instead, pixel
+// for pixel from the cell at `scale` (nearest neighbour: how the world is drawn while the camera eases between two
+// scales). gradient fills the canvas top to bottom through its stops (a share of the height, a colour); glow adds a
+// warm light that falls off from (x, y) to radius r; pool is the same light squashed into an ellipse rx wide and ry
+// tall (the light a lamp spills on the ground).
 export type Stop = readonly [at: number, color: string];
 export interface Painter {
 	readonly w: number;
@@ -39,8 +42,9 @@ export interface Painter {
 	clear(): void;
 	gradient(stops: readonly Stop[]): void;
 	rect(x: number, y: number, w: number, h: number, color: string, alpha: number): void;
-	stamp(sheet: Sheet, cell: number, x: number, y: number, scale: number, alpha: number, flip: boolean): void;
+	stamp(sheet: Sheet, cell: number, x: number, y: number, scale: number, alpha: number, flip: boolean, w?: number, h?: number): void;
 	glow(x: number, y: number, r: number, color: string, alpha: number): void;
+	pool(x: number, y: number, rx: number, ry: number, color: string, alpha: number): void;
 }
 // The glow's falloff, shared by both painters: its strength at a share of the radius out from the centre.
 export const GLOW_STOPS: readonly (readonly [at: number, strength: number])[] = [[0, 1], [0.25, 0.55], [0.6, 0.18], [1, 0]];
@@ -96,14 +100,19 @@ export function hazeTones(sky: Sky, at: number): [string, string, string] {
 
 export function drawWorld(p: Painter, s: WorldScene): void {
 	p.clear();
+	// The zoom: a whole scale at rest, between two while the camera eases (polish pass). Every cell is then drawn from
+	// the next whole scale's atlas into the box between the screen points of its two corners, so neighbours meet with
+	// no gap and no overlap at any zoom; at a whole scale the box is the cell's own size and nothing changes.
 	const z = zoomAt(s.camera, s.now);
-	const size = TILE * z;
+	const zs = Math.max(1, Math.ceil(z - 1e-9));
 	const dark = s.dark ?? 0;
 	const seen = (x: number, y: number, w: number, h: number) => x + w > 0 && y + h > 0 && x < p.w && y < p.h;
-	const tile = (id: TileId, wx: number, wy: number, alpha: number, parallax = 1) => {
-		const at = toScreen(s.camera, s.view, s.now, wx, wy, parallax);
-		if (seen(at.x, at.y, size, size)) p.stamp("tiles", tileIndex(id), at.x, at.y, z, alpha, false);
+	const put = (sheet: Sheet, cell: number, wx: number, wy: number, cw: number, ch: number, alpha: number, flip = false, parallax = 1) => {
+		const a = toScreen(s.camera, s.view, s.now, wx, wy, parallax);
+		const b = toScreen(s.camera, s.view, s.now, wx + cw, wy + ch, parallax);
+		if (seen(a.x, a.y, b.x - a.x, b.y - a.y)) p.stamp(sheet, cell, a.x, a.y, zs, alpha, flip, b.x - a.x, b.y - a.y);
 	};
+	const tile = (id: TileId, wx: number, wy: number, alpha: number) => put("tiles", tileIndex(id), wx, wy, TILE, TILE, alpha);
 	const ground = toScreen(s.camera, s.view, s.now, 0, GROUND_Y * TILE);
 	// 1. the far islands, in haze, barely moving with the camera
 	if (s.sky) {
@@ -111,16 +120,18 @@ export function drawWorld(p: Painter, s: WorldScene): void {
 		const fz = Math.max(1, z - 1);
 		const shift = (START_X - s.camera.x) * FAR_PARALLAX * fz;
 		for (const f of FAR_ISLANDS) {
-			const ox = Math.round(f.fx * s.view.w + shift - (f.w * fz) / 2);
+			const ox = f.fx * s.view.w + shift - (f.w * fz) / 2;
 			const oy = ground.y - f.lift * fz;
 			const tones = hazeTones(s.sky, s.view.h > 0 ? (oy + 20 * fz) / s.view.h : 0);
-			for (const [y, x0, x1, t] of f.runs) p.rect(ox + x0 * fz, oy + y * fz, (x1 - x0) * fz, fz, tones[t], 1);
+			for (const [y, x0, x1, t] of f.runs) {
+				const left = Math.round(ox + x0 * fz);
+				const top = Math.round(oy + y * fz);
+				p.rect(left, top, Math.round(ox + x1 * fz) - left, Math.round(oy + (y + 1) * fz) - top, tones[t], 1);
+			}
 		}
 	}
 	// 2. clouds: the far layer, fainter, then the near one, each with its parallax, each cloud drawn again a span over
 	// wherever the view reaches
-	const cw = CLOUD_CELL.w * z;
-	const ch = CLOUD_CELL.h * z;
 	for (const layer of [0, 1] as const) {
 		const left = s.camera.x * PARALLAX[layer] - s.view.w / 2 / z;
 		const right = left + s.view.w / z;
@@ -129,8 +140,8 @@ export function drawWorld(p: Painter, s: WorldScene): void {
 			const shape = CLOUD_SHAPES[c.shape];
 			const x = cloudX(c, s.clock);
 			for (let k = Math.floor((left - x - shape.x1) / CLOUD_SPAN) + 1; x + k * CLOUD_SPAN + shape.x0 < right; k++) {
-				const at = toScreen(s.camera, s.view, s.now, x + k * CLOUD_SPAN, c.y, PARALLAX[layer]);
-				if (seen(at.x, at.y, cw, ch)) p.stamp("clouds", c.shape, at.x, at.y, z, CLOUD_ALPHA[layer] * (1 - CLOUD_NIGHT_FADE * dark), false);
+				const alpha = CLOUD_ALPHA[layer] * (1 - CLOUD_NIGHT_FADE * dark);
+				put("clouds", c.shape, x + k * CLOUD_SPAN, c.y, CLOUD_CELL.w, CLOUD_CELL.h, alpha, false, PARALLAX[layer]);
 			}
 		}
 	}
@@ -142,11 +153,10 @@ export function drawWorld(p: Painter, s: WorldScene): void {
 	for (const b of s.outline ?? []) tile(b.tile, b.x * TILE, b.y * TILE, OUTLINE_ALPHA);
 	if (s.ghost) tile(s.ghost.tile, s.ghost.x * TILE, s.ghost.y * TILE, GHOST_ALPHA);
 	// 6. him, his feet on the island's top edge; 7. his face, never mirrored
-	const at = toScreen(s.camera, s.view, s.now, s.him.x - FRAME_W / 2, GROUND_Y * TILE - FRAME_H);
-	if (seen(at.x, at.y, FRAME_W * z, FRAME_H * z)) {
-		p.stamp("sprite", frameIndex(s.him.look.frame), at.x, at.y, z, 1, s.him.look.flip);
-		if (s.him.look.face) p.stamp("faces", faceCell(s.him.look.face, s.him.look.gaze), at.x + FACE_AT.x * z, at.y + FACE_AT.y * z, z, 1, false);
-	}
+	const hx = s.him.x - FRAME_W / 2; // his sprite's top-left, world px
+	const hy = GROUND_Y * TILE - FRAME_H;
+	put("sprite", frameIndex(s.him.look.frame), hx, hy, FRAME_W, FRAME_H, 1, s.him.look.flip);
+	if (s.him.look.face) put("faces", faceCell(s.him.look.face, s.him.look.gaze), hx + FACE_AT.x, hy + FACE_AT.y, FACE_W, FACE_H, 1);
 	// 8. after dark, the warm light of each lamp and lit window falls on what is round it
 	if (dark <= 0) return;
 	for (const b of [...s.ground, ...s.laid]) {

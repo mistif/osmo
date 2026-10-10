@@ -49,7 +49,7 @@ export function pixelPainter(w: number, h: number, art: Art): PixelPainter {
 				for (let xx = Math.max(0, x); xx < Math.min(w, x + rw); xx++) blend((yy * w + xx) * 4, c[0], c[1], c[2], alpha);
 			}
 		},
-		stamp(sheet, cell, x, y, scale, alpha, flip) {
+		stamp(sheet, cell, x, y, scale, alpha, flip, dw, dh) {
 			const key = `${sheet}@${scale}`;
 			let bmp = sheets.get(key);
 			if (!bmp) {
@@ -58,13 +58,19 @@ export function pixelPainter(w: number, h: number, art: Art): PixelPainter {
 			}
 			const cw = CELL[sheet].w * scale;
 			const ch = CELL[sheet].h * scale;
-			for (let dy = 0; dy < ch; dy++) {
+			// The box drawn: the cell's own size, or the one asked for, sampled nearest neighbour as a canvas does with
+			// smoothing off. At the cell's own size every pixel maps to itself.
+			const bw = Math.max(0, Math.round(dw ?? cw));
+			const bh = Math.max(0, Math.round(dh ?? ch));
+			for (let dy = 0; dy < bh; dy++) {
 				const ty = y + dy;
 				if (ty < 0 || ty >= h) continue;
-				for (let dx = 0; dx < cw; dx++) {
+				const sy = Math.floor((dy * ch) / bh);
+				for (let dx = 0; dx < bw; dx++) {
 					const tx = x + dx;
 					if (tx < 0 || tx >= w) continue;
-					const s = (dy * bmp.w + cell * cw + (flip ? cw - 1 - dx : dx)) * 4;
+					const sx = Math.floor(((flip ? bw - 1 - dx : dx) * cw) / bw);
+					const s = (sy * bmp.w + cell * cw + sx) * 4;
 					blend((ty * w + tx) * 4, bmp.data[s], bmp.data[s + 1], bmp.data[s + 2], (bmp.data[s + 3] / 255) * alpha);
 				}
 			}
@@ -76,6 +82,22 @@ export function pixelPainter(w: number, h: number, art: Art): PixelPainter {
 			for (let y = Math.max(0, Math.floor(cy - r)); y < Math.min(h, Math.ceil(cy + r)); y++) {
 				for (let x = Math.max(0, Math.floor(cx - r)); x < Math.min(w, Math.ceil(cx + r)); x++) {
 					const a = alpha * glowAt(Math.hypot(x + 0.5 - cx, y + 0.5 - cy) / r);
+					if (a <= 0) continue;
+					const o = (y * w + x) * 4;
+					const da = data[o + 3] / 255;
+					const oa = Math.min(1, da + a);
+					for (let i = 0; i < 3; i++) data[o + i] = Math.min(255, Math.round((data[o + i] * da + c[i] * a) / oa));
+					data[o + 3] = Math.round(oa * 255);
+				}
+			}
+		},
+		// The glow squashed into an ellipse: its strength by the distance measured in each radius.
+		pool(cx, cy, rx, ry, color, alpha) {
+			const c = parseColor(color);
+			if (!c || rx <= 0 || ry <= 0) return;
+			for (let y = Math.max(0, Math.floor(cy - ry)); y < Math.min(h, Math.ceil(cy + ry)); y++) {
+				for (let x = Math.max(0, Math.floor(cx - rx)); x < Math.min(w, Math.ceil(cx + rx)); x++) {
+					const a = alpha * glowAt(Math.hypot((x + 0.5 - cx) / rx, (y + 0.5 - cy) / ry));
 					if (a <= 0) continue;
 					const o = (y * w + x) * 4;
 					const da = data[o + 3] / 255;

@@ -5,7 +5,7 @@ import { CASTLE_BLOCKS } from "./blueprints/castle";
 import { HALL } from "./blueprints/hall";
 import { ISLAND } from "./blueprints/island";
 import { GROUND_Y, TILE } from "./blueprints/types";
-import { newCamera, toScreen } from "./camera";
+import { newCamera, toScreen, zoomAt } from "./camera";
 import { PALETTE } from "./palette";
 import { hashPixels, pixelPainter } from "./pixel-painter";
 import { snapshot } from "./png";
@@ -190,6 +190,24 @@ describe("the world", () => {
 		const unlit = pixelPainter(VIEW.w, VIEW.h, artFor("hsl(172 38% 50%)", 1));
 		drawWorld(unlit, { ...s, dark: 0 });
 		expect(bright(night.data)).toBeGreaterThan(bright(unlit.data) + 20);
+	});
+	it("draws between two scales with no gap between neighbours while the camera eases (polish pass)", () => {
+		const s = scene(hall.length);
+		const camera = { ...s.camera, from: 2.66, to: 2.66 }; // as the camera draws a frame part way from 2 to 3
+		const now = 0;
+		expect(zoomAt(camera, now) % 1).not.toBe(0);
+		const data = paint({ ...s, camera, now }).data;
+		// The hall's wall from x 29 to 35 and y 20 to 23: brick, pillars, windows, the door and banners, every one solid.
+		const a = toScreen(camera, VIEW, now, 29 * TILE, 20 * TILE);
+		const b = toScreen(camera, VIEW, now, 35 * TILE, 23 * TILE);
+		let checked = 0;
+		for (let y = Math.max(0, a.y); y < Math.min(VIEW.h, b.y); y++) {
+			for (let x = Math.max(0, a.x); x < Math.min(VIEW.w, b.x); x++) {
+				expect(px(data, x, y)[3], `${x},${y}`).toBe(255);
+				checked++;
+			}
+		}
+		expect(checked).toBeGreaterThan(2000);
 	});
 	it("copes with a canvas of no size", () => {
 		expect(() => drawWorld(pixelPainter(0, 0, art), { ...scene(40), view: { w: 0, h: 0 } })).not.toThrow();

@@ -54,20 +54,23 @@ export function canvasPainter(ctx: CanvasRenderingContext2D, art: Art, overrides
 			ctx.fillRect(x, y, w, h);
 			ctx.globalAlpha = 1;
 		},
-		stamp(sheet, cell, x, y, scale, alpha, flip) {
+		stamp(sheet, cell, x, y, scale, alpha, flip, dw, dh) {
 			const src = atlas(sheet, scale);
 			const cw = CELL[sheet].w * scale;
 			const ch = CELL[sheet].h * scale;
+			const bw = Math.max(0, Math.round(dw ?? cw));
+			const bh = Math.max(0, Math.round(dh ?? ch));
+			if (bw === 0 || bh === 0) return;
 			ctx.imageSmoothingEnabled = false;
 			ctx.globalAlpha = alpha;
 			if (flip) {
 				ctx.save();
-				ctx.translate(x + cw, y);
+				ctx.translate(x + bw, y);
 				ctx.scale(-1, 1);
-				ctx.drawImage(src, cell * cw, 0, cw, ch, 0, 0, cw, ch);
+				ctx.drawImage(src, cell * cw, 0, cw, ch, 0, 0, bw, bh);
 				ctx.restore();
 			} else {
-				ctx.drawImage(src, cell * cw, 0, cw, ch, x, y, cw, ch);
+				ctx.drawImage(src, cell * cw, 0, cw, ch, x, y, bw, bh);
 			}
 			ctx.globalAlpha = 1;
 		},
@@ -81,6 +84,20 @@ export function canvasPainter(ctx: CanvasRenderingContext2D, art: Art, overrides
 			ctx.globalAlpha = Math.min(1, Math.max(0, alpha));
 			ctx.fillStyle = g;
 			ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+			ctx.restore();
+		},
+		pool(x, y, rx, ry, color, alpha) {
+			const c = parseColor(color);
+			if (!c || rx <= 0 || ry <= 0) return;
+			ctx.save();
+			ctx.translate(x, y);
+			ctx.scale(1, ry / rx);
+			const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+			for (const [at, k] of GLOW_STOPS) g.addColorStop(at, `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${k})`);
+			ctx.globalCompositeOperation = "lighter";
+			ctx.globalAlpha = Math.min(1, Math.max(0, alpha));
+			ctx.fillStyle = g;
+			ctx.fillRect(-rx, -rx, 2 * rx, 2 * rx);
 			ctx.restore();
 		},
 	};
