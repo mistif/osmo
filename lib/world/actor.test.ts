@@ -148,6 +148,52 @@ describe("night", () => {
 	});
 });
 
+describe("rooms as places (phase 2)", () => {
+	it("walks to the room Gur opened and waits there, laying nothing", () => {
+		const r = run(newActor(200, 0, 12), 0, 6000, { ...W, visit: 400 });
+		expect(r.a.kind).toBe("idle");
+		expect(r.a.x).toBe(400);
+		expect(r.laid).toBe(0);
+		expect(run(r.a, 6000, 9000, { ...W, visit: 400 }).a).toEqual(r.a);
+	});
+	it("leaves a block unfinished to go, and goes back to work when the panel closes", () => {
+		const kneeling = run(newActor(200, 0, 12), 0, 100).a;
+		expect(kneeling.kind).toBe("building");
+		const away = run(kneeling, 100, 2400, { ...W, visit: 300 });
+		expect(away.laid).toBe(0);
+		expect(away.a.x).toBe(300);
+		const back = run(away.a, 2400, 8000);
+		expect(back.a.x).toBe(200);
+		expect(back.laid).toBeGreaterThan(0);
+	});
+	it("goes to the room even at night, and to the bench once the panel closes", () => {
+		const there = run(newActor(700, 0, 23), 0, 3000, { ...W, visit: 650 });
+		expect([there.a.kind, there.a.x]).toEqual(["idle", 650]);
+		const rest = run(there.a, 3000, 6000);
+		expect([rest.a.kind, rest.a.x]).toEqual(["resting", 760]);
+		expect(run(rest.a, 6000, 6100, { ...W, visit: 650 }).a.kind).not.toBe("resting");
+	});
+	it("follows Gur from room to room without stopping", () => {
+		const walking = run(newActor(200, 0, 12), 0, 500, { ...W, visit: 600 }).a;
+		expect(walking.kind).toBe("walking");
+		const turned = step(walking, tick(550), { ...W, visit: 100 }).actor;
+		expect(turned.kind).toBe("walking");
+		expect(turned.dir).toBe(-1);
+	});
+	it("waits in the yard when nothing is left to build, and builds when there is", () => {
+		const yard = run(newActor(100, 0, 12), 0, 12_000, { ...W, next: null, yard: 520 });
+		expect([yard.a.kind, yard.a.x]).toEqual(["idle", 520]);
+		expect(run(yard.a, 12_000, 30_000, { ...W, yard: 520 }).laid).toBeGreaterThan(0);
+	});
+	it("after a talk at a room, stands at the room again", () => {
+		const at = run(newActor(300, 0, 12), 0, 100, { ...W, visit: 300 }).a;
+		const facing = run(send(at, { type: "message", now: 200 }, { ...W, visit: 300 }), 200, 600, { ...W, visit: 300 }).a;
+		expect(facing.kind).toBe("facing");
+		const after = run(facing, 600, 600 + FOLLOW_UP_MS + TURN_MS + 500, { ...W, visit: 300 }).a;
+		expect([after.kind, after.x]).toEqual(["idle", 300]);
+	});
+});
+
 describe("how he looks", () => {
 	it("walks in six frames, facing the way he goes", () => {
 		const left = run(newActor(300, 0, 12), 0, 50).a; // the next block is to his left

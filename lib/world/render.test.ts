@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { look, newActor } from "./actor";
 import { blocksOf } from "./blueprints";
+import { CASTLE_BLOCKS } from "./blueprints/castle";
 import { HALL } from "./blueprints/hall";
 import { ISLAND } from "./blueprints/island";
 import { GROUND_Y, TILE } from "./blueprints/types";
@@ -9,7 +10,7 @@ import { PALETTE } from "./palette";
 import { hashPixels, pixelPainter } from "./pixel-painter";
 import { snapshot } from "./png";
 import { colours, parseColor } from "./raster";
-import { artFor, drawSky, drawWorld, sheetBitmap, type WorldScene } from "./render";
+import { artFor, drawSky, drawWorld, GHOST_ALPHA, OUTLINE_ALPHA, sheetBitmap, type WorldScene } from "./render";
 import { CLOUD_CELL, CLOUD_GRIDS } from "./backdrop";
 import { hslCss, skyAt, starField } from "./sky";
 import { TILE_IDS, TILES } from "./tiles";
@@ -144,6 +145,51 @@ describe("the world", () => {
 		const b = draw({ ...s, sky: undefined });
 		for (let i = 0; i < a.length; i += 4) if (a[i + 3] !== b[i + 3]) differ++;
 		expect(differ).toBeGreaterThan(500);
+	});
+	it("draws the outline of what is still to come fainter than the next block, only in its own cells (phase 2)", () => {
+		const s = scene(40);
+		const rest = hall.slice(41);
+		const base = paint(s).data;
+		const outlined = paint({ ...s, outline: rest }).data;
+		const cells = rest.map((b) => toScreen(s.camera, VIEW, 0, b.x * TILE, b.y * TILE));
+		let changed = 0;
+		for (let y = 0; y < VIEW.h; y++) {
+			for (let x = 0; x < VIEW.w; x++) {
+				if (px(outlined, x, y).join() === px(base, x, y).join()) continue;
+				changed++;
+				expect(cells.some((c) => x >= c.x && x < c.x + 2 * TILE && y >= c.y && y < c.y + 2 * TILE), `${x},${y}`).toBe(true);
+			}
+		}
+		expect(changed).toBeGreaterThan(0);
+		// One cell alone: as the outline it adds less than as the next block.
+		const cell = hall[50]; // world (30, 22), in view
+		const at = toScreen(s.camera, VIEW, 0, cell.x * TILE, cell.y * TILE);
+		const alphaIn = (d: Uint8ClampedArray) => {
+			let sum = 0;
+			for (let y = at.y; y < at.y + 2 * TILE; y++) for (let x = at.x; x < at.x + 2 * TILE; x++) sum += px(d, x, y)[3];
+			return sum;
+		};
+		const none = alphaIn(paint({ ...s, ghost: null }).data);
+		const asOutline = alphaIn(paint({ ...s, ghost: null, outline: [cell] }).data) - none;
+		const asGhost = alphaIn(paint({ ...s, ghost: cell }).data) - none;
+		expect(asOutline).toBeGreaterThan(0);
+		expect(asOutline).toBeLessThan(asGhost);
+		expect(OUTLINE_ALPHA).toBeLessThan(GHOST_ALPHA);
+	});
+	it("lays the forge's warm glow on the workshop wall after dark (phase 2)", () => {
+		const shop = CASTLE_BLOCKS.workshop.filter((b) => b.tile !== "lantern");
+		const forge = shop.find((b) => b.tile === "forge");
+		expect(forge).toBeDefined();
+		if (!forge) return;
+		const s = { ...scene(0), laid: shop, ghost: null, camera: newCamera(forge.x * TILE, VIEW, 2) };
+		const c = toScreen(s.camera, VIEW, 0, forge.x * TILE + 8, forge.y * TILE + 11);
+		const near = { x: c.x - 30, y: c.y - 4 };
+		const bright = (d: Uint8ClampedArray) => px(d, near.x, near.y).slice(0, 3).reduce((a, b) => a + b, 0);
+		const night = pixelPainter(VIEW.w, VIEW.h, artFor("hsl(172 38% 50%)", 1));
+		drawWorld(night, { ...s, dark: 1 });
+		const unlit = pixelPainter(VIEW.w, VIEW.h, artFor("hsl(172 38% 50%)", 1));
+		drawWorld(unlit, { ...s, dark: 0 });
+		expect(bright(night.data)).toBeGreaterThan(bright(unlit.data) + 20);
 	});
 	it("copes with a canvas of no size", () => {
 		expect(() => drawWorld(pixelPainter(0, 0, art), { ...scene(40), view: { w: 0, h: 0 } })).not.toThrow();

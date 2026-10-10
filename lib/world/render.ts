@@ -54,11 +54,13 @@ export type WorldScene = {
 	ground: readonly Block[]; // the island, always drawn
 	laid: readonly Block[]; // the castle so far, in laying order
 	ghost: Block | null; // the next block, drawn faint
+	outline?: readonly Block[]; // phase 2: the rest of every open room, drawn fainter still (spec 5)
 	him: { x: number; look: Look };
 	sky?: Sky; // when given, the far islands are drawn, tinted from it
 	dark?: number; // 0 by day to 1 at night: lit windows and the lamps' glow (the art itself is graded by artFor)
 };
 export const GHOST_ALPHA = 0.3;
+export const OUTLINE_ALPHA = 0.12;
 export const CLOUD_ALPHA = [0.72, 1] as const; // far, near
 export const CLOUD_NIGHT_FADE = 0.6; // at night the clouds are this much fainter, so the stars come through
 export const LIT_FROM = 0.5; // windows are lit from this dark on
@@ -67,6 +69,7 @@ const LIT: Partial<Record<TileId, TileId>> = { window: "window-lit", "window-top
 const LIGHTS: Partial<Record<TileId, { x: number; y: number; r: number; strength: number }>> = {
 	lantern: { x: 8.5, y: 9.5, r: 40, strength: 0.42 },
 	"window-lit": { x: 8, y: 2, r: 30, strength: 0.3 },
+	forge: { x: 8, y: 11, r: 44, strength: 0.5 },
 };
 
 export function drawSky(p: Painter, s: SkyScene): void {
@@ -131,10 +134,12 @@ export function drawWorld(p: Painter, s: WorldScene): void {
 			}
 		}
 	}
-	// 3. the island, 4. the castle so far (its windows lit after dark), 5. the next block, faint
+	// 3. the island, 4. the castle so far (its windows lit after dark), 5. the outline of what is still to come in each
+	// open room, then the next block, both faint
 	const lit = (id: TileId) => (dark >= LIT_FROM ? (LIT[id] ?? id) : id);
 	for (const b of s.ground) tile(b.tile, b.x * TILE, b.y * TILE, 1);
 	for (const b of s.laid) tile(lit(b.tile), b.x * TILE, b.y * TILE, 1);
+	for (const b of s.outline ?? []) tile(b.tile, b.x * TILE, b.y * TILE, OUTLINE_ALPHA);
 	if (s.ghost) tile(s.ghost.tile, s.ghost.x * TILE, s.ghost.y * TILE, GHOST_ALPHA);
 	// 6. him, his feet on the island's top edge; 7. his face, never mirrored
 	const at = toScreen(s.camera, s.view, s.now, s.him.x - FRAME_W / 2, GROUND_Y * TILE - FRAME_H);
