@@ -15,6 +15,9 @@ export const TILE_IDS = [
 	"pine-small", "pine-l", "pine-c", "pine-r", "bush", "tuft", "path", "sign", "fence",
 	// Appended for the rooms (village phase 2); the 55 above keep their cells.
 	"tower-cap", "shelf-window", "forge", "dome-l", "dome", "dome-r",
+	// Appended in the polish pass; the 61 above keep their cells. Two variants each of brick, the island's stone and
+	// snow (the renderer chooses per cell, texture.ts), and the bookcase window and the dome lit for the night.
+	"brick-2", "brick-3", "stone-2", "stone-3", "snow-2", "snow-3", "shelf-window-lit", "dome-l-lit", "dome-lit", "dome-r-lit",
 ] as const;
 export type TileId = (typeof TILE_IDS)[number];
 
@@ -158,8 +161,14 @@ const stoneDark = rock({
 const SNOW_DEPTH = [7, 7, 7, 8, 8, 8, 7, 7, 6, 6, 7, 7, 8, 9, 8, 7];
 const SNOW_SOFT = new Set([4, 12]);
 const ICICLES: Readonly<Record<number, number>> = { 5: 2, 13: 3 };
-function snowCap(x: number, y: number, under: Grid = stone): string {
-	const d = SNOW_DEPTH[wrap(x)];
+function snowCap(
+	x: number,
+	y: number,
+	under: Grid = stone,
+	depth: readonly number[] = SNOW_DEPTH,
+	icicles: Readonly<Record<number, number>> = ICICLES,
+): string {
+	const d = depth[wrap(x)];
 	if (y === 0) return SNOW_SOFT.has(wrap(x)) ? "o" : "p";
 	if (y < d - 2) {
 		if (y <= 4 && noise(x, y, 11) > 0.93) return "p";
@@ -169,7 +178,7 @@ function snowCap(x: number, y: number, under: Grid = stone): string {
 	if (y === d - 2) return "n";
 	if (y === d - 1) return "U";
 	// Two icicles hang from the cap.
-	const icicle = ICICLES[wrap(x)];
+	const icicle = icicles[wrap(x)];
 	if (icicle && y - d < icicle) return y - d === icicle - 1 ? "n" : "Y";
 	return darker(under[y][wrap(x)], y === d ? 2 : y === d + 1 ? 1 : 0);
 }
@@ -215,7 +224,7 @@ const BRICK_MAP = [
 	"JKKKKKLLLLLLJJJJ",
 ];
 const brickBase = masonry(BRICK_MAP, {
-	joint: "a", steps: "bcRde", seed: 7, pits: 0.08, flat: true, warm: new Set(["C", "G", "K"]), warmSteps: "bSSTe",
+	joint: "0", steps: "bcRde", seed: 7, pits: 0.08, flat: true, warm: new Set(["C", "G", "K"]), warmSteps: "bSSTe",
 	lift: { A: 0.04, B: -0.06, C: 0, D: 0.08, E: -0.12, G: 0.02, H: 0.04, I: -0.1, J: 0.1, K: -0.04, L: -0.02 },
 });
 // A hairline crack in the long brick of the top course.
@@ -899,8 +908,189 @@ function domeEdge(x: number, y: number, side: "l" | "r"): string {
 	return domeGlass(x, y, side === "l" ? 0 : 1);
 }
 
+// --- Added in the polish pass. A variant keeps its base's outermost ring of pixels exactly, so it joins any neighbour
+// (the base, the other variant, an edge tile) the way the base does; everything inside the ring is its own. ---
+const keepRing = (base: Grid, inner: Grid): Grid =>
+	base.map((row, y) => (y === 0 || y === N - 1 ? row : row[0] + inner[y].slice(1, N - 1) + row[N - 1]));
+const snowBase = make((x, y) => snowCap(x, y));
+// brick-2, weathered: the same bond; one brick warmer, one darker, a chipped corner, a crack in another brick, moss.
+const brick2: Grid = [
+	"edd0eddbdR0eTTT0",
+	"dRc0RRRRRc0TSSS0",
+	"Rcc0cbbbbb0SSSb0",
+	"0000000000000000",
+	"eebddd0eTTTTT0ee",
+	"RRRbRc0TSSSSS0dR",
+	"cccacc0SSSSSb0Rc",
+	"00CDDC0000000000",
+	"TT0dRRRRR0eR0eTT",
+	"SS0Rccccc0Rc0TSS",
+	"SS0cbbbbb0cb0SSS",
+	"0000000000000000",
+	"0eTTS000ddR0eeed",
+	"0TSSS00RRRc0dRRc",
+	"0Sbbb0Rccbb0Rccc",
+	"0000000000000000",
+];
+// brick-3, mended: one brick replaced by a newer, paler stone, a drain hole in another, soot run down from a joint.
+const brick3: Grid = [
+	"edd0eddbdR0eTTT0",
+	"dRc0RRRRbc0TSSS0",
+	"Rcc0cbbbbb0SSSb0",
+	"0000000000000000",
+	"eedddd0eddRdR0ee",
+	"RRRRRc0Rccbbc0dR",
+	"cccccc0cbbaab0Rc",
+	"0000000000000000",
+	"TT0eddddd0dR0eTT",
+	"SS0dRa0Rc0cb0TSS",
+	"SS0RcRdcc0bb0SSS",
+	"0000000000000000",
+	"0eeee0edddR0eeed",
+	"0eeed0dRRRc0dRRc",
+	"0dddR0cccbb0Rccc",
+	"0000000000000000",
+];
+const stone2 = over(
+	rock({
+		ramp: "abcRde",
+		seed: 3,
+		stones: [[2, 2, 5, 3], [9, 2, 3, 2], [8, 6, 5, 3], [12, 10, 6, 4], [4, 10, 4, 3]],
+		cracks: [[0, 7], [1, 7], [2, 8], [9, 14], [10, 14], [11, 15], [14, 1], [15, 2], [4, 6], [5, 6], [6, 7], [7, 7]],
+	}),
+	[
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"         e      ",
+		"          ed    ",
+		"           de   ",
+		"                ",
+		"                ",
+		"                ",
+	],
+);
+const stone3 = over(
+	rock({
+		ramp: "abcRde",
+		seed: 3,
+		stones: [[3, 2, 8, 5], [12, 10, 6, 4]],
+		cracks: [[0, 7], [1, 7], [2, 8], [9, 14], [10, 14], [11, 15], [14, 1], [15, 2]],
+	}),
+	[
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"     ee         ",
+		"    ebdd        ",
+		"    dbeb        ",
+		"     bb         ",
+		"                ",
+		"                ",
+	],
+);
+// snow-2, a drift: deeper in the middle columns, one icicle elsewhere, a second cluster of sparkles.
+const DRIFT = [7, 7, 8, 8, 9, 10, 10, 11, 11, 10, 10, 9, 9, 9, 8, 7];
+const snow2 = over(
+	make((x, y) => snowCap(x, y, stone, DRIFT, { 9: 3 })),
+	[
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"         p      ",
+		"      p         ",
+		"        p       ",
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+		"                ",
+	],
+);
+// snow-3: a tuft of grass through the cap near its left side, and a shallow dent beside it.
+const snow3 = over(make((x, y) => snowCap(x, y, stone, SNOW_DEPTH, { 11: 2 })), [
+	"                ",
+	"      oooo      ",
+	"      nnooo     ",
+	"      oppp      ",
+	"  E    YY       ",
+	" EDE E          ",
+	" DCDCD          ",
+	"                ",
+	"                ",
+	"                ",
+	"                ",
+	"                ",
+	"                ",
+	"                ",
+	"                ",
+	"                ",
+]);
+// The bookcase window lit from inside: the same frame; lamp light behind and between the books, the books dark
+// against it, a candle on the middle shelf.
+const SHELF_WINDOW_LIT = [
+	"                ",
+	"                ",
+	"      tvvtu     ",
+	"     thgtxtqt   ",
+	"     uhguxuqu   ",
+	"     lkkkkkkj   ",
+	"     tttttwtt   ",
+	"     rthgtwtl   ",
+	"     ruhguwul   ",
+	"     lkkkkkkj   ",
+	"     twtkttvu   ",
+	"     xwtkurru   ",
+	"     xwukuhhg   ",
+	"     lkkkkkkj   ",
+	"                ",
+	"                ",
+];
+const shelfWindowLit = (x: number, y: number) => {
+	const ch = SHELF_WINDOW_LIT[y][x];
+	return ch === " " ? shelfWindow(x, y) : ch;
+};
+// The dome lit from inside: the cames unchanged, each pane warm, lit along its top and left, the top-left pane
+// brightest with a spark; the shadow side (shade 1) dimmer.
+function domeGlassLit(x: number, y: number, shade: number): string {
+	const px = wrap(x) & 7;
+	const py = wrap(y) & 7;
+	if (px === 7 || py === 7) return px === 7 && py === 7 ? "b" : "a";
+	const first = wrap(x) < 8 && wrap(y) < 8;
+	const last = wrap(x) >= 8 && wrap(y) >= 8;
+	// The shadow side, and the lower right pane of each four, keep only a short lit top edge.
+	if (shade > 0 || last) return py === 0 && px < (shade > 0 ? 3 : 5) ? "t" : "u";
+	if (first && px >= 1 && px <= 2 && py === 1) return "v";
+	if (px === 0 || py === 0 || (first && px + py <= 3)) return "t";
+	return first && px + py === 4 && checker(x, y) ? "t" : "u";
+}
+function domeEdgeLit(x: number, y: number, side: "l" | "r"): string {
+	const d = side === "l" ? x + y - 15 : y - x;
+	if (d < 3) return domeEdge(x, y, side);
+	return domeGlassLit(x, y, side === "l" ? 0 : 1);
+}
+
 export const TILES: Readonly<Record<TileId, Grid>> = {
-	snow: make((x, y) => snowCap(x, y)),
+	snow: snowBase,
 	"snow-edge-l": make((x, y) => snowEdge(x, y, "l")),
 	"snow-edge-r": make((x, y) => snowEdge(x, y, "r")),
 	stone,
@@ -1129,6 +1319,16 @@ export const TILES: Readonly<Record<TileId, Grid>> = {
 	"dome-l": make((x, y) => domeEdge(x, y, "l")),
 	dome: make((x, y) => domeGlass(x, y, 0)),
 	"dome-r": make((x, y) => domeEdge(x, y, "r")),
+	"brick-2": keepRing(brick, brick2),
+	"brick-3": keepRing(brick, brick3),
+	"stone-2": keepRing(stone, stone2),
+	"stone-3": keepRing(stone, stone3),
+	"snow-2": keepRing(snowBase, snow2),
+	"snow-3": keepRing(snowBase, snow3),
+	"shelf-window-lit": make(shelfWindowLit),
+	"dome-l-lit": make((x, y) => domeEdgeLit(x, y, "l")),
+	"dome-lit": make((x, y) => domeGlassLit(x, y, 0)),
+	"dome-r-lit": make((x, y) => domeEdgeLit(x, y, "r")),
 };
 
 const INDEX = new Map<TileId, number>(TILE_IDS.map((id, i) => [id, i]));
