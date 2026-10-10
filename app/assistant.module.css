@@ -577,3 +577,13 @@
 .stage[data-world] .head {
 	text-shadow: 0 1px 3px rgb(0 0 0 / 0.55);
 }
+/* Phase 2: the rooms behind the conversation take clicks (components/osmo/world.tsx, .hit). The column lets the
+   pointer through where nothing of it is drawn; its parts, and each line of the log, still take it. */
+.stage[data-world] .column,
+.stage[data-world] .log {
+	pointer-events: none;
+}
+.stage[data-world] .column > :not(.log),
+.stage[data-world] .log > li {
+	pointer-events: auto;
+}

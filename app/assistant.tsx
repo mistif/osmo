@@ -738,6 +738,8 @@ export default function AgentChat() {
 						said={said}
 						heard={heard}
 						controlRef={worldRef}
+						route={shell.route}
+						onOpen={(to) => shell.go(to)}
 						signals={{
 							lines: messages.length,
 							inTalk: voice.mode === "awake" || voice.mode === "thinking" || voice.mode === "speaking" || voice.mode === "followup",
