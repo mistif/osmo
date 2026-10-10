@@ -40,6 +40,14 @@ export function createSeenStore(storage: KeyValue | null, now: () => string) {
 				return null;
 			}
 		},
+		// What was stored for this id, without starting a baseline: null when nothing was, or storage fails.
+		peek(id: string): string | null {
+			try {
+				return storage?.getItem(key(id)) ?? null;
+			} catch {
+				return null;
+			}
+		},
 		mark(id: string): void {
 			try {
 				storage?.setItem(key(id), now());

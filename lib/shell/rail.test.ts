@@ -40,12 +40,20 @@ describe("dots", () => {
 		s.mark("library");
 		expect(s.get("library")).toBe(t);
 	});
+	it("peeks without starting a baseline, and sees what was marked", () => {
+		const s = createSeenStore(mem(), () => "2026-10-01T00:00:00Z");
+		expect(s.peek("settings")).toBeNull();
+		expect(s.peek("settings")).toBeNull();
+		s.mark("settings");
+		expect(s.peek("settings")).toBe("2026-10-01T00:00:00Z");
+	});
 	it("survives missing or throwing storage", () => {
 		const boom = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };
 		for (const storage of [null, boom]) {
 			const s = createSeenStore(storage, () => "2026-10-01T00:00:00Z");
 			expect(s.get("library")).toBeNull();
 			expect(() => s.mark("library")).not.toThrow();
+			expect(s.peek("settings")).toBeNull();
 		}
 	});
 });

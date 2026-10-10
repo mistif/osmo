@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { latestLibraryStamp } from "@/lib/shell/data";
 import { createSeenStore, hasNew, type KeyValue } from "@/lib/shell/rail";
+import { SETTINGS_SEEN } from "@/lib/world/unlock";
 import type { PanelId } from "@/lib/shell/route";
 
-// Storage can be missing or throw (private windows, blocked site data): then there is no dot.
-function safeLocalStorage(): KeyValue | null {
+// Storage can be missing or throw (private windows, blocked site data): then there is no dot. The village reads the
+// same store (components/osmo/world.tsx).
+export function safeLocalStorage(): KeyValue | null {
 	try {
 		return window.localStorage;
 	} catch {
@@ -48,6 +50,11 @@ export function useRailDots(enabled: boolean, ready: boolean, panel: PanelId | n
 			live = false;
 		};
 	}, [enabled, ready, panel, store, newer]);
+
+	// Settings opened in the new shell, kept per device: the village's observatory unlocks on it (lib/world/unlock.ts).
+	useEffect(() => {
+		if (enabled && ready && panel === "settings") store().mark(SETTINGS_SEEN);
+	}, [enabled, ready, panel, store]);
 
 	return { library };
 }
