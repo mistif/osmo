@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { START_X } from "./blueprints";
 import { HALL } from "./blueprints/hall";
 import { GROUND_Y, TILE, WORLD_W } from "./blueprints/types";
-import { baseZoom, BELOW_TILES, easing, follow, groundAbove, newCamera, settling, SKY_TILES, toScreen, zoomAt, zoomTo } from "./camera";
+import {
+	baseZoom, BELOW_TILES, easeOutCubic, easing, follow, GLIDE_MS, groundAbove, JUMP_PX, newCamera, settling, SKY_TILES, toScreen, ZOOM_MS, zoomAt, zoomTo,
+} from "./camera";
 
 const V = { w: 960, h: 600 }; // a desktop view: 480 by 300 world px at zoom 2
 const GROUND = GROUND_Y * TILE;
@@ -109,19 +111,40 @@ describe("smoothing", () => {
 	});
 });
 
+describe("the easing (polish pass)", () => {
+	it("is an ease-out cubic: 0 to 1, fast at first, settling softly, clamped outside", () => {
+		expect([0, 0.5, 1].map(easeOutCubic)).toEqual([0, 0.875, 1]);
+		expect(easeOutCubic(-1)).toBe(0);
+		expect(easeOutCubic(2)).toBe(1);
+		expect(easeOutCubic(0.25) - easeOutCubic(0)).toBeGreaterThan(easeOutCubic(1) - easeOutCubic(0.75));
+	});
+});
+
 describe("coming in on him", () => {
-	it("steps in two scale steps over 400 ms and eases back the same way", () => {
+	it("eases in over 400 ms on the curve, with no steps, and eases back the same way", () => {
 		let c = zoomTo(newCamera(512, V, 2), 4, 1000);
-		expect([1000, 1199, 1200, 1399, 1400, 2000].map((t) => zoomAt(c, t))).toEqual([2, 2, 3, 3, 4, 4]);
+		expect(ZOOM_MS).toBe(400);
+		expect(zoomAt(c, 1000)).toBe(2);
+		expect(zoomAt(c, 1200)).toBeCloseTo(2 + 2 * 0.875, 6);
+		expect(zoomAt(c, 1400)).toBe(4);
+		expect(zoomAt(c, 2000)).toBe(4);
+		const seen = Array.from({ length: 13 }, (_, i) => zoomAt(c, 1000 + i * 33));
+		for (let i = 1; i < seen.length; i++) expect(seen[i]).toBeGreaterThan(seen[i - 1]); // every frame moves: no steps
 		expect(easing(c, 1300)).toBe(true);
 		expect(easing(c, 1400)).toBe(false);
 		c = zoomTo(c, 2, 3000);
-		expect([3000, 3200, 3400].map((t) => zoomAt(c, t))).toEqual([4, 3, 2]);
+		expect(zoomAt(c, 3200)).toBeCloseTo(4 - 2 * 0.875, 6);
+		expect(zoomAt(c, 3400)).toBe(2);
 	});
 	it("turns back from wherever it is if he turns away mid-zoom", () => {
 		const c = zoomTo(zoomTo(newCamera(512, V, 2), 4, 0), 2, 250);
-		expect(zoomAt(c, 250)).toBe(3);
-		expect(zoomAt(c, 450)).toBe(2);
+		const mid = 2 + 2 * easeOutCubic(250 / 400);
+		expect(zoomAt(c, 250)).toBeCloseTo(mid, 6);
+		expect(zoomAt(c, 450)).toBeLessThan(mid);
+		expect(zoomAt(c, 650)).toBe(2);
+	});
+	it("copes with a clock that is not a number", () => {
+		expect(zoomAt(zoomTo(newCamera(512, V, 2), 4, 0), Number.NaN)).toBe(4);
 	});
 	it("jumps at once under reduced motion", () => {
 		expect(zoomAt(zoomTo(newCamera(512, V, 2), 4, 0, true), 0)).toBe(4);
@@ -129,9 +152,54 @@ describe("coming in on him", () => {
 	it("centres on him when close", () => {
 		expect(settle(zoomTo(newCamera(512, V, 2), 4, 0), 540, V, true).x).toBeCloseTo(540, 1);
 	});
-	it("comes in from 1 to 2 to 3 on a desktop, a real step when he turns", () => {
+	it("comes in from 1 to 3 on a desktop when he turns, passing 2 on the way", () => {
 		const v = { w: 1920, h: 1080 };
 		const c = zoomTo(newCamera(START_X, v, baseZoom(v.w, v.h)), baseZoom(v.w, v.h) + 2, 0);
-		expect([0, 200, 400].map((t) => zoomAt(c, t))).toEqual([1, 2, 3]);
+		expect(zoomAt(c, 0)).toBe(1);
+		expect(zoomAt(c, 100)).toBeGreaterThan(2);
+		expect(zoomAt(c, 400)).toBe(3);
+	});
+});
+
+describe("gliding (polish pass)", () => {
+	it("glides to him on the curve when he turns to Gur, instead of snapping", () => {
+		let c = settle(newCamera(512, V, 2), 512);
+		c = follow(c, 600, V, 10_000, 33, true); // he turned: the aim jumps 88 px to him
+		expect(c.aimX).toBe(600);
+		expect(c.x).toBeCloseTo(512, 6); // the first frame of the glide has not moved yet
+		const at = (t: number) => follow(c, 600, V, 10_000 + t, 33, true).x;
+		expect(at(GLIDE_MS / 2)).toBeCloseTo(600 - 88 * (1 - 0.875), 6);
+		expect(at(GLIDE_MS)).toBe(600);
+		expect(at(GLIDE_MS * 2)).toBe(600);
+	});
+	it("tracks him exactly at the edge of the dead zone while he walks: no lag, no glide", () => {
+		expect(48 * 0.033).toBeLessThan(JUMP_PX);
+		let c = settle(newCamera(512, V, 2), 584); // at the zone's edge: 512 + 72
+		let x = 584;
+		for (let t = 0; t < 1000; t += 33) {
+			x += 48 * 0.033;
+			c = follow(c, x, V, 20_000 + t, 33, false);
+		}
+		expect(c.x).toBeCloseTo(x - 72, 6);
+		expect(c.ox).toBe(0);
+	});
+	it("starts a new glide from wherever it is when the aim jumps again mid-glide", () => {
+		let c = settle(newCamera(512, V, 2), 512);
+		c = follow(c, 600, V, 0, 33, true);
+		c = follow(c, 600, V, 200, 33, true);
+		const mid = c.x;
+		c = follow(c, 512, V, 233, 33, false); // he turned back to work: the aim is the dead zone's edge, 512 + 72 = 584
+		expect(c.aimX).toBe(584);
+		expect(c.x).toBeCloseTo(mid, 6);
+		expect(follow(c, 512, V, 233 + GLIDE_MS, 33, false).x).toBe(584);
+	});
+	it("jumps at once under reduced motion", () => {
+		const c = follow(settle(newCamera(512, V, 2), 512), 600, V, 0, 33, true, true);
+		expect(c.x).toBe(600);
+	});
+	it("counts the glide as settling until it is within half a pixel", () => {
+		const c = follow(settle(newCamera(512, V, 2), 512), 600, V, 0, 33, true);
+		expect(settling(c, 600, V, 0, true)).toBe(true);
+		expect(settling(follow(c, 600, V, GLIDE_MS, 33, true), 600, V, GLIDE_MS, true)).toBe(false);
 	});
 });

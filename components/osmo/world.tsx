@@ -294,7 +294,7 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 		const close = facingViewer(actor);
 		const base = baseZoom(view.w, view.h);
 		camera = zoomTo(camera, close ? base + ZOOM_IN : base, now, reduced);
-		camera = follow(camera, actor.x, view, now, dt, close);
+		camera = follow(camera, actor.x, view, now, dt, close, reduced);
 		paintSky(hour);
 		const v = shown();
 		const laid = v ? laidCount(v) : 0;
