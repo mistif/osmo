@@ -2,7 +2,8 @@
 
 // A dev-only view of the village: every state he can be in, every hour of the sky, each room locked or at 0, 50 and
 // 100 percent (the faint outlines show at 0 and 50), the castle building live, the room hit areas, walking to each
-// panel's room, each mood, and the phone camera. Nothing is read or saved. Not served in production.
+// panel's room, each mood, the phone camera, and (polish pass) the life in the world: snow, smoke and birds by the
+// clock, all of it now, or none. Nothing is read or saved. Not served in production.
 import { type CSSProperties, useState } from "react";
 import { Bricolage_Grotesque } from "next/font/google";
 import { notFound } from "next/navigation";
@@ -57,6 +58,12 @@ const HOURS: { label: string; hour: number }[] = [
 	{ label: "Dusk", hour: 20 },
 ];
 const SAID = "Good evening, Gur. I have laid the east wall of the hall.";
+type LifeMode = "clock" | "all" | "none";
+const LIFE: { label: string; mode: LifeMode }[] = [
+	{ label: "Life by the clock", mode: "clock" },
+	{ label: "All life now", mode: "all" },
+	{ label: "No life", mode: "none" },
+];
 
 function feeling(mood: Emotion | "calm"): Activations {
 	const a = { ...BASELINE };
@@ -76,6 +83,7 @@ export default function WorldPage() {
 	const [phone, setPhone] = useState(false);
 	const [speaking, setSpeaking] = useState(false);
 	const [lines, setLines] = useState(0);
+	const [life, setLife] = useState<LifeMode>("clock");
 	const activations = feeling(mood);
 	const theme = moodTheme(activations);
 	const stageStyle = {
@@ -99,7 +107,10 @@ export default function WorldPage() {
 			said={speaking ? SAID : null}
 			heard={null}
 			persist={false}
-			fixed={{ hour: hour ?? undefined, rooms: pins ? roomsFrom(pins) : undefined, pose: poseKind === "live" ? undefined : poseKind, hits }}
+			fixed={{
+				hour: hour ?? undefined, rooms: pins ? roomsFrom(pins) : undefined, pose: poseKind === "live" ? undefined : poseKind, hits,
+				life: life === "clock" ? undefined : life,
+			}}
 			route={route}
 			onOpen={(to) => {
 				setRoute(to);
@@ -151,13 +162,17 @@ export default function WorldPage() {
 					{button("Speaking", speaking, () => setSpeaking((v) => !v))}
 					{button("Phone", phone, () => setPhone((v) => !v))}
 				</div>
+				<div className={dev.toolbar}>{LIFE.map((l) => button(l.label, life === l.mode, () => setLife(l.mode)))}</div>
 				<p className={dev.note}>
 					Live: he builds the whole castle from nothing, room by room (nothing is saved). The room rows pin each room locked or
 					at 0, 50 or 100 percent; an open room that is not finished shows as a faint outline, a locked one not at all. A
 					finished room with a panel (library, workshop, gate, observatory) is a button: click it, or Tab to it, and he walks
 					there. Message and Speaking turn him to you; he turns back six seconds after Speaking is off. Set
-					prefers-reduced-motion in devtools for still frames. The world is drawn at pixel scale 1 from 900 px wide and 2 below;
-					the Phone box (375 by 700) shows scale 2, coming in to 3 and 4 when he turns.
+					prefers-reduced-motion in devtools for still frames (no life, no blinks). The world is drawn at pixel scale 1 from 900
+					px wide and 2 below; the Phone box (375 by 700) shows scale 2, easing in to 4 when he turns. Life by the clock: snow
+					at night in spells (45 s in every two minutes), smoke from the chimney of the workshop once it is built (9 s in every 30),
+					a flight of birds by day about every 80 s; All life now keeps them all going; with Message he faces you, breathes and
+					blinks every 3 to 6 s.
 				</p>
 				{phone && <div className={dev.phone}>{world}</div>}
 			</div>
