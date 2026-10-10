@@ -1,29 +1,38 @@
 // The village renderer (spec 2). It draws onto a Painter, so the same code draws to a canvas in the browser
 // (canvas-painter.ts) and to plain pixels in the tests (pixel-painter.ts). Drawing order is in drawWorld.
 import type { Look } from "./actor";
-import { CLOUD_CELL, CLOUD_GRIDS, CLOUD_SHAPES, FAR_ISLANDS, FAR_PARALLAX, HILLS } from "./backdrop";
+import { BIRD_CELL, BIRD_GRIDS, CLOUD_CELL, CLOUD_GRIDS, CLOUD_SHAPES, FAR_ISLANDS, FAR_PARALLAX, HILLS } from "./backdrop";
 import { START_X } from "./blueprints";
 import { GROUND_Y, TILE, type Block } from "./blueprints/types";
 import { toScreen, zoomAt, type Camera, type View } from "./camera";
-import { FACE_AT, FACE_CELLS, FACE_H, FACE_W, faceCell, FRAME_H, FRAME_NAMES, FRAME_W, FRAMES, frameIndex } from "./osmo-sprite";
+import type { Life } from "./life";
+import {
+	blinkCell, FACE_AT, FACE_CELLS, FACE_H, FACE_W, faceCell, FRAME_H, FRAME_NAMES, FRAME_W, FRAMES, frameIndex, TRAIL_AT, TRAIL_CELLS, TRAIL_H,
+	TRAIL_W,
+} from "./osmo-sprite";
 import { PALETTE } from "./palette";
-import { colours, rasterize, type Bitmap, type Colours, type Grid } from "./raster";
+import { colours, nightColour, parseColor, rasterize, type Bitmap, type Colours, type Grid } from "./raster";
 import { CLOUD_SPAN, CLOUDS, cloudX, hslCss, PARALLAX, SKY_STOPS, skyHslAt, twinkle, type Sky, type Star } from "./sky";
 import { forgeBreath, litOf, poolsOf, SHADOW_ALPHA, SHADOW_COLOR, shadowed, variantOf } from "./texture";
 import { TILE_IDS, TILES, tileIndex, type TileId } from "./tiles";
 
-export type Sheet = "tiles" | "sprite" | "faces" | "clouds";
+export type Sheet = "tiles" | "sprite" | "faces" | "clouds" | "trail" | "birds";
 export const CELL: Readonly<Record<Sheet, { w: number; h: number }>> = {
 	tiles: { w: TILE, h: TILE },
 	sprite: { w: FRAME_W, h: FRAME_H },
 	faces: { w: FACE_W, h: FACE_H },
 	clouds: CLOUD_CELL,
+	trail: { w: TRAIL_W, h: TRAIL_H },
+	birds: BIRD_CELL,
 };
 export type Art = { grids: Readonly<Record<Sheet, readonly Grid[]>>; colours: Colours };
 // The drawn art with his scarf in the mood's first aura colour; dark (0 by day, 1 at night) grades it toward night.
 export function artFor(scarf: string, dark = 0): Art {
 	return {
-		grids: { tiles: TILE_IDS.map((id) => TILES[id]), sprite: FRAME_NAMES.map((n) => FRAMES[n]), faces: FACE_CELLS, clouds: CLOUD_GRIDS },
+		grids: {
+			tiles: TILE_IDS.map((id) => TILES[id]), sprite: FRAME_NAMES.map((n) => FRAMES[n]), faces: FACE_CELLS, clouds: CLOUD_GRIDS,
+			trail: TRAIL_CELLS, birds: BIRD_GRIDS,
+		},
 		colours: colours({ Z: scarf }, dark),
 	};
 }
@@ -64,6 +73,7 @@ export type WorldScene = {
 	him: { x: number; look: Look };
 	sky?: Sky; // when given, the far islands are drawn, tinted from it
 	dark?: number; // 0 by day to 1 at night: lit windows and the lamps' glow (the art itself is graded by artFor)
+	life?: Life; // polish pass: snow, birds, smoke, a landing's dust and pop (life.ts); none when left out
 };
 export const GHOST_ALPHA = 0.3;
 export const OUTLINE_ALPHA = 0.12;
@@ -77,6 +87,23 @@ const LIGHTS: Partial<Record<TileId, { x: number; y: number; r: number; strength
 	forge: { x: 8, y: 11, r: 44, strength: 0.5 },
 	"shelf-window-lit": { x: 8, y: 8, r: 28, strength: 0.26 },
 	"dome-lit": { x: 8, y: 8, r: 34, strength: 0.1 }, // fifteen panes, their glows overlapping: each faint
+};
+// The life's colours (polish pass): smoke a pale grey, dust a pale mortar (the stone's own light is lost against the
+// wall it falls past), both graded toward night with the art; snow the snow's highlight, never graded (it catches
+// what light there is).
+const SMOKE = "#c4c8d0";
+const DUST = "#ddd6c8";
+// A smoke puff is drawn PUFF.grow times its radius, so the puffs of one plume run together, as a disc at PUFF.rim of
+// its alpha with a denser core (PUFF.core of the radius, a little above the centre) over it: soft, not a flat coin.
+const PUFF = { grow: 1.3, rim: 0.6, core: 0.6, lift: 0.2 } as const;
+// A flake is its square at full alpha with a softer cross of SNOW_HALO round it, so it reads as a soft flake and not
+// as one more hard star.
+const SNOW_HALO = 0.35;
+const graded = (hex: string, dark: number): string => {
+	const c = parseColor(hex);
+	if (!c || dark <= 0) return hex;
+	const [r, g, b] = nightColour(c, dark);
+	return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 };
 // The haze band at the horizon (polish pass): it lies over the hills' foot, rising from nothing HAZE.from world px
 // below their top line to HAZE.alpha at HAZE.peak, holding to HAZE.hold (the hills reach at least that deep, so their
@@ -167,6 +194,11 @@ export function drawWorld(p: Painter, s: WorldScene): void {
 			p.rect(0, top, s.view.w, Math.round(htop + (y + 1) * fz) - top, hazeColor, HAZE.alpha * k);
 		}
 	}
+	// 1c. birds crossing the sky by day (polish pass), behind the clouds; screen px, at a whole scale
+	const k = Math.max(1, Math.round(z));
+	for (const b of s.life?.birds ?? []) {
+		if (seen(b.x, b.y, BIRD_CELL.w * k, BIRD_CELL.h * k)) p.stamp("birds", b.frame, b.x, b.y, k, 1, b.flip);
+	}
 	// 2. clouds: the far layer, fainter, then the near one, each with its parallax, each cloud drawn again a span over
 	// wherever the view reaches
 	for (const layer of [0, 1] as const) {
@@ -196,6 +228,32 @@ export function drawWorld(p: Painter, s: WorldScene): void {
 	}
 	for (const b of s.outline ?? []) block(b, OUTLINE_ALPHA);
 	if (s.ghost) block(s.ghost, GHOST_ALPHA);
+	// 5a. polish pass: the block that just landed, a world pixel bigger all round for a moment; the dust from its foot;
+	// the smoke from the workshop's chimney
+	const pop = s.life?.pop;
+	if (pop) put("tiles", tileIndex(variantOf(lit(pop.tile), pop.x, pop.y)), pop.x * TILE - 1, pop.y * TILE - 1, TILE + 2, TILE + 2, 1);
+	const dot = (wx: number, wy: number, ww: number, wh: number, color: string, alpha: number) => {
+		const a = toScreen(s.camera, s.view, s.now, wx, wy);
+		const c = toScreen(s.camera, s.view, s.now, wx + ww, wy + wh);
+		if (c.x > a.x && c.y > a.y && seen(a.x, a.y, c.x - a.x, c.y - a.y)) p.rect(a.x, a.y, c.x - a.x, c.y - a.y, color, alpha);
+	};
+	const dust = graded(DUST, dark);
+	for (const m of s.life?.dust ?? []) dot(Math.round(m.x), Math.round(m.y), m.size, m.size, dust, m.alpha);
+	const smoke = graded(SMOKE, dark);
+	// A round disc of rows, each its own width, in world px.
+	const disc = (cx: number, cy: number, r: number, alpha: number) => {
+		for (let dy = -r; dy < r; dy++) {
+			const half = Math.round(Math.sqrt(r * r - (dy + 0.5) * (dy + 0.5)));
+			dot(cx - half, cy + dy, 2 * half, 1, smoke, alpha);
+		}
+	};
+	for (const puff of s.life?.smoke ?? []) {
+		const r = Math.max(1, Math.round(puff.r * PUFF.grow));
+		const cx = Math.round(puff.x);
+		const cy = Math.round(puff.y);
+		disc(cx, cy, r, puff.alpha * PUFF.rim);
+		disc(cx, cy - Math.round(r * PUFF.lift), Math.max(1, Math.round(r * PUFF.core)), puff.alpha * PUFF.rim);
+	}
 	// 5b. after dark, each lantern and door spills a soft ellipse of warm light on the ground under it
 	if (dark > 0) {
 		for (const pool of poolsOf([...s.ground, ...s.laid])) {
@@ -206,18 +264,36 @@ export function drawWorld(p: Painter, s: WorldScene): void {
 		}
 	}
 	// 6. him, his feet on the island's top edge; 7. his face, never mirrored
+	const look = s.him.look;
 	const hx = s.him.x - FRAME_W / 2; // his sprite's top-left, world px
 	const hy = GROUND_Y * TILE - FRAME_H;
-	put("sprite", frameIndex(s.him.look.frame), hx, hy, FRAME_W, FRAME_H, 1, s.him.look.flip);
-	if (s.him.look.face) put("faces", faceCell(s.him.look.face, s.him.look.gaze), hx + FACE_AT.x, hy + FACE_AT.y, FACE_W, FACE_H, 1);
+	// 6a. polish pass: the end of his scarf streaming behind him while he walks, behind his body (mirrored with him)
+	if (look.trail !== null) {
+		const tx = look.flip ? hx + FRAME_W - TRAIL_AT.x - TRAIL_W : hx + TRAIL_AT.x;
+		put("trail", look.trail, tx, hy + TRAIL_AT.y, TRAIL_W, TRAIL_H, 1, look.flip);
+	}
+	put("sprite", frameIndex(look.frame), hx, hy, FRAME_W, FRAME_H, 1, look.flip);
+	if (look.face) put("faces", look.blink ? blinkCell(look.face) : faceCell(look.face, look.gaze), hx + FACE_AT.x, hy + FACE_AT.y, FACE_W, FACE_H, 1);
 	// 8. after dark, the warm light of each lamp and lit window falls on what is round it
-	if (dark <= 0) return;
-	for (const b of [...s.ground, ...s.laid]) {
-		const light = LIGHTS[lit(b.tile)];
-		if (!light) continue;
-		const c = toScreen(s.camera, s.view, s.now, b.x * TILE + light.x, b.y * TILE + light.y);
-		const r = light.r * z;
-		const strength = light.strength * (b.tile === "forge" ? forgeBreath(s.now) : 1);
-		if (seen(c.x - r, c.y - r, 2 * r, 2 * r)) p.glow(c.x, c.y, r, PALETTE.t, strength * dark);
+	if (dark > 0) {
+		for (const b of [...s.ground, ...s.laid]) {
+			const light = LIGHTS[lit(b.tile)];
+			if (!light) continue;
+			const c = toScreen(s.camera, s.view, s.now, b.x * TILE + light.x, b.y * TILE + light.y);
+			const r = light.r * z;
+			const strength = light.strength * (b.tile === "forge" ? forgeBreath(s.now) : 1);
+			if (seen(c.x - r, c.y - r, 2 * r, 2 * r)) p.glow(c.x, c.y, r, PALETTE.t, strength * dark);
+		}
+	}
+	// 9. polish pass: snow at night, in front of everything; screen px
+	for (const f of s.life?.snow ?? []) {
+		const t = Math.max(1, Math.floor(f.size / 2)); // the halo's width
+		if (!seen(f.x - t, f.y - t, f.size + 2 * t, f.size + 2 * t)) continue;
+		p.rect(f.x, f.y, f.size, f.size, PALETTE.p, f.alpha);
+		const halo = f.alpha * SNOW_HALO;
+		p.rect(f.x, f.y - t, f.size, t, PALETTE.p, halo);
+		p.rect(f.x, f.y + f.size, f.size, t, PALETTE.p, halo);
+		p.rect(f.x - t, f.y, t, f.size, PALETTE.p, halo);
+		p.rect(f.x + f.size, f.y, t, f.size, PALETTE.p, halo);
 	}
 }

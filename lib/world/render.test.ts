@@ -11,10 +11,13 @@ import { hashPixels, pixelPainter } from "./pixel-painter";
 import { snapshot } from "./png";
 import { colours, parseColor } from "./raster";
 import { artFor, drawSky, drawWorld, GHOST_ALPHA, HAZE, OUTLINE_ALPHA, sheetBitmap, type WorldScene } from "./render";
-import { CLOUD_CELL, CLOUD_GRIDS, HILLS } from "./backdrop";
+import { BIRD_CELL, CLOUD_CELL, CLOUD_GRIDS, HILLS } from "./backdrop";
 import { hslCss, skyAt, starField, twinkle } from "./sky";
 import { poolsOf, shadowed, SHADOW_ALPHA, variantOf } from "./texture";
 import { TILE_IDS, TILES } from "./tiles";
+import { birdsAt, dustAt, lifeAt, MAX_PARTICLES, NO_LIFE, smokeAt, snowAt, type Life } from "./life";
+import { pose } from "./actor";
+import { TRAIL_AT, TRAIL_W } from "./osmo-sprite";
 
 const art = artFor("hsl(172 38% 50%)");
 const VIEW = { w: 320, h: 200 };
@@ -40,6 +43,8 @@ describe("the atlas", () => {
 		expect([sheetBitmap(art, "tiles", 2).w, sheetBitmap(art, "tiles", 2).h]).toEqual([TILE_IDS.length * 32, 32]);
 		expect([sheetBitmap(art, "clouds", 1).w, sheetBitmap(art, "clouds", 1).h]).toEqual([CLOUD_GRIDS.length * CLOUD_CELL.w, CLOUD_CELL.h]);
 		expect([sheetBitmap(art, "sprite", 3).w, sheetBitmap(art, "sprite", 3).h]).toEqual([18 * 48, 96]);
+		expect([sheetBitmap(art, "trail", 2).w, sheetBitmap(art, "trail", 2).h]).toEqual([2 * 16, 12]);
+		expect([sheetBitmap(art, "birds", 1).w, sheetBitmap(art, "birds", 1).h]).toEqual([2 * BIRD_CELL.w, BIRD_CELL.h]);
 		expect([sheetBitmap(art, "faces", 2).w, sheetBitmap(art, "faces", 2).h]).toEqual([12 * 16, 8]); // nine faces, three blinks
 	});
 });
@@ -279,6 +284,77 @@ describe("the world", () => {
 	});
 	it("copes with a canvas of no size", () => {
 		expect(() => drawWorld(pixelPainter(0, 0, art), { ...scene(40), view: { w: 0, h: 0 } })).not.toThrow();
+	});
+});
+
+describe("life in the world (polish pass)", () => {
+	const scarf = (parseColor("hsl(172 38% 50%)") ?? [0, 0, 0]).slice(0, 3); // the scarf in the scene's mood colour
+	const withLife = (life: Life, over: Partial<WorldScene> = {}) => paint({ ...scene(40), life, ...over }).data;
+	const differs = (a: Uint8ClampedArray, b: Uint8ClampedArray) => {
+		let n = 0;
+		for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2] || a[i + 3] !== b[i + 3]) n++;
+		return n;
+	};
+	it("draws nothing of it when none is given, or when it is empty", () => {
+		expect(hashPixels(withLife(NO_LIFE))).toBe(hashPixels(paint(scene(40)).data));
+	});
+	it("streams his scarf behind him while he walks, on the side away from where he goes", () => {
+		const s = scene(40);
+		const walking = { ...pose("walking", s.him.x, 0), dir: 1 as const };
+		const draw = (flip: boolean, trail: 0 | 1 | null) =>
+			paint({ ...s, him: { x: s.him.x, look: { ...look(walking, 0, "warm"), flip, trail } } }).data;
+		const at = toScreen(s.camera, VIEW, 0, s.him.x - 8, GROUND_Y * TILE - 32);
+		const scarfIn = (d: Uint8ClampedArray, x0: number, x1: number) => {
+			let n = 0;
+			for (let y = at.y + 24; y < at.y + 36; y++) for (let x = x0; x < x1; x++) if (px(d, x, y).slice(0, 3).join() === scarf.join()) n++;
+			return n;
+		};
+		// Facing right the trail lies left of his sprite; facing left, right of it.
+		const left = [at.x + TRAIL_AT.x * 2, at.x] as const;
+		const right = [at.x + 32, at.x + 32 + (TRAIL_W + TRAIL_AT.x) * 2 + 12] as const;
+		expect(scarfIn(draw(false, 0), ...left)).toBeGreaterThan(3);
+		expect(scarfIn(draw(false, null), ...left)).toBe(0);
+		expect(scarfIn(draw(true, 1), ...right)).toBeGreaterThan(3);
+	});
+	it("shuts his eyes on a blink", () => {
+		const s = scene(40);
+		const facing = pose("facing", s.him.x, 0);
+		const open = paint({ ...s, him: { x: s.him.x, look: { ...look(facing, 0, "warm"), blink: false } } }).data;
+		const shut = paint({ ...s, him: { x: s.him.x, look: { ...look(facing, 0, "warm"), blink: true } } }).data;
+		expect(differs(open, shut)).toBeGreaterThan(0);
+		const pupil = rgb("P").join();
+		const at = toScreen(s.camera, VIEW, 0, s.him.x - 8, GROUND_Y * TILE - 32);
+		let pupils = 0;
+		for (let y = at.y; y < at.y + 32; y++) for (let x = at.x; x < at.x + 32; x++) if (px(shut, x, y).slice(0, 3).join() === pupil) pupils++;
+		expect(pupils).toBe(0);
+	});
+	it("pops a landed block a world pixel bigger all round, for its moment", () => {
+		const s = scene(40);
+		const top = s.laid[s.laid.length - 1]; // the newest block: sky above it
+		const a = withLife({ ...NO_LIFE, pop: top });
+		const b = paint(s).data;
+		const at = toScreen(s.camera, VIEW, 0, top.x * TILE, top.y * TILE);
+		const above = px(a, at.x + 8, at.y - 1);
+		expect(px(b, at.x + 8, at.y - 1)[3]).toBe(0);
+		expect(above[3]).toBeGreaterThan(0);
+	});
+	it("throws the dust, puffs the smoke, lets the snow fall and the birds fly", () => {
+		const s = scene(40);
+		const base = paint(s).data;
+		const landing = { block: s.laid[s.laid.length - 1], at: 0 };
+		expect(differs(withLife({ ...NO_LIFE, dust: dustAt(landing, 100) }), base)).toBeGreaterThan(0);
+		const smoke = smokeAt(5_000).map((p) => ({ ...p, x: s.him.x + 20, y: 360 })); // moved into view
+		expect(differs(withLife({ ...NO_LIFE, smoke }), base)).toBeGreaterThan(20);
+		expect(differs(withLife({ ...NO_LIFE, snow: snowAt(20_000, VIEW, 2, 1) }), base)).toBeGreaterThan(40);
+		expect(differs(withLife({ ...NO_LIFE, birds: birdsAt(16_000 * 3 + 8_000, VIEW, 2, true) }), base)).toBeGreaterThan(4);
+	});
+	it("draws a full frame of life at its cap, at night, without trouble", () => {
+		const life = lifeAt({
+			wallMs: 20_000, now: 50, view: VIEW, scale: 2, day: true, night: true, chimney: true, landing: { block: hall[0], at: 0 }, motion: true, force: "all",
+		});
+		expect(life.snow.length + life.smoke.length + life.birds.length + life.dust.length).toBeLessThanOrEqual(MAX_PARTICLES);
+		const night = pixelPainter(VIEW.w, VIEW.h, artFor("hsl(172 38% 50%)", 1));
+		expect(() => drawWorld(night, { ...scene(40), life, dark: 1 })).not.toThrow();
 	});
 });
 
