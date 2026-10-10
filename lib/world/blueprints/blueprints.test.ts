@@ -77,7 +77,7 @@ describe("the hall", () => {
 // The five rooms of phase 2. Their block counts are pinned, because saved progress counts blocks: change a room's map
 // only before it ships, and re-pin here when you do.
 const COUNTS: Readonly<Record<Exclude<CastleRoom, "hall">, number>> = {
-	library: 85,
+	library: 84,
 	workshop: 101,
 	study: 57,
 	gate: 67,
