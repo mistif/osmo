@@ -12,6 +12,9 @@ export const CLEARED_KEY = "osmo-village-cleared";
 // land after the rows are deleted. (The table's trigger guards updates only; a clear is a delete, so nothing stops it.)
 let clearing = false;
 let inFlight: Promise<unknown> = Promise.resolve();
+// A clear that never settles (a stalled fetch) must not hold every save of this tab: after this long it gives up, says
+// so once, and saves start again. (A delete that lands late is found by the world's re-read when the page is shown again.)
+export const CLEAR_TIMEOUT_MS = 10_000;
 
 // ok is false when it could not be read (a network error, or the table is not migrated yet): then he does not build
 // and nothing is saved this visit, rather than building on a count that may be wrong.
@@ -36,9 +39,22 @@ export async function saveRoom(p: RoomProgress): Promise<boolean> {
 export async function clearVillage(): Promise<boolean> {
 	if (clearing) return false;
 	clearing = true;
+	let timer: ReturnType<typeof setTimeout> | undefined;
 	try {
-		await inFlight;
-		const { error } = await supabase.from("village").delete().in("room", [...CASTLE_ROOMS]);
+		const late = new Promise<"late">((resolve) => {
+			timer = setTimeout(() => resolve("late"), CLEAR_TIMEOUT_MS);
+		});
+		const gone = (async () => {
+			await inFlight;
+			return supabase.from("village").delete().in("room", [...CASTLE_ROOMS]);
+		})();
+		gone.catch(() => undefined); // if the timer wins, a later failure of the delete is not an unhandled rejection
+		const result = await Promise.race([gone, late]);
+		if (result === "late") {
+			console.warn("[village] The village did not clear in time, so saving carries on.");
+			return false;
+		}
+		const { error } = result;
 		if (error) {
 			console.error("Could not clear the village", error);
 			return false;
@@ -57,6 +73,7 @@ export async function clearVillage(): Promise<boolean> {
 		console.error("Could not clear the village", err);
 		return false;
 	} finally {
+		clearTimeout(timer);
 		clearing = false;
 	}
 }

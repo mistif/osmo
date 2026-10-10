@@ -3,7 +3,7 @@ import { CASTLE_BLOCKS } from "./blueprints/castle";
 import { CASTLE_ROOMS, type CastleRoom } from "./blueprints/types";
 import type { VillageRow } from "./progress";
 import {
-	admit, current, dueSaves, finishedRooms, laidBlocks, laidCount, layNext, markRoomSaved, nextBlock, outlineBlocks, pinnedVillage,
+	admit, adoptRead, clearedElsewhere, current, dueSaves, finishedRooms, laidBlocks, laidCount, layNext, markRoomSaved, nextBlock, outlineBlocks, pinnedVillage,
 	queueOf, resumeVillage, type Village,
 } from "./village";
 
@@ -27,6 +27,12 @@ describe("the building order", () => {
 	it("keeps started rooms first, oldest first, then the open ones in spec order", () => {
 		const rows = [row("gate", 3, "2026-10-05T00:00:00Z"), row("hall", 180, "2026-10-01T00:00:00Z")];
 		expect(queueOf(rows, ["hall", "library", "workshop", "gate", "observatory"])).toEqual(["hall", "gate", "library", "workshop", "observatory"]);
+	});
+	it("puts a room that started earlier ahead of one that comes first in spec order", () => {
+		// Spec order is hall, library, ..., observatory; here the observatory began before the library did.
+		const rows = [row("library", 5, "2026-10-05T00:00:00Z"), row("observatory", 9, "2026-10-02T00:00:00Z"), row("hall", 180, "2026-10-01T00:00:00Z")];
+		expect(queueOf(rows, ["hall", "library", "observatory"])).toEqual(["hall", "observatory", "library"]);
+		expect(queueOf([...rows].reverse(), ["hall", "library", "observatory"])).toEqual(["hall", "observatory", "library"]);
 	});
 	it("keeps a started room whose rule is no longer true, and puts an unreadable start last among the started", () => {
 		const rows = [row("library", 5, "junk"), row("hall", 180, "2026-10-01T00:00:00Z")];
@@ -113,5 +119,45 @@ describe("the dev page's fixed village", () => {
 		const v = pinnedVillage({ hall: 9999, gate: -4, observatory: Number.NaN, library: 12.6 }, NOW);
 		expect(v.queue).toEqual(["hall", "library", "gate", "observatory"]);
 		expect(CASTLE_ROOMS.map((r) => v.rooms[r]?.laid ?? null)).toEqual([180, 12, null, null, 0, 0]);
+	});
+});
+
+describe("a page that held the village while it was cleared elsewhere", () => {
+	// The page built the hall to 128 and saved it; then the village was cleared on another device, or the laptop slept.
+	const held = () => markRoomSaved(resumeVillage([row("hall", 120)], ["hall", "library"], NOW), "hall", 128);
+	const open = ["hall", "library"] as const;
+	it("sees a row that is gone, or lower than it last saved", () => {
+		expect(clearedElsewhere(held(), [])).toBe(true);
+		expect(clearedElsewhere(held(), [row("hall", 40)])).toBe(true);
+	});
+	it("lets the read win: the later, lower read replaces the page's counts, and he builds from it", () => {
+		const r = adoptRead(held(), [row("hall", 40)], open, NOW);
+		expect(r.adopted).toBe(true);
+		expect(r.village.rooms.hall).toMatchObject({ laid: 40, saved: 40 });
+		expect(nextBlock(r.village)).toBe(CASTLE_BLOCKS.hall[40]);
+		const none = adoptRead(held(), [], open, NOW);
+		expect(none.village.rooms.hall).toMatchObject({ laid: 0, saved: 0 });
+		expect(current(none.village)).toBe("hall");
+	});
+	it("drops a room the page had started when the read has no row for it, and a room that went back", () => {
+		const two = markRoomSaved(layMany(resumeVillage([row("hall", 180)], ["hall", "library"], NOW), 12).v, "library", 12);
+		const r = adoptRead(two, [row("hall", 180)], open, NOW);
+		expect(r.adopted).toBe(true);
+		expect(r.village.rooms.library).toMatchObject({ laid: 0 });
+		expect(r.village.rooms.hall).toMatchObject({ laid: 180 });
+	});
+	it("keeps the page's counts when the read is level or higher, and blocks not saved yet", () => {
+		const v = layMany(held(), 5).v; // 133 laid, 128 saved
+		expect(clearedElsewhere(v, [row("hall", 128)])).toBe(false);
+		expect(adoptRead(v, [row("hall", 128)], open, NOW)).toEqual({ village: v, adopted: false });
+		expect(adoptRead(v, [row("hall", 150)], open, NOW).village).toBe(v); // another device is ahead: the trigger keeps the larger
+	});
+	it("takes a page that never saved anything as clean, even when no row exists", () => {
+		const fresh = resumeVillage([], ["hall"], NOW);
+		const v = layMany(fresh, 3).v;
+		expect(clearedElsewhere(v, [])).toBe(false);
+	});
+	it("ignores rooms the page does not hold", () => {
+		expect(clearedElsewhere(held(), [row("hall", 128), row("gate", 1)])).toBe(false);
 	});
 });

@@ -32,6 +32,20 @@ export function resumeVillage(rows: readonly VillageRow[], open: readonly Castle
 	return { queue, rooms };
 }
 
+// A page that was hidden, slept or sat in the back/forward cache may hold a village that was cleared elsewhere (another
+// device, or a tab that never heard of it). Its next save would put the old counts back. So after such a pause the rows
+// are read again: when any room's saved row is gone or lower than the count this page last saved, the read wins and
+// the page's counts are dropped. Otherwise the page keeps its own (blocks it has not saved yet are not lost).
+export function clearedElsewhere(v: Village, rows: readonly VillageRow[]): boolean {
+	return v.queue.some((room) => {
+		const mine = v.rooms[room]?.saved ?? 0;
+		return mine > 0 && resume(rows, room, total(room), "").saved < mine;
+	});
+}
+export function adoptRead(v: Village, rows: readonly VillageRow[], open: readonly CastleRoom[], nowIso: string): { village: Village; adopted: boolean } {
+	return clearedElsewhere(v, rows) ? { village: resumeVillage(rows, open, nowIso), adopted: true } : { village: v, adopted: false };
+}
+
 // Rooms that opened during the visit (Settings opened for the first time) join the end of the queue.
 export function admit(v: Village, open: readonly CastleRoom[], nowIso: string): Village {
 	const add = CASTLE_ROOMS.filter((room) => open.includes(room) && !v.queue.includes(room));

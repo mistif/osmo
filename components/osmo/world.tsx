@@ -25,7 +25,7 @@ import { roomEvents, type RoomSignals } from "@/lib/world/signals";
 import { daylight, hourOf, phaseOf, skyAt, starField, sunAt } from "@/lib/world/sky";
 import { openRooms, SETTINGS_SEEN, type VillageCounts } from "@/lib/world/unlock";
 import {
-	admit, dueSaves, finishedRooms, laidBlocks, laidCount, layNext, markRoomSaved, nextBlock, outlineBlocks, pinnedVillage, resumeVillage,
+	admit, adoptRead, dueSaves, finishedRooms, laidBlocks, laidCount, layNext, markRoomSaved, nextBlock, outlineBlocks, pinnedVillage, resumeVillage,
 	type Village,
 } from "@/lib/world/village";
 import { readVillageCounts } from "@/lib/world/village-counts";
@@ -182,6 +182,8 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 			hitKey = names;
 			hooks.finished(rooms);
 		}
+		const panelOpen = (live.current.route?.panel ?? null) !== null;
+		const box = root.getBoundingClientRect();
 		for (const hit of hitAreas(rooms, camera, view, now)) {
 			const el = root.querySelector<HTMLElement>(`[data-hit="${hit.room}"]`);
 			if (!el) continue;
@@ -190,6 +192,18 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 			el.style.width = `${hit.w}px`;
 			el.style.height = `${hit.h}px`;
 			el.hidden = !hit.seen;
+			// Covered: a panel is open, or something of the conversation (its header, a long log) lies over the middle of
+			// the part in view. The keyboard and screen readers skip it then, as the pointer cannot reach it either.
+			let covered = panelOpen;
+			if (!covered && hit.seen) {
+				const cx = (Math.max(0, hit.x) + Math.min(view.w, hit.x + hit.w)) / 2;
+				const cy = (Math.max(0, hit.y) + Math.min(view.h, hit.y + hit.h)) / 2;
+				const top = document.elementFromPoint(box.left + cx, box.top + cy);
+				covered = top !== null && top !== el;
+			}
+			el.tabIndex = covered ? -1 : 0;
+			if (covered) el.setAttribute("aria-hidden", "true");
+			else el.removeAttribute("aria-hidden");
 		}
 	};
 	const apply = (e: ActorEvent) => {
@@ -305,6 +319,37 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 		schedule(nextTickIn({ actor, now, easing: moving, hasWork: workBlock() !== null && place() === "yard", reducedMotion: reduced }));
 	});
 
+	// Back after a hide, a sleep or the back/forward cache: the village may have been cleared elsewhere (another device,
+	// a tab that never heard of it), and this page's next save would put its old counts back. So nothing is saved until
+	// the rows are read again; when one went backwards or is gone the read wins (adoptRead) and he starts from it.
+	const recheck = () => {
+		if (!persist || pinned() || !village || !counts || !canSave) return;
+		const mine = ++gen;
+		canSave = false;
+		void loadVillage()
+			.then(({ rows, ok }) => {
+				if (g.dead || mine !== gen) return;
+				canSave = true;
+				if (ok && village && counts) {
+					const r = adoptRead(village, rows, openRooms({ counts, settingsOpened: settingsOpened || place() === "observatory" }), iso());
+					if (r.adopted) {
+						village = r.village;
+						news = [];
+						drawn = null;
+						// A block he was walking to or laying belongs to the old village: he chooses again.
+						if (actor.kind === "building" || (actor.kind === "walking" && actor.purpose === "build")) {
+							actor = { ...actor, kind: "idle", since: clock(), target: null, purpose: null, toward: "work" };
+						}
+					}
+				}
+				schedule(0);
+			})
+			.catch((err: unknown) => {
+				if (g.dead || mine !== gen) return;
+				canSave = true;
+				console.warn("[village] Could not read the village again.", err);
+			});
+	};
 	const onVisibility = guarded(() => {
 		const now = clock();
 		if (document.hidden) {
@@ -315,11 +360,19 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 			last = now;
 			measure();
 			apply({ type: "visible", now });
+			recheck();
 			schedule(0);
 		}
 	});
+	const onPageShow = guarded((e: PageTransitionEvent) => {
+		if (e.persisted && !document.hidden) recheck();
+	});
 	document.addEventListener("visibilitychange", onVisibility);
-	g.undo.push(() => document.removeEventListener("visibilitychange", onVisibility));
+	window.addEventListener("pageshow", onPageShow);
+	g.undo.push(() => {
+		document.removeEventListener("visibilitychange", onVisibility);
+		window.removeEventListener("pageshow", onPageShow);
+	});
 	// The size is read on mount and when the box changes, not every frame.
 	const resize = new ResizeObserver(
 		guarded(() => {
@@ -433,10 +486,12 @@ export function WorldStage(props: WorldProps) {
 	const { fixed, colorA, colorB } = props;
 	const pins = JSON.stringify(fixed?.rooms ?? null);
 	const at = placeOf(props.route ?? TALK);
-	// A new pin, a new place (he sets off at once, even from the 3 s tick) or new buttons to place: draw now.
+	const panelOpen = (props.route?.panel ?? null) !== null;
+	// A new pin, a new place (he sets off at once, even from the 3 s tick), new buttons to place, a panel opening or the
+	// conversation growing (which of the buttons are covered): draw now.
 	useEffect(() => {
 		engine.current?.refresh();
-	}, [fixed?.hour, pins, fixed?.pose, fixed?.hits, colorA, colorB, at, hits]);
+	}, [fixed?.hour, pins, fixed?.pose, fixed?.hits, colorA, colorB, at, hits, panelOpen, lines]);
 	const { onOpen } = props;
 
 	return (

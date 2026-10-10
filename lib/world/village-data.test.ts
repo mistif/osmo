@@ -27,7 +27,7 @@ vi.mock("../supabase", () => ({
 
 import { CASTLE_ROOMS } from "./blueprints/types";
 import { resume } from "./progress";
-import { CLEARED_KEY, clearVillage, saveRoom, VILLAGE_CLEARED } from "./village-data";
+import { CLEAR_TIMEOUT_MS, CLEARED_KEY, clearVillage, saveRoom, VILLAGE_CLEARED } from "./village-data";
 
 const NOW = "2026-10-10T12:00:00.000Z";
 const hall = (laid: number) => ({ ...resume([], "hall", 180, NOW), laid });
@@ -86,6 +86,26 @@ describe("clearing the village", () => {
 		expect(stored.get(CLEARED_KEY)).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 		vi.stubGlobal("window", Object.assign(new EventTarget(), { localStorage: { setItem: () => { throw new Error("blocked"); } } }));
 		expect(await clearVillage()).toBe(true);
+	});
+	it("gives up after ten seconds when it never settles, warns once, and lets saves start again", async () => {
+		vi.useFakeTimers();
+		try {
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+			holdUpsert = new Promise<void>(() => undefined); // a save that never answers
+			void saveRoom(hall(8));
+			const clearing = clearVillage();
+			await vi.advanceTimersByTimeAsync(CLEAR_TIMEOUT_MS - 1);
+			expect(await saveRoom(hall(9))).toBe(false); // still clearing
+			await vi.advanceTimersByTimeAsync(1);
+			expect(await clearing).toBe(false);
+			expect(warn).toHaveBeenCalledTimes(1);
+			expect(log).toEqual([]); // nothing was deleted, nobody was told
+			holdUpsert = null;
+			expect(await saveRoom(hall(10))).toBe(true);
+			expect(log).toEqual(["upsert village hall 10"]);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 	it("says false and tells nobody when the delete fails", async () => {
 		deleteError = { message: "offline" };

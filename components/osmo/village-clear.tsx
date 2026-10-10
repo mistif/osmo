@@ -19,10 +19,10 @@ export function VillageClear() {
 			<div className={panel.actions}>
 				{state === "asking" || state === "clearing" ? (
 					<>
-						<button type="button" className={panel.action} autoFocus disabled={state === "clearing"} onClick={() => void clear()}>
+						<button type="button" className={panel.action} disabled={state === "clearing"} onClick={() => void clear()}>
 							Clear the village
 						</button>
-						<button type="button" className={panel.action} disabled={state === "clearing"} onClick={() => setState("idle")}>
+						<button type="button" className={panel.action} autoFocus disabled={state === "clearing"} onClick={() => setState("idle")}>
 							Keep it
 						</button>
 					</>
@@ -34,7 +34,7 @@ export function VillageClear() {
 			</div>
 			{state === "done" && (
 				<p className={panel.note} role="status">
-					The village is cleared. I have started the hall again.
+					The village is cleared.
 				</p>
 			)}
 			{state === "failed" && (
