@@ -593,3 +593,46 @@
 .stage[data-world] .composer {
 	margin-top: auto;
 }
+/* Polish pass: a faint glass band behind the conversation column and the composer, so the words sit on something
+   while the world shows through: blurred where the browser can, a translucent fill where it cannot. It takes no
+   clicks, so the rooms behind the empty column stay clickable (phase 2), and its edges fade into the world. */
+.stage[data-world] .column::before {
+	content: "";
+	position: absolute;
+	inset: 0 -1.5rem;
+	z-index: -1;
+	pointer-events: none;
+	background: color-mix(in oklab, var(--base) 34%, transparent);
+	-webkit-mask-image: linear-gradient(to right, transparent, #000 1.5rem, #000 calc(100% - 1.5rem), transparent);
+	mask-image: linear-gradient(to right, transparent, #000 1.5rem, #000 calc(100% - 1.5rem), transparent);
+}
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+	.stage[data-world] .column::before {
+		background: color-mix(in oklab, var(--base) 16%, transparent);
+		-webkit-backdrop-filter: blur(6px) saturate(1.1);
+		backdrop-filter: blur(6px) saturate(1.1);
+	}
+}
+/* A panel slides over the world from the room's edge, the whole of its width, on the rail's easing
+   (rail.module.css --ease), instead of fading in from close by. */
+.stage[data-world] :global(#osmo-panel) {
+	animation: world-panel-in 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes world-panel-in {
+	from {
+		translate: 100% 0;
+	}
+	to {
+		translate: 0 0;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.stage[data-world] :global(#osmo-panel) {
+		animation: world-panel-fade 0.15s ease both;
+	}
+}
+@keyframes world-panel-fade {
+	from {
+		opacity: 0;
+	}
+}
