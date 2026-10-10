@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { newActor, type Actor } from "./actor";
-import { CALM_FRAME_MS, FRAME_MS, nextTickIn, shouldDraw, SLOW_MS } from "./pace";
+import { AMBIENT_MS, CALM_FRAME_MS, FRAME_MS, nextTickIn, shouldDraw, SLOW_MS } from "./pace";
 
 const a = newActor(200, 0, 12);
-const input = (actor: Actor, over: Partial<{ now: number; easing: boolean; hasWork: boolean; reducedMotion: boolean }> = {}) =>
+type Over = Partial<{ now: number; easing: boolean; hasWork: boolean; reducedMotion: boolean; lookIn: number | null; ambient: number | null }>;
+const input = (actor: Actor, over: Over = {}) =>
 	({ actor, now: 0, easing: false, hasWork: true, reducedMotion: false, ...over });
 
 describe("the redraw pace", () => {
@@ -28,6 +29,24 @@ describe("the redraw pace", () => {
 	});
 	it("slows the frames under reduced motion", () => {
 		expect(nextTickIn(input({ ...a, kind: "walking" }, { reducedMotion: true }))).toBe(CALM_FRAME_MS);
+	});
+	it("wakes for a breath or a blink while he stands, never faster than a frame (polish pass)", () => {
+		expect(nextTickIn(input(a, { hasWork: false, lookIn: 400 }))).toBe(400);
+		expect(nextTickIn(input(a, { hasWork: false, lookIn: 5 }))).toBe(FRAME_MS);
+		expect(nextTickIn(input(a, { hasWork: false, lookIn: 9000 }))).toBe(SLOW_MS);
+		expect(nextTickIn(input({ ...a, nextAt: 300 }, { lookIn: 900 }))).toBe(300); // the next block comes first
+		expect(nextTickIn(input({ ...a, kind: "facing", quietSince: 0 }, { now: 1000, lookIn: 140 }))).toBe(140);
+	});
+	it("keeps the pace the life in the world asks for while it is on screen (polish pass)", () => {
+		expect(nextTickIn(input(a, { hasWork: false, ambient: AMBIENT_MS }))).toBe(AMBIENT_MS);
+		expect(nextTickIn(input(a, { hasWork: false, ambient: FRAME_MS }))).toBe(FRAME_MS);
+		expect(nextTickIn(input(a, { hasWork: false, ambient: 1 }))).toBe(FRAME_MS); // the 30 frames a second cap holds
+		expect(nextTickIn(input(a, { hasWork: false, ambient: null }))).toBe(SLOW_MS);
+		expect(nextTickIn(input({ ...a, kind: "resting" }, { ambient: AMBIENT_MS }))).toBe(AMBIENT_MS);
+	});
+	it("ignores both under reduced motion, and while hidden", () => {
+		expect(nextTickIn(input(a, { hasWork: false, ambient: AMBIENT_MS, lookIn: 100, reducedMotion: true }))).toBe(SLOW_MS);
+		expect(nextTickIn(input({ ...a, hidden: true }, { ambient: AMBIENT_MS, lookIn: 100 }))).toBeNull();
 	});
 	it("redraws a still frame only on a new block, mode, sky phase, zoom or tile", () => {
 		const k = { laid: 3, kind: "idle", phase: "day", zoom: 2, tx: 10 };

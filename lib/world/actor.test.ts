@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-	BLOCK_GAP_MS, FOLLOW_UP_MS, LAY_MS, MAX_DT, PRESENT_MS, TURN_MS,
-	facingViewer, look, newActor, pose, step,
+	BLINK_MS, BLINK_WINDOW_MS, BLOCK_GAP_MS, BREATH_IN_MS, BREATH_MS, FOLLOW_UP_MS, LAY_MS, MAX_DT, PRESENT_MS, TRAIL_MS, TURN_MS,
+	blinking, facingViewer, look, newActor, nextLookIn, pose, step,
 	type Actor, type ActorEvent, type ActorWorld,
 } from "./actor";
 
@@ -217,6 +217,65 @@ describe("how he looks", () => {
 		expect(look(t, 200, "warm").face).toBe("warm");
 		expect(look({ ...t, toward: "work" }, 0, "warm").frame).toBe("turn-3");
 		expect(look(pose("resting", 760, 0), 0, "warm").frame).toBe("sit-1");
+	});
+	it("breathes in for 700 ms at the end of every 3.2 s, standing or facing Gur (polish pass)", () => {
+		const idle = newActor(200, 0, 12);
+		const frameAt = (a: Actor, t: number) => look(a, t, "warm").frame;
+		expect(frameAt(idle, 0)).toBe("idle-1");
+		expect(frameAt(idle, BREATH_MS - BREATH_IN_MS - 1)).toBe("idle-1");
+		expect(frameAt(idle, BREATH_MS - BREATH_IN_MS)).toBe("idle-2");
+		expect(frameAt(idle, BREATH_MS)).toBe("idle-1");
+		const facing = { ...pose("facing", 200, 0), talk: "listening" as const };
+		expect(frameAt(facing, BREATH_MS - 1)).toBe("face-2");
+		expect(frameAt(facing, 100)).toBe("face-1");
+		expect(look(idle, BREATH_MS - 1, "warm", false).frame).toBe("idle-1"); // reduced motion: still
+	});
+	it("blinks for 140 ms, 3 to 6 s apart, only facing Gur, never under reduced motion (polish pass)", () => {
+		const starts: number[] = [];
+		for (let t = 0; t < 120_000; t++) if (blinking(t) && !blinking(t - 1)) starts.push(t);
+		expect(starts.length).toBeGreaterThan(18);
+		for (let i = 1; i < starts.length; i++) {
+			expect(starts[i] - starts[i - 1]).toBeGreaterThan(3000);
+			expect(starts[i] - starts[i - 1]).toBeLessThan(6000);
+		}
+		const on = starts[3];
+		expect(blinking(on + BLINK_MS - 1)).toBe(true);
+		expect(blinking(on + BLINK_MS)).toBe(false);
+		const facing = { ...pose("facing", 200, 0), talk: "listening" as const };
+		expect(look(facing, on, "warm").blink).toBe(true);
+		expect(look(facing, on, "warm", false).blink).toBe(false);
+		expect(look(newActor(200, 0, 12), on, "warm").blink).toBe(false); // in profile his eye is drawn in the frame
+		expect(blinking(Number.NaN)).toBe(false);
+		expect(BLINK_WINDOW_MS).toBe(4500);
+	});
+	it("trails his scarf in two cells that swap every 160 ms while he walks, and only then (polish pass)", () => {
+		const walking = run(newActor(100, 0, 12), 0, 50).a;
+		expect(walking.kind).toBe("walking");
+		const trails = Array.from({ length: 4 }, (_, i) => look(walking, walking.since + i * TRAIL_MS, "warm").trail);
+		expect(trails).toEqual([0, 1, 0, 1]);
+		expect(look(newActor(100, 0, 12), 0, "warm").trail).toBeNull();
+		expect(look(pose("building", 100, 0), 0, "warm").trail).toBeNull();
+	});
+	it("says when his look will change by itself, so the loop can wake for it (polish pass)", () => {
+		const idle = newActor(200, 0, 12);
+		expect(nextLookIn(idle, 0)).toBe(BREATH_MS - BREATH_IN_MS);
+		expect(nextLookIn(idle, BREATH_MS - 100)).toBe(100);
+		expect(nextLookIn(idle, 0, false)).toBeNull();
+		expect(nextLookIn({ ...idle, hidden: true }, 0)).toBeNull();
+		expect(nextLookIn({ ...idle, kind: "walking" }, 0)).toBeNull();
+		expect(nextLookIn(pose("resting", 200, 0), 0)).toBeNull();
+		// Facing: whichever comes first, a breath or a blink's start or end; never 0, and the look really changes then.
+		const facing = { ...pose("facing", 200, 0), talk: "listening" as const };
+		for (let now = 0; now < 30_000; now += 777) {
+			const ms = nextLookIn(facing, now);
+			expect(ms).not.toBeNull();
+			if (ms === null) continue;
+			expect(ms).toBeGreaterThanOrEqual(1);
+			expect(ms).toBeLessThanOrEqual(BREATH_MS);
+			const before = look(facing, now + ms - 1, "warm");
+			const after = look(facing, now + ms, "warm");
+			expect(before.frame !== after.frame || before.blink !== after.blink).toBe(true);
+		}
 	});
 	it("poses every state for the dev page", () => {
 		for (const k of ["idle", "walking", "building", "turning", "facing", "resting"] as const) expect(pose(k, 10, 0).kind).toBe(k);

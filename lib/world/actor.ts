@@ -136,37 +136,84 @@ function tick(a: Actor, now: number, dt: number, w: ActorWorld): Step {
 	}
 }
 
-export type Look = { frame: FrameName; flip: boolean; face: FaceId | null; gaze: Gaze };
-const IDLE: readonly FrameName[] = ["idle-1", "idle-2"];
+// blink: his eyes are shut this frame (the face's blink cell). trail: which of the scarf's two trailing cells streams
+// behind him (walking only), or null.
+export type Look = { frame: FrameName; flip: boolean; face: FaceId | null; gaze: Gaze; blink: boolean; trail: 0 | 1 | null };
 const WALK: readonly FrameName[] = ["walk-1", "walk-2", "walk-3", "walk-4", "walk-5", "walk-6"];
 const BUILD: readonly FrameName[] = ["build-1", "build-2", "build-3", "build-4"];
 const TURN: readonly FrameName[] = ["turn-1", "turn-2", "turn-3"];
-const FACE: readonly FrameName[] = ["face-1", "face-2"];
 // While he speaks his eyes go slightly off Gur and back: 600 ms away in every 2.4 s.
 const speakingGaze = (t: number): Gaze => (Math.floor(t / 600) % 4 === 1 ? 1 : 0);
 
-// The frame to draw now. `face` comes from his mood (face.ts) and shows only toward the viewer.
-export function look(a: Actor, now: number, face: FaceId): Look {
+// The polish pass: he breathes and blinks, and his scarf trails as he walks. Breathing in (idle-2 and face-2, the
+// shoulders a pixel up) lasts BREATH_IN_MS at the end of every BREATH_MS. A blink shuts his eyes for BLINK_MS once in
+// every BLINK_WINDOW_MS, at an offset in its first BLINK_SPREAD_MS taken from a fixed hash of the window's number, so
+// two blinks are always 3 to 6 s apart and every run blinks the same. The scarf's two trailing cells swap every
+// TRAIL_MS, out of step with his 100 ms stride so it flutters.
+export const BREATH_MS = 3200;
+export const BREATH_IN_MS = 700;
+export const BLINK_WINDOW_MS = 4500;
+export const BLINK_SPREAD_MS = 1500;
+export const BLINK_MS = 140;
+export const TRAIL_MS = 160;
+const blinkOffset = (n: number): number => {
+	let h = Math.imul(n + 1, 0x9e3779b1) >>> 0;
+	h = Math.imul(h ^ (h >>> 16), 0x85ebca6b) >>> 0;
+	return ((h ^ (h >>> 13)) >>> 0) % BLINK_SPREAD_MS;
+};
+const blinkStart = (n: number): number => n * BLINK_WINDOW_MS + blinkOffset(n);
+// True while a blink is on at this clock time (ms).
+export function blinking(now: number): boolean {
+	if (!Number.isFinite(now)) return false;
+	const t = now - blinkStart(Math.floor(now / BLINK_WINDOW_MS));
+	return t >= 0 && t < BLINK_MS;
+}
+const breathingIn = (t: number): boolean => t % BREATH_MS >= BREATH_MS - BREATH_IN_MS;
+
+// The frame to draw now. `face` comes from his mood (face.ts) and shows only toward the viewer. motion is false under
+// reduced motion: no breathing and no blink, so a still frame stays still.
+export function look(a: Actor, now: number, face: FaceId, motion = true): Look {
 	const t = Math.max(0, now - a.since);
 	const flip = a.dir < 0;
+	const still = { blink: false, trail: null };
 	const cycle = (names: readonly FrameName[], ms: number) => names[Math.floor(t / ms) % names.length];
 	switch (a.kind) {
 		case "walking":
-			return { frame: cycle(WALK, 100), flip, face: null, gaze: 0 };
+			return { frame: cycle(WALK, 100), flip, face: null, gaze: 0, blink: false, trail: Math.floor(t / TRAIL_MS) % 2 === 0 ? 0 : 1 };
 		case "building":
-			return { frame: cycle(BUILD, LAY_MS / BUILD.length), flip, face: null, gaze: 0 };
+			return { frame: cycle(BUILD, LAY_MS / BUILD.length), flip, face: null, gaze: 0, ...still };
 		case "resting":
-			return { frame: "sit-1", flip: false, face: null, gaze: 0 };
+			return { frame: "sit-1", flip: false, face: null, gaze: 0, ...still };
 		case "turning": {
 			const order = a.toward === "viewer" ? TURN : [...TURN].reverse();
 			const frame = order[Math.min(2, Math.floor(t / (TURN_MS / 3)))];
-			return { frame, flip, face: frame === "turn-3" ? face : null, gaze: 0 };
+			return { frame, flip, face: frame === "turn-3" ? face : null, gaze: 0, ...still };
 		}
 		case "facing":
-			return { frame: cycle(FACE, 700), flip: false, face, gaze: a.talk === "speaking" ? speakingGaze(t) : 0 };
+			return {
+				frame: motion && breathingIn(t) ? "face-2" : "face-1", flip: false, face, gaze: a.talk === "speaking" ? speakingGaze(t) : 0,
+				blink: motion && blinking(now), trail: null,
+			};
 		default:
-			return { frame: cycle(IDLE, 600), flip, face: null, gaze: 0 };
+			return { frame: motion && breathingIn(t) ? "idle-2" : "idle-1", flip, face: null, gaze: 0, ...still };
 	}
+}
+
+// How long until his look changes by itself while he stands (a breath, a blink), so the loop can wake for it instead
+// of drawing frames; null when nothing of him moves on its own (or under reduced motion, or hidden). Walking,
+// building, turning and speaking already run at frame pace.
+export function nextLookIn(a: Actor, now: number, motion = true): number | null {
+	if (!motion || a.hidden || (a.kind !== "idle" && a.kind !== "facing")) return null;
+	const into = Math.max(0, now - a.since) % BREATH_MS;
+	const edge = BREATH_MS - BREATH_IN_MS;
+	let ms = into < edge ? edge - into : BREATH_MS - into;
+	if (a.kind === "facing" && Number.isFinite(now)) {
+		const n = Math.floor(now / BLINK_WINDOW_MS);
+		const start = blinkStart(n);
+		const blinkEdge = now < start ? start - now : now < start + BLINK_MS ? start + BLINK_MS - now : blinkStart(n + 1) - now;
+		ms = Math.min(ms, blinkEdge);
+	}
+	return Math.max(1, Math.ceil(ms));
 }
 
 // A still pose of any state, for /dev/world.
