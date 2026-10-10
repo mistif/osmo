@@ -93,6 +93,14 @@ export function sunAt(hour: number): Sun {
 }
 
 export type Star = { fx: number; fy: number; big: boolean };
+// The polish pass: one star in four twinkles. On each slow tick (pace.ts SLOW_MS) it shines at full, two thirds or a
+// third, from a fixed hash of its place in the field and the tick's number; the others always shine at full.
+export function twinkle(i: number, tick: number): number {
+	if (i % 4 !== 0 || !Number.isFinite(tick)) return 1;
+	let h = Math.imul(i + 1, 0x9e3779b1) ^ Math.imul(Math.floor(tick) + 7, 0x85ebca6b);
+	h = Math.imul(h ^ (h >>> 15), 0xc2b2ae35);
+	return [1, 0.66, 0.33][((h ^ (h >>> 13)) >>> 0) % 3];
+}
 // The same stars every night: a small fixed random sequence.
 export function starField(count = 48, seed = 7): Star[] {
 	let s = seed >>> 0;

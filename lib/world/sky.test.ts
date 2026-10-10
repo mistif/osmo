@@ -4,7 +4,27 @@ import { baseZoom, newCamera, toScreen } from "./camera";
 import { CLOUD_SHAPES } from "./backdrop";
 import {
 	CLOUD_SPAN, CLOUD_SPEED, CLOUDS, cloudX, daylight, hourOf, hslCss, isNight, PARALLAX, phaseOf, SKY_STOPS, skyAt, skyHslAt, starField, sunAt,
+	twinkle,
 } from "./sky";
+
+describe("the stars twinkling (polish pass)", () => {
+	it("dims one star in four on some ticks, the same way every run, and never the others", () => {
+		const field = starField();
+		const levels = new Set<number>();
+		for (let tick = 0; tick < 40; tick++) {
+			field.forEach((_, i) => {
+				const k = twinkle(i, tick);
+				if (i % 4 !== 0) expect(k).toBe(1);
+				levels.add(k);
+				expect(twinkle(i, tick)).toBe(k);
+			});
+		}
+		expect([...levels].sort()).toEqual([0.33, 0.66, 1]);
+		const changes = Array.from({ length: 40 }, (_, t) => twinkle(0, t)).filter((k, t, all) => t > 0 && k !== all[t - 1]).length;
+		expect(changes).toBeGreaterThan(10);
+		expect(twinkle(0, Number.NaN)).toBe(1);
+	});
+});
 
 describe("the clock", () => {
 	it("is dark at night, light by day, half way at sunrise and sunset", () => {
