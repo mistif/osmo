@@ -593,21 +593,17 @@
 .stage[data-world] .composer {
 	margin-top: auto;
 }
-/* Polish pass: a faint glass band behind the conversation column and the composer, so the words sit on something
-   while the world shows through: blurred where the browser can, a translucent fill where it cannot. It takes no
-   clicks, so the rooms behind the empty column stay clickable (phase 2), and its edges fade into the world. */
-.stage[data-world] .column::before {
-	content: "";
-	position: absolute;
-	inset: 0 -1.5rem;
-	z-index: -1;
-	pointer-events: none;
+/* Polish pass: a faint glass behind the conversation's lines, so the words sit on something while the world shows
+   through: blurred where the browser can, a translucent fill where it cannot. Review B2: it is the log's own box (only
+   as tall as its messages, its top fading under the header with the log's mask), not a band the height of the column,
+   so it never lies over him in the open space below a short conversation; it is only there once there is a line; and
+   his own line (world.module.css .bubble) sits above it. The column's empty space still takes no clicks (phase 2). */
+.stage[data-world] .log:has(> .item:not([hidden])) {
+	border-radius: 1rem;
 	background: color-mix(in oklab, var(--base) 34%, transparent);
-	-webkit-mask-image: linear-gradient(to right, transparent, #000 1.5rem, #000 calc(100% - 1.5rem), transparent);
-	mask-image: linear-gradient(to right, transparent, #000 1.5rem, #000 calc(100% - 1.5rem), transparent);
 }
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-	.stage[data-world] .column::before {
+	.stage[data-world] .log:has(> .item:not([hidden])) {
 		background: color-mix(in oklab, var(--base) 16%, transparent);
 		-webkit-backdrop-filter: blur(6px) saturate(1.1);
 		backdrop-filter: blur(6px) saturate(1.1);

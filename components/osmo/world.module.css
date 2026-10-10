@@ -1,14 +1,18 @@
-/* Osmo's village: the sky canvas, the sun (his heart, figure.tsx), the world canvas, and his line above his head. */
+/* Osmo's village: the sky canvas, the sun (his heart, figure.tsx), the world canvas, and his line above his head.
+   Review B2: the root makes no stacking context of its own (no z-index; the stage's own background, the same
+   var(--base), shows until the sky is drawn). Its pictures (the canvases, the sun, the room buttons) sit at z-index -2
+   in the stage, under the conversation's glass (assistant.module.css, z-index -1 and up), and his line (.bubble) sits
+   above it, so the glass never blurs his words. */
 .world {
 	position: absolute;
 	inset: 0;
-	z-index: -1;
 	overflow: clip;
-	background: var(--base);
+	pointer-events: none; /* its box now lies over the room buttons (z-index -2); they take the pointer themselves */
 }
 .layer {
 	position: absolute;
 	inset: 0;
+	z-index: -2;
 	width: 100%;
 	height: 100%;
 	image-rendering: pixelated;
@@ -18,6 +22,7 @@
 .sun {
 	--figure: clamp(4.5rem, 9vw, 7rem);
 	position: absolute;
+	z-index: -2;
 	left: var(--sun-x, 50%);
 	top: var(--sun-y, 30%);
 	translate: -50% -50%;
@@ -53,6 +58,7 @@
 	left: var(--him-x, 50%);
 	top: var(--him-y, 50%);
 	translate: -50% calc(-100% - 0.75rem);
+	z-index: 1; /* review B2: above the conversation's glass, never blurred by it */
 	display: grid;
 	justify-items: center;
 	gap: 0.25rem;
@@ -105,6 +111,7 @@
 .hits {
 	position: absolute;
 	inset: 0;
+	z-index: -2;
 	pointer-events: none;
 }
 .hit {
