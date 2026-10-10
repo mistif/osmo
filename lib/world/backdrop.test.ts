@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLOUD_CELL, CLOUD_GRIDS, CLOUD_SHAPES, FAR_ISLANDS } from "./backdrop";
+import { BIRD_CELL, BIRD_GRIDS, CLOUD_CELL, CLOUD_GRIDS, CLOUD_SHAPES, FAR_ISLANDS, HILLS, silhouette } from "./backdrop";
 import { gridProblems } from "./raster";
 
 describe("the cloud sheet", () => {
@@ -17,6 +17,21 @@ describe("the cloud sheet", () => {
 	});
 });
 
+describe("a hand-drawn silhouette (polish pass)", () => {
+	it("fills its outline by scanlines, lights its top and hazes its underside", () => {
+		// A square 10 wide from y 0 to 10 with a tree 2 wide from y -4.
+		const s = silhouette([[0, 0], [4, 0], [4, -4], [6, -4], [6, 0], [10, 0], [10, 10], [0, 10]]);
+		expect(s.w).toBe(10);
+		const at = (x: number, y: number) => s.runs.find(([ry, x0, x1]) => ry === y && x >= x0 && x < x1)?.[3];
+		expect(at(5, -4)).toBe(1); // the tree's top is lit
+		expect(at(1, 0)).toBe(1); // the shoulder beside it too
+		expect(at(5, 2)).toBe(0); // the body
+		expect(at(5, 9)).toBe(2); // the underside, in haze
+		expect(at(11, 5)).toBeUndefined();
+		expect(at(5, -5)).toBeUndefined();
+	});
+});
+
 describe("the far islands", () => {
 	it("are two or three shapes, each made of runs inside its own width", () => {
 		expect(FAR_ISLANDS.length).toBeGreaterThanOrEqual(2);
@@ -30,5 +45,44 @@ describe("the far islands", () => {
 				expect([0, 1, 2]).toContain(tone);
 			}
 		}
+	});
+	it("are three places of their own, hand drawn: each has something standing on it and something hanging under it", () => {
+		expect(FAR_ISLANDS).toHaveLength(3);
+		expect(new Set(FAR_ISLANDS.map((f) => f.w)).size).toBe(3);
+		for (const f of FAR_ISLANDS) {
+			const ys = f.runs.map(([y]) => y);
+			expect(Math.min(...ys)).toBeLessThanOrEqual(-8); // a tree, a tower or a hill above its top line
+			expect(Math.max(...ys)).toBeGreaterThanOrEqual(40);
+			// Under it, in its lowest fifth, at least two parts hang apart from each other.
+			const low = Math.max(...ys) - Math.round(Math.max(...ys) / 5);
+			const lowRow = f.runs.filter(([y]) => y === low);
+			expect(lowRow.length).toBeGreaterThanOrEqual(2);
+		}
+	});
+});
+
+describe("the hills (polish pass)", () => {
+	it("are one ridge across their whole width that wraps without a seam", () => {
+		const top = (x: number) => Math.min(...HILLS.runs.filter(([, x0, x1]) => x >= x0 && x < x1).map(([y]) => y));
+		for (let x = 0; x < HILLS.w; x++) expect(Number.isFinite(top(x)), `${x}`).toBe(true);
+		expect(Math.abs(top(0) - top(HILLS.w - 1))).toBeLessThanOrEqual(2);
+		const tops = Array.from({ length: HILLS.w }, (_, x) => top(x));
+		expect(Math.max(...tops) - Math.min(...tops)).toBeGreaterThanOrEqual(24); // hills, not a flat band
+		expect(HILLS.w).toBeGreaterThanOrEqual(640);
+		expect(HILLS.parallax).toBeGreaterThan(0.12); // nearer than the far islands
+		expect(HILLS.parallax).toBeLessThan(0.6);
+		expect(HILLS.drop).toBeGreaterThan(0);
+		expect(Math.max(...HILLS.runs.map(([y]) => y))).toBeGreaterThanOrEqual(72); // deep enough for the haze band to swallow their foot
+	});
+});
+
+describe("the birds (polish pass)", () => {
+	it("are two small dark cells, wings up and wings down", () => {
+		expect(BIRD_GRIDS).toHaveLength(2);
+		for (const g of BIRD_GRIDS) {
+			expect(gridProblems(g, BIRD_CELL.w, BIRD_CELL.h)).toEqual([]);
+			expect(g.join("").replace(/\./g, "")).toMatch(/^[ab]+$/);
+		}
+		expect(BIRD_GRIDS[0]).not.toEqual(BIRD_GRIDS[1]);
 	});
 });
