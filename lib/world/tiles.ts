@@ -13,6 +13,8 @@ export const TILE_IDS = [
 	// Appended in the look pass; the 38 above keep their cells.
 	"window-lit", "window-top-lit", "stone-under-l", "stone-under-r", "stone-hang", "trunk", "trunk-base", "pine-tip",
 	"pine-small", "pine-l", "pine-c", "pine-r", "bush", "tuft", "path", "sign", "fence",
+	// Appended for the rooms (village phase 2); the 55 above keep their cells.
+	"tower-cap", "shelf-window", "forge", "dome-l", "dome", "dome-r",
 ] as const;
 export type TileId = (typeof TILE_IDS)[number];
 
@@ -782,6 +784,121 @@ const FENCE = [
 	"lmkj............",
 ];
 
+// --- Added for the rooms (village phase 2): the study's spire, the library's bookcase window, the workshop's forge
+// and the observatory's glass dome. ---
+
+// The tip of a tower roof: a slim spire of shingles, widening a pixel each side every few rows, lit on its left and
+// shaded on its right; above its point an iron rod with a small teal pennant.
+const TOWER_CAP = [
+	"................",
+	".......dayy.....",
+	".......caxxxw...",
+	".......caww.....",
+	".......ff.......",
+	".......Vf.......",
+	".......if.......",
+	".......Vf.......",
+	"......fihf......",
+	"......fVgf......",
+	"......fihf......",
+	"......fVhf......",
+	".....fVhhgf.....",
+	".....fihggf.....",
+	".....fVhhgf.....",
+	".....fihhgf.....",
+];
+
+// The library's window: a stone surround (the window's jambs, an arched head with a keystone, a sill) in the brick,
+// and behind the glass a bookcase of three shelves: books 1 or 2 wide, lit on their left, one leaning, two lying
+// flat, the glass's glint faint across them. The jambs run the tile's full height and the sill sits between them, so
+// two stacked share one frame, the sill and head between them a stone transom.
+const SHELF_WINDOW = [
+	" dRRRRaeddaRccca",
+	" dcccbaaaaabccba",
+	" dccaaihqyqaacca",
+	" aaajWihryqyxaaa",
+	" eRajWihrymyxaRa",
+	" dcajmllllllkaca",
+	" dcajsrqihqxWaca",
+	" aaajsrtihxqWaaa",
+	" eRajsrtihxqWaRa",
+	" dcajmllllllkaca",
+	" dcajyxqWmqqqaca",
+	" aaajyxhWmrsraaa",
+	" eRajyxhWmrihaRa",
+	" dcajmllllllkaca",
+	" dceeeeeeeeeeeca",
+	" aaaaaaaaaaaaaaa",
+];
+// The glint on the glass, over the books in the upper left.
+const SHELF_GLINT = new Set(["7,3", "6,4", "8,6", "7,7"]);
+const shelfWindow = (x: number, y: number) => {
+	const ch = SHELF_WINDOW[y][x];
+	if (ch === " ") return brickAt(x, y);
+	return SHELF_GLINT.has(`${x},${y}`) ? "s" : ch;
+};
+
+// The forge: an arched hearth in the brick at the foot of the wall, a sooted firebrick back glowing low down, three
+// flames rising from a bed of coals behind an iron grate bar, on a hearth stone that runs the tile's full width, so
+// two side by side make one wide hearth.
+const FORGE: Arch = { cx: 8, cy: 11, r: 7, ring: 2.6, x0: 1, x1: 14 };
+const FIRE = [
+	"................",
+	"................",
+	"................",
+	"................",
+	"................",
+	"................",
+	"................",
+	"........u.......",
+	".....u..tu......",
+	"....ut.utu......",
+	"....tvu.tvt..u..",
+	"..u.utvutvvtutu.",
+	"..aaaaaaaaaaaa..",
+	"..utvutvvtuvtu..",
+	"..fufutfuftufu..",
+	"................",
+];
+function forge(x: number, y: number): string {
+	if (y === 15) return x <= 1 ? "e" : x === 15 ? "c" : "d";
+	if (inOpening(FORGE, x, y)) {
+		const edge = !inOpening(FORGE, x - 1, y) || !inOpening(FORGE, x + 1, y) || !inOpening(FORGE, x, y - 1);
+		if (edge) return "a";
+		const f = FIRE[y][x];
+		if (f !== ".") return f;
+		// The back: soot, faint courses of firebrick, and the fire's glow on its lower part.
+		if (y >= 9) return checker(x, y) ? "f" : "a";
+		return (y === 6 && (x === 4 || x === 5)) || (y === 7 && (x === 11 || x === 12)) ? "b" : "a";
+	}
+	return voussoir(FORGE, x, y) ?? brickAt(x, y);
+}
+
+// The observatory's glass dome: panes in a lattice of lead cames, each pane's glass shading from its upper left into
+// the dark, the sky reflected in the top-left pane, a few star glints. The pattern repeats every 16 pixels, so a dome
+// of any size tiles without a seam. shade darkens the glass toward the right, for the dome's shadow side.
+function domeGlass(x: number, y: number, shade: number): string {
+	const px = wrap(x) & 7;
+	const py = wrap(y) & 7;
+	if (px === 7 || py === 7) return px === 7 && py === 7 ? "b" : "a";
+	const first = wrap(x) < 8 && wrap(y) < 8;
+	if (shade === 0) {
+		if (first && px + py === 5 && py > 0) return "s";
+		if ((x === 12 && y === 5) || (x === 3 && y === 13)) return "p";
+	} else if (first && px + py === 5 && py > 1) return "r";
+	// Each pane catches the sky along its top and its left edge and is dark below; the shadow side keeps less of it.
+	const lit = px === 0 ? 4 : 2;
+	return py <= lit - shade * (1 + (x >> 3)) ? "r" : "q";
+}
+// The dome's edges: transparent above the diagonal, a stone rim along it (lit on the left, shaded on the right), the
+// glass below.
+function domeEdge(x: number, y: number, side: "l" | "r"): string {
+	const d = side === "l" ? x + y - 15 : y - x;
+	if (d < 0) return ".";
+	if (d < 3) return (side === "l" ? "eda" : "dba")[d];
+	return domeGlass(x, y, side === "l" ? 0 : 1);
+}
+
 export const TILES: Readonly<Record<TileId, Grid>> = {
 	snow: make((x, y) => snowCap(x, y)),
 	"snow-edge-l": make((x, y) => snowEdge(x, y, "l")),
@@ -1006,6 +1123,12 @@ export const TILES: Readonly<Record<TileId, Grid>> = {
 	path: make(path),
 	sign: SIGN,
 	fence: FENCE,
+	"tower-cap": TOWER_CAP,
+	"shelf-window": make(shelfWindow),
+	forge: make(forge),
+	"dome-l": make((x, y) => domeEdge(x, y, "l")),
+	dome: make((x, y) => domeGlass(x, y, 0)),
+	"dome-r": make((x, y) => domeEdge(x, y, "r")),
 };
 
 const INDEX = new Map<TileId, number>(TILE_IDS.map((id, i) => [id, i]));

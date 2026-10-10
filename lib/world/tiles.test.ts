@@ -14,10 +14,12 @@ const ADDED = [
 	"window-lit", "window-top-lit", "stone-under-l", "stone-under-r", "stone-hang", "trunk", "trunk-base", "pine-tip",
 	"pine-small", "pine-l", "pine-c", "pine-r", "bush", "tuft", "path", "sign", "fence",
 ];
+// Appended for the rooms (village phase 2), after the 55, so every earlier cell keeps its place.
+const ROOMS = ["tower-cap", "shelf-window", "forge", "dome-l", "dome", "dome-r"];
 // Tiles with no transparent pixel.
 const FILLED: TileId[] = [
 	"snow", "stone", "stone-dark", "brick", "brick-dark", "plank", "beam-h", "glass", "window", "window-top",
-	"door", "door-top", "roof-flat", "step", "pillar",
+	"door", "door-top", "roof-flat", "step", "pillar", "shelf-window", "forge", "dome",
 ];
 // Tiles whose whole surface must read as lit from the top left.
 const LIT: TileId[] = ["snow", "stone", "stone-dark", "brick", "brick-dark", "plank", "beam-h", "roof-flat", "step", "pillar"];
@@ -33,9 +35,12 @@ const mean = (chars: string[]) => {
 };
 
 describe("the tiles", () => {
-	it("are the 38 tiles in the fixed cell order, then the look pass's, appended", () => {
-		expect([...TILE_IDS]).toEqual([...ORDER, ...ADDED]);
-		expect(Object.keys(TILES).sort()).toEqual([...ORDER, ...ADDED].sort());
+	it("are the 38 tiles in the fixed cell order, then the look pass's, then the rooms', appended", () => {
+		expect([...TILE_IDS]).toEqual([...ORDER, ...ADDED, ...ROOMS]);
+		expect(Object.keys(TILES).sort()).toEqual([...ORDER, ...ADDED, ...ROOMS].sort());
+		expect(tileIndex("fence")).toBe(54);
+		expect(tileIndex("tower-cap")).toBe(55);
+		expect(tileIndex("dome-r")).toBe(60);
 		expect(tileIndex("snow")).toBe(0);
 		expect(tileIndex("step")).toBe(30);
 		expect(tileIndex("cloud-small")).toBe(37);
