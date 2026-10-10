@@ -21,5 +21,7 @@ export const ISLAND_LEFT = 3; // tile columns of the island's two ends
 export const ISLAND_RIGHT = 60;
 // Where he stands to lay a block (world px): under it, but never off the island's ends.
 export const standX = (b: Block): number => (Math.min(ISLAND_RIGHT - 1, Math.max(ISLAND_LEFT + 1, b.x)) + 0.5) * TILE;
-export const REST_X = (47 + 0.5) * TILE; // the bench by the lantern (island.ts)
-export const START_X = (32 + 0.5) * TILE; // the hall's door
+export const START_X = (32 + 0.5) * TILE; // the hall's door, and the yard in front of it (Talk's place)
+// At night he sits on the hall's step at its door, between its two lanterns (phase 2 moved him off the old bench,
+// which the workshop now covers).
+export const REST_X = START_X;

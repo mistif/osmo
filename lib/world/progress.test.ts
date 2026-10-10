@@ -73,8 +73,10 @@ describe("his line when the AI is off", () => {
 	it("says it plainly, in full forms", () => {
 		expect(villageLine({ room: "hall", event: "started" })).toBe("I have begun the hall.");
 		expect(villageLine({ room: "hall", event: "finished" })).toBe("The hall is finished.");
+		expect(villageLine({ room: "library", event: "started" })).toBe("I have begun the library.");
+		expect(villageLine({ room: "observatory", event: "finished" })).toBe("The observatory is finished.");
 		for (const event of ["started", "finished"] as const) {
-			const line = villageLine({ room: "hall", event });
+			const line = villageLine({ room: "gate", event });
 			expect(line).not.toMatch(/[!']/);
 			expect(line).not.toMatch(/remember/i);
 		}

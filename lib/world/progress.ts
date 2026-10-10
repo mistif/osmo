@@ -43,7 +43,9 @@ export const markSaved = (p: RoomProgress, laid: number): RoomProgress => ({ ...
 export const saveRow = (p: RoomProgress) => ({ room: p.room, laid: p.laid, started_at: p.startedAt, finished_at: p.finishedAt });
 export const nextIndex = (p: RoomProgress): number | null => (p.laid < p.total ? p.laid : null);
 
-const NAMES: Readonly<Record<RoomId, string>> = { island: "island", hall: "hall" };
+const NAMES: Readonly<Record<RoomId, string>> = {
+	island: "island", hall: "hall", library: "library", workshop: "workshop", study: "study", gate: "gate", observatory: "observatory",
+};
 // His own line for a room starting or finishing, when no model writes it (spec 4).
 export function villageLine(news: VillageNews): string {
 	const name = NAMES[news.room];

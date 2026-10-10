@@ -1,5 +1,5 @@
 // The island (spec 2 and 4, reshaped in the look pass): pre-built, never laid. 58 tiles wide from x 3, rows 20 to 39:
-// scenery above the snow (pines, bushes, tufts, a signpost, a fence, the bench and the lantern where he rests), the snow
+// scenery above the snow (pines, bushes, tufts, a signpost, a fence; phase 2 took out the bench and the lantern post), the snow
 // cap with a flagstone path to the hall, and under it a rock body that tapers in an uneven bowl, steep near the ends
 // (where the snow overhangs), with jutting stones and roots of different lengths hanging below.
 import type { Blueprint } from "./types";
@@ -36,9 +36,6 @@ const THINGS: readonly Thing[] = [
 	[39, 1, "t"],
 	[40, 1, "f"],
 	[41, 1, "f"],
-	[44, 1, "b"],
-	[46, 1, "p"],
-	[46, 2, "L"],
 	[48, 1, "o"],
 	[49, 1, "g"],
 	...BIG_PINE(52),
@@ -96,9 +93,6 @@ export const ISLAND: Blueprint = {
 		o: { tile: "bush", layer: "ground" },
 		S: { tile: "sign", layer: "ground" },
 		f: { tile: "fence", layer: "ground" },
-		b: { tile: "bench", layer: "ground" },
-		p: { tile: "lantern-post", layer: "ground" },
-		L: { tile: "lantern", layer: "ground" },
 		"|": { tile: "trunk-base", layer: "ground" },
 		"(": { tile: "pine-l", layer: "ground" },
 		"#": { tile: "pine-c", layer: "ground" },
