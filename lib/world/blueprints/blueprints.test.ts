@@ -79,9 +79,9 @@ describe("the hall", () => {
 const COUNTS: Readonly<Record<Exclude<CastleRoom, "hall">, number>> = {
 	library: 84,
 	workshop: 101,
-	study: 57,
-	gate: 67,
-	observatory: 147,
+	study: 61,
+	gate: 69,
+	observatory: 149,
 };
 
 describe.each(ROOMS)("the %s", (room) => {

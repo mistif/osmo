@@ -1,5 +1,8 @@
 // The study (spec 4 and 5): ideas and goals. A slim tower 5 by 13 tiles at x 11, y 13, between the gate and the
-// library, with a pointed roof, a tower cap and its door at x 13. Draft from the phase 2 plan; Task 4 refines it.
+// library, standing proud of the castle's string course: its own eave at y 16 under a hipped roof whose flat ridge
+// carries the tower cap (on the ridge, not on a roof peak, so the spire has no finial under it), a bookshelf window level
+// with the string course, a tall window on the hall's window rows and its door at x 13 between two lanterns. Its west
+// corner is the gate's turret.
 import type { Blueprint } from "./types";
 
 const BLANK = ".".repeat(5);
@@ -10,17 +13,17 @@ export const STUDY: Blueprint = {
 	y: 13,
 	map: [
 		"..c..",
-		"..^..",
 		".<=>.",
 		"<===>",
 		"hhhhh",
-		"IBBBI",
-		"IBvBI",
-		"IBwBI",
-		"IkBBI",
-		"IBBBI",
-		"IBaBI",
-		"IBdBI",
+		"BBBBI",
+		"BBkBI",
+		"BBBBI",
+		"BBvBI",
+		"BBwBI",
+		"BBBBI",
+		"BBaBI",
+		"BBdBI",
 		"SSSSS",
 	],
 	decor: [BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, ".l.l.", BLANK, BLANK],
@@ -32,7 +35,6 @@ export const STUDY: Blueprint = {
 		"<": { tile: "roof-left", layer: "roof" },
 		">": { tile: "roof-right", layer: "roof" },
 		"=": { tile: "roof-flat", layer: "roof" },
-		"^": { tile: "roof-peak", layer: "roof" },
 		c: { tile: "tower-cap", layer: "roof" },
 		v: { tile: "window-top", layer: "windows" },
 		w: { tile: "window", layer: "windows" },

@@ -1,7 +1,8 @@
 // The observatory (spec 4 and 5): Settings, and Search's glass. The castle's east end and its highest point: a tower
-// 9 by 17 tiles at x 51, y 9, with a glass dome, a string course halfway up and the door at x 55. Its top row (y 9) is
-// two rows above the hall's peak, inside the two tiles of sky the camera keeps over the hall. Draft from the phase 2
-// plan; Task 4 refines it.
+// 9 by 17 tiles at x 51, y 9, with a glass dome (a drum, then sloping shoulders, then a flat crown), the castle's string
+// course carried across it at y 18, windows above and on the hall's window rows, a banner over the door at x 55 and a
+// lantern each side. Its top row (y 9) is two rows above the hall's peak, inside the two tiles of sky the camera keeps
+// over the hall.
 import type { Blueprint } from "./types";
 
 const BLANK = ".".repeat(9);
@@ -11,25 +12,25 @@ export const OBSERVATORY: Blueprint = {
 	x: 51,
 	y: 9,
 	map: [
-		"...(g)...",
 		"..(ggg)..",
 		".(ggggg).",
+		".ggggggg.",
 		"ThhhhhhhT",
 		"IBBBBBBBI",
 		"IBBvBvBBI",
 		"IBBwBwBBI",
+		"IBBBBBBBI",
 		"IBBBBBBBI",
 		"hhhhhhhhh",
 		"IBBBBBBBI",
 		"IBvBBBvBI",
 		"IBwBBBwBI",
 		"IBBBBBBBI",
-		"IBBBBBBBI",
 		"IBBBaBBBI",
 		"IBBBdBBBI",
 		"SSSSSSSSS",
 	],
-	decor: [BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, ".b.....b.", ".e.....e.", BLANK, BLANK, BLANK, "...l.l...", BLANK, BLANK],
+	decor: [BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, BLANK, "....b....", "....e....", BLANK, BLANK, "...l.l...", BLANK, BLANK],
 	legend: {
 		S: { tile: "step", layer: "floor" },
 		I: { tile: "pillar", layer: "walls" },
