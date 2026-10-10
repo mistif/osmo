@@ -75,3 +75,27 @@
 		transition: none;
 	}
 }
+
+/* Phase 2: a button over each finished room, placed by the loop (canvas px); the keyboard reaches it, the pointer shows
+   a hand. The dev page's "Hit areas" outlines them. */
+.hits {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+}
+.hit {
+	position: absolute;
+	padding: 0;
+	border: 0;
+	border-radius: 0.25rem;
+	background: none;
+	cursor: pointer;
+	pointer-events: auto;
+}
+.hit:focus-visible {
+	outline: 2px solid var(--bone);
+	outline-offset: 2px;
+}
+.world[data-show-hits] .hit {
+	outline: 1px dashed color-mix(in oklab, var(--bone) 70%, transparent);
+}

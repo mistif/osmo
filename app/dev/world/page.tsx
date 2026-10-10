@@ -70,7 +70,7 @@ export default function WorldPage() {
 			said={speaking ? SAID : null}
 			heard={null}
 			persist={false}
-			fixed={{ hour: hour ?? undefined, laid: FILLS[fill].laid, pose: poseKind === "live" ? undefined : poseKind }}
+			fixed={{ hour: hour ?? undefined, rooms: FILLS[fill].laid === undefined ? undefined : { hall: FILLS[fill].laid }, pose: poseKind === "live" ? undefined : poseKind }}
 		/>
 	);
 	return (

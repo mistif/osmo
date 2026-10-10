@@ -3,28 +3,41 @@
 // Osmo's village (spec docs/superpowers/specs/2026-10-09-osmo-village-design.md, phase 1): the sky, the sun that is
 // his heart, the island, the hall he builds, and him with his line above his head. app/assistant.tsx loads it after
 // first paint, and only when NEXT_PUBLIC_OSMO_SHELL2 and NEXT_PUBLIC_OSMO_WORLD are both on.
-import { type RefObject, useEffect, useRef } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { Figure } from "@/components/osmo/figure";
 import type { AgentState } from "@/lib/agent/state";
 import { facingViewer, look, newActor, pose, step, type Actor, type ActorEvent, type ActorKind, type ActorWorld } from "@/lib/world/actor";
 import { blocksOf, REST_X, standX, START_X } from "@/lib/world/blueprints";
-import { HALL } from "@/lib/world/blueprints/hall";
 import { ISLAND } from "@/lib/world/blueprints/island";
-import { GROUND_Y, TILE } from "@/lib/world/blueprints/types";
+import { CASTLE_ROOMS, GROUND_Y, TILE, type CastleRoom } from "@/lib/world/blueprints/types";
+import { createSeenStore } from "@/lib/shell/rail";
+import { TALK, type Route } from "@/lib/shell/route";
+import { safeLocalStorage } from "@/components/osmo/use-rail-dots";
 import { baseZoom, easing, follow, newCamera, settling, toScreen, zoomAt, zoomTo, ZOOM_IN, type Camera, type View } from "@/lib/world/camera";
 import { canvasPainter, loadSheets, type Overrides } from "@/lib/world/canvas-painter";
 import { bearing } from "@/lib/world/face";
 import { FRAME_H } from "@/lib/world/osmo-sprite";
 import { FRAME_MS, nextTickIn, shouldDraw, type DrawKey } from "@/lib/world/pace";
-import { lay, markSaved, needsSave, nextIndex, resume, type RoomProgress, type VillageNews } from "@/lib/world/progress";
+import type { VillageNews } from "@/lib/world/progress";
 import { artFor, drawSky, drawWorld } from "@/lib/world/render";
+import { clickable, hitAreas, placeOf, ROOM_LABELS, roomContext, routeOf, spotX } from "@/lib/world/rooms";
 import { roomEvents, type RoomSignals } from "@/lib/world/signals";
 import { daylight, hourOf, phaseOf, skyAt, starField, sunAt } from "@/lib/world/sky";
-import { loadVillage, saveRoom } from "@/lib/world/village-data";
+import { openRooms, SETTINGS_SEEN, type VillageCounts } from "@/lib/world/unlock";
+import {
+	admit, dueSaves, finishedRooms, laidBlocks, laidCount, layNext, markRoomSaved, nextBlock, outlineBlocks, pinnedVillage, resumeVillage,
+	type Village,
+} from "@/lib/world/village";
+import { readVillageCounts } from "@/lib/world/village-counts";
+import { CLEARED_KEY, loadVillage, saveRoom, VILLAGE_CLEARED } from "@/lib/world/village-data";
 import s from "./world.module.css";
 
-export type WorldControl = { attend(): void; takeNews(): VillageNews | null };
-export type WorldFixed = { hour?: number; laid?: number; pose?: ActorKind };
+// attend: Gur is typing or focused the composer. takeNews: the oldest room started or finished since the last call (for
+// TurnFacts.village). context: the line for the open panel's room (lib/world/rooms.ts roomContext), null in Talk or
+// before the visit's counts are read. The last two are the language lane's to call.
+export type WorldControl = { attend(): void; takeNews(): VillageNews | null; context(): string | null };
+// The dev page's pins: the hour, each room's laid blocks (a room left out is locked), his pose, and the hit areas drawn.
+export type WorldFixed = { hour?: number; rooms?: Partial<Record<CastleRoom, number>>; pose?: ActorKind; hits?: boolean };
 export type WorldProps = {
 	agent: Pick<AgentState, "activations" | "mood">;
 	colorA: string;
@@ -35,17 +48,21 @@ export type WorldProps = {
 	controlRef?: RefObject<WorldControl | null>;
 	persist?: boolean;
 	fixed?: WorldFixed;
+	route?: Route; // the open panel (shell v2); he walks to its room
+	onOpen?(to: Route): void; // a finished room was clicked
 };
-type Engine = { send(e: ActorEvent): void; refresh(): void; takeNews(): VillageNews | null; dispose(): void };
+type Engine = { send(e: ActorEvent): void; refresh(): void; takeNews(): VillageNews | null; context(): string | null; dispose(): void };
+// How the loop tells React which rooms have a hit area now.
+type Hooks = { finished(rooms: CastleRoom[]): void };
 
 // The loop, outside React: it reads the latest props through `live` and writes the canvases and a few CSS variables.
 // Nothing in it may throw into React (a throw inside useEffect would unmount the room): a failure stops the world and
 // logs one warning. `g` is shared with the wrapper so that a throw while starting can undo what was already set up.
 type Guard = { dead: boolean; undo: (() => void)[] };
-function startWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: HTMLCanvasElement, live: { current: WorldProps }): Engine | null {
+function startWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: HTMLCanvasElement, live: { current: WorldProps }, hooks: Hooks): Engine | null {
 	const g: Guard = { dead: false, undo: [] };
 	try {
-		return buildWorld(root, skyCanvas, canvas, live, g);
+		return buildWorld(root, skyCanvas, canvas, live, hooks, g);
 	} catch (err) {
 		g.dead = true;
 		for (const u of g.undo) u();
@@ -54,27 +71,33 @@ function startWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 	}
 }
 
-function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: HTMLCanvasElement, live: { current: WorldProps }, g: Guard): Engine | null {
+function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: HTMLCanvasElement, live: { current: WorldProps }, hooks: Hooks, g: Guard): Engine | null {
 	const ctx = canvas.getContext("2d");
 	const skyCtx = skyCanvas.getContext("2d");
 	if (!ctx || !skyCtx) return null;
 	const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 	const persist = live.current.persist !== false;
 	const ground = blocksOf(ISLAND);
-	const hall = blocksOf(HALL);
 	const stars = starField();
 	const clock = () => performance.now();
+	const iso = () => new Date().toISOString();
 	const hourNow = () => live.current.fixed?.hour ?? hourOf(new Date());
-	const fixedLaid = () => live.current.fixed?.laid;
+	const pinned = () => live.current.fixed?.rooms;
+	const place = () => placeOf(live.current.route ?? TALK);
 
 	let view: View = { w: 0, h: 0 };
 	let actor: Actor = newActor(START_X, clock(), hourNow());
 	let camera: Camera = newCamera(actor.x, view, 2);
-	// The room: unknown until the one read of the visit answers. The dev page: a local hall from nothing.
-	let progress: RoomProgress | null = persist ? null : resume([], "hall", hall.length, new Date().toISOString());
+	// The room: unknown until the one read of the visit answers. The dev page: the whole castle from nothing, room by room.
+	let village: Village | null = persist ? null : resumeVillage([], CASTLE_ROOMS, iso());
+	let counts: VillageCounts | null = null; // read once per visit, with the village
+	// Settings opened in the new shell on this device (the shell marks it, use-rail-dots.ts), or during this visit.
+	let settingsOpened = createSeenStore(safeLocalStorage(), iso).peek(SETTINGS_SEEN) !== null;
+	let gen = 0; // a clear bumps it: a read or a save begun before the clear is dropped
 	let canSave = false;
 	let saving = false;
-	let news: VillageNews | null = null;
+	let news: VillageNews[] = [];
+	let hitKey = "";
 	let overrides: Overrides = {};
 	let scarf = live.current.colorA;
 	// How dark it is, in eighths: the world's art is graded toward night by it (artFor), so a step rebuilds the atlases.
@@ -89,40 +112,85 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 	let last = clock();
 	let timer: ReturnType<typeof setTimeout> | null = null;
 
-	const laidCount = () => fixedLaid() ?? progress?.laid ?? 0;
-	// The block he works on next: none while the count is pinned, before the read answers, or once the hall is done.
-	const nextBlock = () => {
-		if (fixedLaid() !== undefined || !progress) return null;
-		const i = nextIndex(progress);
-		return i === null ? null : hall[i];
+	// The village drawn: the dev page's pinned one, or the real one (null until the visit's read answers).
+	const shown = (): Village | null => {
+		const pin = pinned();
+		return pin ? pinnedVillage(pin, iso()) : village;
 	};
+	// The block he works on next: none while the dev page pins the rooms, before the read answers, or when all is done.
+	const workBlock = () => (pinned() || !village ? null : nextBlock(village));
 	const world = (): ActorWorld => {
 		const sig = live.current.signals;
-		const next = nextBlock();
+		const next = workBlock();
+		const at = place();
 		return {
 			next: next ? standX(next) : null,
 			restX: REST_X,
 			speed: bearing(live.current.agent, Date.now(), hourNow()).speed,
 			held: sig.inTalk || sig.thinking || sig.speaking,
+			visit: at === "yard" ? null : spotX(at),
+			yard: START_X,
 		};
 	};
-	const save = async () => {
-		if (!progress || !canSave || saving) return;
+	// Saves every room that is due, one at a time; a clear in between stops it.
+	const save = async (reason: "block" | "hidden") => {
+		if (!village || !canSave || saving) return;
 		saving = true;
-		const snap = progress;
+		const mine = gen;
 		try {
-			const ok = await saveRoom(snap);
-			if (ok && progress) progress = markSaved(progress, snap.laid);
+			for (const p of dueSaves(village, reason)) {
+				if (gen !== mine) break;
+				const ok = await saveRoom(p);
+				if (ok && village && gen === mine) village = markRoomSaved(village, p.room, p.laid);
+			}
 		} finally {
 			saving = false;
 		}
 	};
+	const saveSoon = (reason: "block" | "hidden") => {
+		void save(reason).catch((err: unknown) => console.warn("[village] Could not save the village.", err));
+	};
 	const onLaid = () => {
-		if (!progress || fixedLaid() !== undefined) return;
-		const r = lay(progress, new Date().toISOString());
-		progress = r.progress;
-		if (r.news) news = r.news;
-		if (needsSave(progress, "block")) void save();
+		if (!village || pinned()) return;
+		const r = layNext(village, iso());
+		village = r.village;
+		if (r.news) news = [...news, r.news].slice(-4);
+		saveSoon("block");
+	};
+	// The visit's one read: the rows and, the first time, the counts the unlock rules and the context line use.
+	const load = () => {
+		const mine = gen;
+		void Promise.all([loadVillage(), counts ? Promise.resolve(counts) : readVillageCounts()])
+			.then(([{ rows, ok }, c]) => {
+				if (g.dead || mine !== gen) return;
+				counts = c;
+				if (!ok) {
+					console.warn("[village] Could not read the village, so he will not build this visit.");
+					return;
+				}
+				village = resumeVillage(rows, openRooms({ counts: c, settingsOpened: settingsOpened || place() === "observatory" }), iso());
+				canSave = true;
+				schedule(0);
+			})
+			.catch((err: unknown) => console.warn("[village] Could not read the village, so he will not build this visit.", err));
+	};
+	// The finished rooms get a button each (React draws them, from hooks.finished); the loop places them over the canvas.
+	const placeHits = (v: Village | null, now: number) => {
+		const rooms = v ? clickable(finishedRooms(v)) : [];
+		const names = rooms.join(",");
+		if (names !== hitKey) {
+			hitKey = names;
+			hooks.finished(rooms);
+		}
+		for (const hit of hitAreas(rooms, camera, view, now)) {
+			const el = root.querySelector<HTMLElement>(`[data-hit="${hit.room}"]`);
+			if (!el) continue;
+			el.style.left = `${hit.x}px`;
+			el.style.top = `${hit.y}px`;
+			el.style.width = `${hit.w}px`;
+			el.style.height = `${hit.h}px`;
+			el.hidden = !hit.seen;
+		}
 	};
 	const apply = (e: ActorEvent) => {
 		const r = step(actor, e, world());
@@ -198,6 +266,11 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 			posed = null;
 			apply({ type: "tick", now, dt });
 		}
+		// Settings opened during the visit: the observatory joins the queue (spec 4).
+		if (!settingsOpened && place() === "observatory") {
+			settingsOpened = true;
+			if (village && counts) village = admit(village, openRooms({ counts, settingsOpened }), iso());
+		}
 		if (live.current.colorA !== scarf || darkAt(hour) !== dark) {
 			scarf = live.current.colorA;
 			dark = darkAt(hour);
@@ -209,28 +282,34 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 		camera = zoomTo(camera, close ? base + ZOOM_IN : base, now, reduced);
 		camera = follow(camera, actor.x, view, now, dt, close);
 		paintSky(hour);
-		const laid = laidCount();
-		const next = nextBlock();
-		const ghost = fixedLaid() !== undefined ? (hall[laid] ?? null) : next;
+		const v = shown();
+		const laid = v ? laidCount(v) : 0;
 		const key: DrawKey = { laid, kind: actor.kind, phase: phaseOf(hour), zoom: zoomAt(camera, now), tx: Math.floor(actor.x / TILE) };
+		root.toggleAttribute("data-show-hits", live.current.fixed?.hits === true);
 		if (shouldDraw(reduced, drawn, key)) {
 			drawn = key;
 			const face = bearing(live.current.agent, Date.now(), hour).face;
 			const sky = skyAt(live.current.colorA, live.current.colorB, hour);
-			drawWorld(painter, { camera, view, now, clock: now, ground, laid: hall.slice(0, laid), ghost, him: { x: actor.x, look: look(actor, now, face) }, sky, dark });
+			drawWorld(painter, {
+				camera, view, now, clock: now, ground, laid: v ? laidBlocks(v) : [], ghost: v ? nextBlock(v) : null, outline: v ? outlineBlocks(v) : [],
+				him: { x: actor.x, look: look(actor, now, face) }, sky, dark,
+			});
 			const head = toScreen(camera, view, now, actor.x, GROUND_Y * TILE - FRAME_H);
 			root.style.setProperty("--him-x", `${head.x}px`);
 			root.style.setProperty("--him-y", `${head.y}px`);
+			placeHits(v, now);
 		}
 		const moving = easing(camera, now) || settling(camera, actor.x, view, now, close);
-		schedule(nextTickIn({ actor, now, easing: moving, hasWork: next !== null || actor.night, reducedMotion: reduced }));
+		// Work waits only in the yard: at a room he stands, so the loop slows to its 3 s tick (and at night with nothing
+		// left to build, too: review M3).
+		schedule(nextTickIn({ actor, now, easing: moving, hasWork: workBlock() !== null && place() === "yard", reducedMotion: reduced }));
 	});
 
 	const onVisibility = guarded(() => {
 		const now = clock();
 		if (document.hidden) {
 			apply({ type: "hidden", now });
-			if (progress && needsSave(progress, "hidden")) void save();
+			saveSoon("hidden");
 			schedule(null);
 		} else {
 			last = now;
@@ -250,15 +329,26 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 	resize.observe(root);
 	g.undo.push(() => resize.disconnect());
 	if (persist) {
-		void loadVillage().then(({ rows, ok }) => {
-			if (g.dead) return;
-			if (!ok) {
-				console.warn("[village] Could not read the village, so he will not build this visit.");
-				return;
-			}
-			progress = resume(rows, "hall", hall.length, new Date().toISOString());
-			canSave = true;
+		load();
+		// Settings cleared the village (village-data.ts): drop everything held, read it again, and he begins the hall.
+		const onCleared = guarded(() => {
+			gen++;
+			village = null;
+			canSave = false;
+			news = [];
+			drawn = null;
+			load();
 			schedule(0);
+		});
+		// Another tab cleared it: the same (village-data.ts writes CLEARED_KEY, which fires "storage" in every other tab).
+		const onStorage = (e: StorageEvent) => {
+			if (e.key === CLEARED_KEY) onCleared();
+		};
+		window.addEventListener(VILLAGE_CLEARED, onCleared);
+		window.addEventListener("storage", onStorage);
+		g.undo.push(() => {
+			window.removeEventListener(VILLAGE_CLEARED, onCleared);
+			window.removeEventListener("storage", onStorage);
 		});
 	}
 	void loadSheets().then((found) => {
@@ -284,15 +374,16 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 			if (!document.hidden) schedule(0);
 		}),
 		takeNews() {
-			const n = news;
-			news = null;
+			const n = news[0] ?? null;
+			news = news.slice(1);
 			return n;
 		},
+		context: () => (counts === null ? null : roomContext(place(), counts)),
 		dispose() {
 			g.dead = true;
 			schedule(null);
 			for (const u of g.undo) u();
-			if (progress && needsSave(progress, "hidden")) void save();
+			saveSoon("hidden");
 		},
 	};
 }
@@ -304,6 +395,8 @@ export function WorldStage(props: WorldProps) {
 	const live = useRef(props);
 	const engine = useRef<Engine | null>(null);
 	const prevSignals = useRef<RoomSignals | null>(null);
+	// The finished rooms that have a hit area, as the loop last reported them.
+	const [hits, setHits] = useState<CastleRoom[]>([]);
 	useEffect(() => {
 		live.current = props;
 	});
@@ -312,7 +405,7 @@ export function WorldStage(props: WorldProps) {
 		const sky = skyRef.current;
 		const canvas = canvasRef.current;
 		if (!root || !sky || !canvas) return;
-		const e = startWorld(root, sky, canvas, live);
+		const e = startWorld(root, sky, canvas, live, { finished: setHits });
 		engine.current = e;
 		return () => {
 			e?.dispose();
@@ -325,6 +418,7 @@ export function WorldStage(props: WorldProps) {
 		controlRef.current = {
 			attend: () => engine.current?.send({ type: "message", now: performance.now() }),
 			takeNews: () => engine.current?.takeNews() ?? null,
+			context: () => engine.current?.context() ?? null,
 		};
 		return () => {
 			controlRef.current = null;
@@ -337,9 +431,13 @@ export function WorldStage(props: WorldProps) {
 		prevSignals.current = next;
 	}, [lines, inTalk, speaking, thinking]);
 	const { fixed, colorA, colorB } = props;
+	const pins = JSON.stringify(fixed?.rooms ?? null);
+	const at = placeOf(props.route ?? TALK);
+	// A new pin, a new place (he sets off at once, even from the 3 s tick) or new buttons to place: draw now.
 	useEffect(() => {
 		engine.current?.refresh();
-	}, [fixed?.hour, fixed?.laid, fixed?.pose, colorA, colorB]);
+	}, [fixed?.hour, pins, fixed?.pose, fixed?.hits, colorA, colorB, at, hits]);
+	const { onOpen } = props;
 
 	return (
 		<div ref={rootRef} className={s.world}>
@@ -348,6 +446,22 @@ export function WorldStage(props: WorldProps) {
 				<Figure />
 			</div>
 			<canvas ref={canvasRef} className={s.layer} aria-hidden="true" />
+			<div className={s.hits}>
+				{hits.map((room) => (
+					<button
+						key={room}
+						type="button"
+						className={s.hit}
+						data-hit={room}
+						aria-label={ROOM_LABELS[room]}
+						hidden
+						onClick={() => {
+							const to = routeOf(room);
+							if (to) onOpen?.(to);
+						}}
+					/>
+				))}
+			</div>
 			<div className={s.bubble}>
 				{props.heard !== null && <p className={s.heard}>{props.heard}</p>}
 				<p className={s.said} aria-live="polite">
