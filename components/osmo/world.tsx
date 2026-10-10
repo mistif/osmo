@@ -6,7 +6,7 @@
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { Figure } from "@/components/osmo/figure";
 import type { AgentState } from "@/lib/agent/state";
-import { facingViewer, look, newActor, pose, step, type Actor, type ActorEvent, type ActorKind, type ActorWorld } from "@/lib/world/actor";
+import { facingViewer, look, newActor, nextLookIn, pose, step, type Actor, type ActorEvent, type ActorKind, type ActorWorld } from "@/lib/world/actor";
 import { blocksOf, REST_X, standX, START_X } from "@/lib/world/blueprints";
 import { ISLAND } from "@/lib/world/blueprints/island";
 import { CASTLE_ROOMS, GROUND_Y, TILE, type CastleRoom } from "@/lib/world/blueprints/types";
@@ -17,7 +17,8 @@ import { baseZoom, easing, follow, newCamera, settling, toScreen, zoomAt, zoomTo
 import { canvasPainter, loadSheets, type Overrides } from "@/lib/world/canvas-painter";
 import { bearing } from "@/lib/world/face";
 import { FRAME_H } from "@/lib/world/osmo-sprite";
-import { FRAME_MS, nextTickIn, shouldDraw, type DrawKey } from "@/lib/world/pace";
+import { chimneyLaid, lifeAt, lifeWants, type Landing } from "@/lib/world/life";
+import { AMBIENT_MS, FRAME_MS, nextTickIn, shouldDraw, SLOW_MS, type DrawKey } from "@/lib/world/pace";
 import type { VillageNews } from "@/lib/world/progress";
 import { artFor, drawSky, drawWorld } from "@/lib/world/render";
 import { clickable, hitAreas, placeOf, ROOM_LABELS, roomContext, routeOf, spotX } from "@/lib/world/rooms";
@@ -36,8 +37,9 @@ import s from "./world.module.css";
 // TurnFacts.village). context: the line for the open panel's room (lib/world/rooms.ts roomContext), null in Talk or
 // before the visit's counts are read. The last two are the language lane's to call.
 export type WorldControl = { attend(): void; takeNews(): VillageNews | null; context(): string | null };
-// The dev page's pins: the hour, each room's laid blocks (a room left out is locked), his pose, and the hit areas drawn.
-export type WorldFixed = { hour?: number; rooms?: Partial<Record<CastleRoom, number>>; pose?: ActorKind; hits?: boolean };
+// The dev page's pins: the hour, each room's laid blocks (a room left out is locked), his pose, the hit areas drawn,
+// and the life in the world (polish pass: "all" keeps snow, smoke and birds going whatever the hour, "none" stops them).
+export type WorldFixed = { hour?: number; rooms?: Partial<Record<CastleRoom, number>>; pose?: ActorKind; hits?: boolean; life?: "all" | "none" };
 export type WorldProps = {
 	agent: Pick<AgentState, "activations" | "mood">;
 	colorA: string;
@@ -97,6 +99,7 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 	let canSave = false;
 	let saving = false;
 	let news: VillageNews[] = [];
+	let landing: Landing | null = null; // the block laid last and when: its pop and its dust (life.ts)
 	let hitKey = "";
 	let overrides: Overrides = {};
 	let scarf = live.current.colorA;
@@ -152,6 +155,8 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 	};
 	const onLaid = () => {
 		if (!village || pinned()) return;
+		const laidNow = nextBlock(village);
+		if (laidNow) landing = { block: laidNow, at: clock() };
 		const r = layNext(village, iso());
 		village = r.village;
 		if (r.news) news = [...news, r.news].slice(-4);
@@ -250,13 +255,16 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 		drawn = null;
 		return true;
 	};
-	// The sky changes slowly: redrawn when the size, the mood colours or the five-minute slot changes.
+	// The sky changes slowly: redrawn when the size, the mood colours or the five-minute slot changes, and while the
+	// stars are out, on each slow tick for the ones that twinkle (none under reduced motion).
 	const paintSky = (hour: number) => {
 		const { colorA, colorB } = live.current;
-		const key = `${view.w}x${view.h}|${colorA}|${colorB}|${Math.floor(hour * 12)}`;
+		const sky = skyAt(colorA, colorB, hour);
+		const tick = !reduced && sky.stars > 0 ? Math.floor(Date.now() / SLOW_MS) : undefined;
+		const key = `${view.w}x${view.h}|${colorA}|${colorB}|${Math.floor(hour * 12)}|${tick ?? ""}`;
 		if (key === skyKey) return;
 		skyKey = key;
-		drawSky(skyPainter, { sky: skyAt(colorA, colorB, hour), stars });
+		drawSky(skyPainter, { sky, stars, tick });
 		const sun = sunAt(hour);
 		root.style.setProperty("--sun-x", `${(sun.fx * 100).toFixed(2)}%`);
 		root.style.setProperty("--sun-y", `${(sun.fy * 100).toFixed(2)}%`);
@@ -297,16 +305,21 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 		camera = follow(camera, actor.x, view, now, dt, close, reduced);
 		paintSky(hour);
 		const v = shown();
-		const laid = v ? laidCount(v) : 0;
-		const key: DrawKey = { laid, kind: actor.kind, phase: phaseOf(hour), zoom: zoomAt(camera, now), tx: Math.floor(actor.x / TILE) };
+		const key: DrawKey = { laid: v ? laidCount(v) : 0, kind: actor.kind, phase: phaseOf(hour), zoom: zoomAt(camera, now), tx: Math.floor(actor.x / TILE) };
 		root.toggleAttribute("data-show-hits", live.current.fixed?.hits === true);
+		// The life in the world this frame (polish pass, life.ts): none under reduced motion.
+		const laid = v ? laidBlocks(v) : [];
+		const life = lifeAt({
+			wallMs: Date.now(), now, view, scale: zoomAt(camera, now), day: daylight(hour) >= 1, night: dark >= 0.5, chimney: chimneyLaid(laid),
+			landing, motion: !reduced, force: live.current.fixed?.life,
+		});
 		if (shouldDraw(reduced, drawn, key)) {
 			drawn = key;
 			const face = bearing(live.current.agent, Date.now(), hour).face;
 			const sky = skyAt(live.current.colorA, live.current.colorB, hour);
 			drawWorld(painter, {
-				camera, view, now, clock: now, ground, laid: v ? laidBlocks(v) : [], ghost: v ? nextBlock(v) : null, outline: v ? outlineBlocks(v) : [],
-				him: { x: actor.x, look: look(actor, now, face) }, sky, dark,
+				camera, view, now, clock: now, ground, laid, ghost: v ? nextBlock(v) : null, outline: v ? outlineBlocks(v) : [],
+				him: { x: actor.x, look: look(actor, now, face, !reduced) }, sky, dark, life,
 			});
 			const head = toScreen(camera, view, now, actor.x, GROUND_Y * TILE - FRAME_H);
 			root.style.setProperty("--him-x", `${head.x}px`);
@@ -316,7 +329,13 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 		const moving = easing(camera, now) || settling(camera, actor.x, view, now, close);
 		// Work waits only in the yard: at a room he stands, so the loop slows to its 3 s tick (and at night with nothing
 		// left to build, too: review M3).
-		schedule(nextTickIn({ actor, now, easing: moving, hasWork: workBlock() !== null && place() === "yard", reducedMotion: reduced }));
+		const wants = lifeWants(life);
+		schedule(
+			nextTickIn({
+				actor, now, easing: moving, hasWork: workBlock() !== null && place() === "yard", reducedMotion: reduced,
+				lookIn: nextLookIn(actor, now, !reduced), ambient: wants === "frames" ? FRAME_MS : wants === "ambient" ? AMBIENT_MS : null,
+			}),
+		);
 	});
 
 	// Back after a hide, a sleep or the back/forward cache: the village may have been cleared elsewhere (another device,
@@ -491,7 +510,7 @@ export function WorldStage(props: WorldProps) {
 	// conversation growing (which of the buttons are covered): draw now.
 	useEffect(() => {
 		engine.current?.refresh();
-	}, [fixed?.hour, pins, fixed?.pose, fixed?.hits, colorA, colorB, at, hits, panelOpen, lines]);
+	}, [fixed?.hour, pins, fixed?.pose, fixed?.hits, fixed?.life, colorA, colorB, at, hits, panelOpen, lines]);
 	const { onOpen } = props;
 
 	return (
