@@ -39,7 +39,7 @@ describe("the atlas", () => {
 		expect([sheetBitmap(art, "tiles", 2).w, sheetBitmap(art, "tiles", 2).h]).toEqual([TILE_IDS.length * 32, 32]);
 		expect([sheetBitmap(art, "clouds", 1).w, sheetBitmap(art, "clouds", 1).h]).toEqual([CLOUD_GRIDS.length * CLOUD_CELL.w, CLOUD_CELL.h]);
 		expect([sheetBitmap(art, "sprite", 3).w, sheetBitmap(art, "sprite", 3).h]).toEqual([18 * 48, 96]);
-		expect([sheetBitmap(art, "faces", 2).w, sheetBitmap(art, "faces", 2).h]).toEqual([9 * 16, 8]);
+		expect([sheetBitmap(art, "faces", 2).w, sheetBitmap(art, "faces", 2).h]).toEqual([12 * 16, 8]); // nine faces, three blinks
 	});
 });
 
@@ -48,7 +48,7 @@ describe("the world", () => {
 		const p = paint(scene(40));
 		snapshot("world-40", p);
 		expect(hashPixels(p.data)).toBe(hashPixels(paint(scene(40)).data));
-		expect(hashPixels(p.data)).toMatchInlineSnapshot(`"6a73edc5"`);
+		expect(hashPixels(p.data)).toMatchInlineSnapshot(`"b35a965d"`);
 	});
 	it("changes the picture when one more block is laid", () => {
 		expect(hashPixels(paint(scene(40)).data)).not.toBe(hashPixels(paint(scene(41)).data));

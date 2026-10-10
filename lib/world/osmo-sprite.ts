@@ -66,15 +66,16 @@ const HEAD_TQ_SIDE = paints(HEAD_SIDE, [3, 5, ["HHHHHHJIIH"]], [3, 6, ["HHHHJIII
 // Three-quarter toward the viewer: both eyes, the far one narrower.
 const HEAD_TQ_FRONT = paints(HEAD_FRONT, [3, 8, ["HIINPNINPH"]], [3, 10, ["HIIIIIHIIH"]]);
 
-// --- Torsos, rows 12 to 24, with no arm drawn; arms and the scarf's tail are painted on. ---
+// --- Torsos, rows 12 to 24, with no arm drawn; arms and the scarf's tail are painted on. The coat's lit edge (4) runs
+// along the top of his shoulders and down his back, the side toward the light. ---
 const TORSO_SIDE = [
 	"....HZZZZZZZH...",
 	"....ZZZZZZZZH...",
-	"....HLLLLLLMH...",
-	"....HLKKKKKMH...",
-	"....HLKKKKKMH...",
-	"....HLKKKKKMH...",
-	"....HLKKKKKMH...",
+	"....H44444LMH...",
+	"....H4KKKKKMH...",
+	"....H4KKKKKMH...",
+	"....H4KKKKKMH...",
+	"....H4KKKKKMH...",
 	"....HLKKKKKMH...",
 	"....HLKKKKKMH...",
 	"....HLKKKKKMH...",
@@ -82,88 +83,120 @@ const TORSO_SIDE = [
 	"....HLKKKKKMH...",
 	"....HMMMMMMMH...",
 ];
-// The near arm in profile, painted at (3, 15): back, half back, down, half forward, forward.
+// Breathing in: the shoulders and chest one row higher (the scarf's lower row tucks under them), the hem stays.
+const TORSO_IN = [TORSO_SIDE[0], "....ZZZZZ44MH...", ...TORSO_SIDE.slice(3, 12), TORSO_SIDE[11], TORSO_SIDE[12]];
+// The near arm in profile, painted from the shoulder (row 15) at column 0; a space keeps what is under it. The near
+// arm swings against the near leg; when it is back, the far hand shows past his chest, and the other way round.
 const ARM = {
-	back: ["    LKH", "   LKH ", "  LKH  ", " HLKH  ", "HLKH   ", "HIJH   ", " HH    ", "       ", "       "],
-	backMid: ["    LKH", "    LKH", "   LKH ", "   LKH ", "  LKH  ", "  IJH  ", "  HH   ", "       ", "       "],
-	down: ["    LKH", "    LKH", "    LKH", "    LKH", "    LKH", "    LKH", "    LKH", "    IJH", "    HHK"],
-	fwdMid: ["    LKH", "    LKH", "     LKH", "     LKH", "      LKH", "      IJH", "      HH", "       ", "       "],
-	fwd: ["    LKH", "    LKKH", "     LKKH", "      LKKH", "       LKH", "        IJH", "        HH", "       ", "       "],
+	back: ["       4KH", "      LKH", "     LKH", "    LKH", "   HLKH", "  HLKH", "  HIJH", "   HH"],
+	backMid: ["       4KH", "      LKH", "      LKH", "     LKH", "     LKH", "    HLKH", "    HIJH", "     HH"],
+	down: ["       4KH", "       LKH", "       LKH", "       LKH", "       LKH", "       LKH", "       LKH", "       IJH", "       HH"],
+	fwdMid: ["       4KH", "       LKH", "        LKH", "        LKH", "         LKH", "         LKH", "         HIJH", "          HH"],
+	fwd: ["       4KH", "       LKKH", "        LKKH", "         LKKH", "          LKH", "          HLKH", "           HIJH", "            HH"],
 } as const;
 type Arm = keyof typeof ARM;
-// Breathing in: the shoulders and chest one row higher (the scarf's lower row tucks under them), the hem stays.
-const TORSO_IN = [TORSO_SIDE[0], "....ZZZZZLLMH...", ...TORSO_SIDE.slice(3, 12), TORSO_SIDE[11], TORSO_SIDE[12]];
-// The scarf's tail behind him, painted at (0, 12): it hangs when he stands and streams back when he walks.
+// The far hand, past his chest or his back, painted at row 19.
+const FAR = {
+	none: [],
+	fwd: ["            MH", "            HJH", "             H"],
+	back: ["   HM", "  HJH", "   H"],
+} as const;
+type Far = keyof typeof FAR;
+// The scarf's tail behind him, painted at (0, 12) of the frame: it hangs when he stands; as he walks it is a short root
+// that the trail cells (TRAIL_CELLS) continue, at the same rows whether his body is up or down.
 const TAIL = {
 	hang: ["...H", "..HZ", ".HZZ", "HZZH", "HHH."],
 	hang2: ["...H", "..HZ", ".HZZ", ".HZH", ".HH."],
-	stream: [".HHH", "HZZZ", "HHZZ", "..HH", "...."],
-	streamLow: ["..HH", "HHZZ", "HZZZ", "HHHH", "...."],
-	streamHigh: ["HHHH", "HZZZ", ".HZZ", "..HH", "...."],
-	flick: ["..HH", ".HZZ", "HZZZ", "HZHH", "HH.."],
+	root: ["HHHH", "ZZZZ", "ZZZZ", "HHHH"],
 } as const;
 type Tail = keyof typeof TAIL;
-const sideTorso = (arm: Arm, tail: Tail) => paints(TORSO_SIDE, [3, 3, ARM[arm]], [0, 0, TAIL[tail]]);
 
-// --- Legs in profile, rows 25 to 31 (the first row is the coat's hem, where the legs come out). ---
+// --- Legs in profile, rows 25 to 31 (one row fewer when he is down): trousers 2 with the shadow side 3, the far leg in
+// 3 and its boot in k, the near boot Q. ---
 const LEGS = {
 	stand: [
-		"....HHMMHMMHH...",
-		".....HMMHMMH....",
-		".....HMMHMMH....",
-		".....HMMHMMHH...",
-		"....HQQQHQQQQH..",
-		"....HQQQHQQQQH..",
-		"....HHHHHHHHHH..",
+		".....H33H223H...",
+		".....H33H223H...",
+		".....H33H223H...",
+		".....H33H223H...",
+		".....HkkHQQQQH..",
+		".....HkkHQQQQQH.",
+		".....HHHHHHHHHH.",
 	],
+	// Contact: the near leg forward, the far leg back, both feet down.
 	contact: [
-		"....HHMMMMMHH...",
-		"....HMMMHMMMH...",
-		"...HMMHHHMMH....",
-		"...HMMH..HMMH...",
-		"..HQQH...HQQH...",
-		"..HQQQH..HQQQH..",
-		"..HHHHH..HHHHH..",
+		"....H33H2223H...",
+		"...H33H.H223H...",
+		"..H33H...H223H..",
+		"..H33H...H223H..",
+		"..HkkkH..HQQQQH.",
+		"..HkkkkH.HQQQQH.",
+		"..HHHHHH.HHHHHH.",
 	],
+	// Down: the body a row lower, the knees bent, the feet closer.
+	down: [
+		"....H33H2223H...",
+		"...H33H.H223H...",
+		"..H33H..H223H...",
+		"..HkkkH.HQQQQH..",
+		"..HkkkkHHQQQQH..",
+		"..HHHHHHHHHHHH..",
+	],
+	// Passing: the near leg straight under him, the far foot lifted behind.
 	pass: [
-		"....HHMMMMHH....",
-		".....HMMMMH.....",
-		"....HMMHMMH.....",
-		"...HMMHHMMH.....",
-		"..HQQH.HQQH.....",
-		"..HHH..HQQQH....",
-		".......HHHHH....",
+		".....H33223H....",
+		".....H33223H....",
+		"....H33H223H....",
+		"..HkkkkH223H....",
+		"..HHHHHHQQQQH...",
+		".......HQQQQQH..",
+		".......HHHHHHH..",
 	],
-	up: [
-		"....HHMMMMHH....",
-		".....HMMMMH.....",
-		".....HMMHMMH....",
-		"....HMMH.HMMH...",
-		"...HQQH..HQQQH..",
-		"...HQQQH.HHHH...",
-		"...HHHHH........",
+	// The other contact: the far leg forward, the near leg back.
+	contact2: [
+		"....H22333H.....",
+		"...H223HH33H....",
+		"..H223H..H33H...",
+		"..H223H..H33H...",
+		"..HQQQH..HkkkkH.",
+		".HQQQQH..HkkkkH.",
+		".HHHHHH..HHHHHH.",
+	],
+	down2: [
+		"....H22333H.....",
+		"...H223HH33H....",
+		"..H223H.H33H....",
+		"..HQQQH.HkkkkH..",
+		".HQQQQHHkkkkH...",
+		".HHHHHHHHHHHH...",
+	],
+	// The other passing: the far leg straight under him, the near foot lifted behind.
+	pass2: [
+		".....H22333H....",
+		"....H223H33H....",
+		"...H223HH33H....",
+		"..HQQQH.H33H....",
+		"..HHHHH.HkkkkH..",
+		"........HkkkkkH.",
+		"........HHHHHHH.",
 	],
 } as const;
-// The down frame: the body one row lower, so the legs are one row shorter and more bent.
-const LEGS_DOWN = [
-	"....HHMMMMMHH...",
-	"....HMMMHMMMH...",
-	"...HMMHHHMMH....",
-	"...HQQH.HQQH....",
-	"...HQQH.HQQQH...",
-	"...HHHH.HHHHH...",
-];
-const side = (arm: Arm, tail: Tail, legs: readonly string[], dip = 0): string[] =>
-	dip ? [...blank(1), ...HEAD_SIDE, ...sideTorso(arm, tail), ...legs] : [...HEAD_SIDE, ...sideTorso(arm, tail), ...legs];
+type Legs = keyof typeof LEGS;
+// A frame in profile: head, torso with the far hand and the near arm, legs; down = the body a row lower.
+function side(arm: Arm, tail: Tail, legs: Legs, far: Far = "none", down = false): string[] {
+	const torso = paints(TORSO_SIDE, [0, 7, FAR[far]], [0, 3, ARM[arm]]);
+	const body = [...(down ? blank(1) : []), ...HEAD_SIDE, ...torso, ...LEGS[legs]];
+	return paint(body, 0, 12, TAIL[tail]);
+}
 
-// --- Facing the viewer: both arms at his sides, a shirt strip down the centre, a belt. ---
+// --- Facing the viewer: both arms at his sides, a shirt strip down the centre, a belt, two legs in trousers. ---
 const BODY_FRONT = [
 	"...HZZZZZZZZH...",
 	"..HZZZZZZZZZZH..",
-	"..HLLLZNNLLLMH..",
-	"..HLKMZNNKMKMH..",
-	"..HLKMZNNKMKMH..",
-	"..HLKMLNNKMKMH..",
+	"..H444ZNN44LMH..",
+	"..H4KMZNNKMKMH..",
+	"..H4KMZNNKMKMH..",
+	"..H4KMLNNKMKMH..",
 	"..HLKMLNNKMKMH..",
 	"..HLKMLNNKMKMH..",
 	"..HLKMLNNKMKMH..",
@@ -171,18 +204,18 @@ const BODY_FRONT = [
 	"..HIJMLKKKMIJH..",
 	"..HHHMLKKKMHHH..",
 	"....HLKKKKMH....",
-	"....HMMHHMMH....",
-	"....HMMHHMMH....",
-	"....HMMHHMMH....",
-	"....HMMHHMMH....",
-	"...HQQQHHQQQH...",
-	"...HQQQHHQQQH...",
+	"....H23HH23H....",
+	"....H23HH23H....",
+	"....H23HH23H....",
+	"....H23HH23H....",
+	"...HQQQHHQQkH...",
+	"...HQQQHHQQkH...",
 	"...HHHHHHHHHH...",
 ];
 // Breathing in: the shoulders rise a row, the hands with them; the head and the feet stay.
 const BODY_FRONT_IN = [
 	BODY_FRONT[0],
-	"..HLZZZZZZZZMH..",
+	"..H4ZZZZZZZZMH..",
 	BODY_FRONT[2],
 	...BODY_FRONT.slice(4, 12),
 	BODY_FRONT[12],
@@ -190,43 +223,88 @@ const BODY_FRONT_IN = [
 	...BODY_FRONT.slice(13),
 ];
 
-// --- Kneeling to build: the head drops to row 6, the back knee on the ground, the front foot planted. ---
+// --- Kneeling to build: the head drops to row 6, the far knee on the ground, the near foot planted by the stone. ---
 const KNEEL_TORSO = [
 	"....HZZZZZZZH...",
 	"....ZZZZZZZZH...",
-	"....HLLLLLLMH...",
-	"....HLKKKKKMH...",
-	"....HLKKKKKMH...",
+	"....H44444LMH...",
+	"....H4KKKKKMH...",
+	"....H4KKKKKMH...",
 	"....HLKKKKKMH...",
 	"....HLKKKKKMH...",
 	"....HMMMMMMMH...",
 ];
 const KNEEL_LEGS = [
-	"....HMMMMMMMH...",
-	"....HMMMHMMMMH..",
-	"....HMMMHHHMMH..",
-	"....HMMMH.HMMH..",
-	"HHHHHMMMHHQQQH..",
-	"HQMMMMMMHHQQQQH.",
-	"HHHHHHHHHHHHHHH.",
+	"....H3332222H...",
+	"....H333H2223H..",
+	"....H333HH223H..",
+	"....H333H.H23H..",
+	"HHHHH333HQQQQH..",
+	"Hk333333HQQQQH..",
+	"HHHHHHHHHHHHHH..",
 ];
-const KNEEL = [...blank(5), ...HEAD_SIDE, ...KNEEL_TORSO, ...KNEEL_LEGS];
 // The stone he lays: e top-left, d, an a outline; on the ground it sits at his toes.
 const BLOCK = ["eda", "dda", "aaa"];
-const SET_BLOCK = [13, 29, BLOCK] as const;
+const KNEEL = paints([...blank(5), ...HEAD_SIDE, ...KNEEL_TORSO, ...KNEEL_LEGS], [13, 29, BLOCK]);
 type Patch = readonly [number, number, readonly string[]];
 const kneel = (tail: Tail, ...patches: Patch[]) => paints(KNEEL, [0, 17, TAIL[tail]], ...patches);
-// His arm from the shoulder (row 20), painted at (5, 20).
-const BUILD = {
-	// The arm drawn back and bent, the stone held close at his chest.
-	hold: ["  LKH  ", "  LKH  ", "  LKKKH", "  HHHIJ"],
-	// The arm raised, the stone lifted to his face.
-	raise: ["        IJH", "       LKH ", "      LKH  ", "     LKH   ", "    LKH    ", "   LKH     ", "  LKH      ", " LKH       "],
-	// The arm reaching down to the ground, pressing the stone in.
-	press: ["  LKH", "   LKH", "    LKH", "     LKH", "      LKH", "       LKH", "       HIJH", "       HIJH", "        HH"],
-	// The hand open over the set stone, the arm coming back.
-	release: ["  LKH", "   LKH", "    LKH", "     LKH", "     HIJH", "     HIHIH"],
+// The hammer in his near hand, painted at (0, 0) of the frame: the handle in wood (l lit, k shadow), the head c with
+// a b shadow and an a outline. Raised over his head, swinging down past his shoulder, on the stone, the rebound.
+const SWING = {
+	raised: [
+		"",
+		"",
+		" aaaaa",
+		" aecca",
+		" abbba",
+		" aaaaa",
+		"   lk",
+		"   lk",
+		"   lk",
+		"   lk",
+		"   lk",
+		"  HIJH",
+		"  HLKH",
+		"   LKH",
+		"   LKH",
+		"    LKH",
+		"    LKH",
+		"     LKH",
+		"     LKH",
+		"      LKH",
+		"       LKH",
+	],
+	down: [
+		"", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+		"            aaaa",
+		"            aeba",
+		"        HIJlacba",
+		"       LKKHkacba",
+		"      LKH   aaaa",
+		"      LKH",
+	],
+	strike: [
+		"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+		"       LKH",
+		"       LKH",
+		"        LKH",
+		"        LKH",
+		"        LKH aaaa",
+		"        HIJlaeba",
+		"         HHkacba",
+		"            acba",
+		"            aaaa",
+	],
+	rebound: [
+		"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+		"       LKH  aaaa",
+		"        LKH aeba",
+		"        HIJlacba",
+		"         HHkacba",
+		"            aaaa",
+	],
 } as const;
+const swing = (s: keyof typeof SWING): Patch => [0, 0, SWING[s]];
 
 // --- Sitting on the bench (its seat is row 24): head tipped forward, the eye closed, a hand in his lap. ---
 const HEAD_SIT = paints(
@@ -240,40 +318,41 @@ const SIT = [
 	...HEAD_SIT,
 	"...HHZZZZZZZZH..",
 	"..HZZZZZZZZZH...",
-	".HZZHLLLLLLMH...",
-	"HZZHHLKLKHKMH...",
-	"HHH.HLKLKHKMH...",
-	"....HLKLKHKMH...",
+	".HZZH4444LLMH...",
+	"HZZHH4KLKHKMH...",
+	"HHH.H4KLKHKMH...",
+	"....H4KLKHKMH...",
 	"....HLKLKHKMH...",
 	"....HLKIJHKMH...",
-	"....HLKHHKKKKHH.",
-	"....HMMMMMMMMMH.",
-	"....HHHHHHHHMMH.",
-	"...........HMMH.",
-	"...........HMMH.",
-	"...........HMMH.",
-	"...........HMMH.",
+	"....HLKHH22222H.",
+	"....H333333333H.",
+	"....HHHHHHHH23H.",
+	"...........H23H.",
+	"...........H23H.",
+	"...........H23H.",
+	"...........H23H.",
 	"..........HQQQH.",
 	"..........HQQQQH",
 	"..........HHHHHH",
 ];
 
+const TURN_SHIRT = ["NH", "NH", "NH", "NH", "NH", "NH"];
 export const FRAMES: Readonly<Record<FrameName, Grid>> = {
-	"idle-1": side("down", "hang", LEGS.stand),
-	"idle-2": [...HEAD_SIDE, ...paints(TORSO_IN, [3, 2, ARM.down], [0, 0, TAIL.hang2]), ...LEGS.stand],
-	"walk-1": side("back", "stream", LEGS.contact),
-	"walk-2": side("backMid", "streamLow", LEGS_DOWN, 1),
-	"walk-3": side("down", "streamHigh", LEGS.pass),
-	"walk-4": side("fwdMid", "stream", LEGS.up),
-	"walk-5": side("fwd", "streamLow", LEGS.contact),
-	"walk-6": side("down", "flick", LEGS.pass),
-	"build-1": kneel("hang", [5, 20, BUILD.hold], [12, 19, BLOCK]),
-	"build-2": kneel("hang2", [5, 12, BUILD.raise], [13, 9, BLOCK]),
-	"build-3": kneel("hang", [5, 20, BUILD.press], SET_BLOCK),
-	"build-4": kneel("hang2", [5, 20, BUILD.release], SET_BLOCK),
-	"turn-1": [...HEAD_TQ_SIDE, ...paints(TORSO_SIDE, [9, 3, ["NH", "NH", "NH", "NH", "NH", "NH"]], [3, 3, ARM.down], [0, 0, TAIL.hang]), ...LEGS.stand],
+	"idle-1": side("down", "hang", "stand"),
+	"idle-2": paint([...HEAD_SIDE, ...paints(TORSO_IN, [0, 2, ARM.down]), ...LEGS.stand], 0, 12, TAIL.hang2),
+	"walk-1": side("back", "root", "contact", "fwd"),
+	"walk-2": side("backMid", "root", "down", "none", true),
+	"walk-3": side("down", "root", "pass"),
+	"walk-4": side("fwd", "root", "contact2", "back"),
+	"walk-5": side("fwdMid", "root", "down2", "none", true),
+	"walk-6": side("down", "root", "pass2"),
+	"build-1": kneel("hang", swing("raised")),
+	"build-2": kneel("hang2", swing("down")),
+	"build-3": kneel("hang", swing("strike")),
+	"build-4": kneel("hang2", swing("rebound")),
+	"turn-1": paint([...HEAD_TQ_SIDE, ...paints(TORSO_SIDE, [10, 3, TURN_SHIRT], [0, 3, ARM.down]), ...LEGS.stand], 0, 12, TAIL.hang),
 	"turn-2": [...HEAD_TQ_FRONT, ...paints(BODY_FRONT, [6, 3, ["ZLNN", "ZLNN", "LLNN", "LLNN", "LLNN", "LLNN"]])],
-	"turn-3": [...HEAD_FRONT, ...paints(BODY_FRONT, [12, 16, ["H"]], [8, 17, ["HQQQQH", "HQQQQH", "HHHHHH"]], [6, 2, ["L", "L"]])],
+	"turn-3": [...HEAD_FRONT, ...paints(BODY_FRONT, [12, 16, ["H"]], [8, 17, ["HQQQQH", "HQQQQH", "HHHHHH"]], [6, 2, ["4", "L"]])],
 	"face-1": [...HEAD_FRONT, ...BODY_FRONT],
 	"face-2": [...HEAD_FRONT, ...BODY_FRONT_IN],
 	"sit-1": SIT,
@@ -289,24 +368,47 @@ export const FACE_H = 4;
 // Where a face patch goes in a facing frame, in sprite pixels.
 export const FACE_AT = { x: 4, y: 7 } as const;
 export const FACES: Readonly<Record<FaceId, Grid>> = {
-	warm: ["........", "NPN..NPN", "..H..H..", "...HH..."],
-	attentive: [".HH..HH.", "NPN..NPN", "........", "...HH..."],
-	tired: ["........", "HHH..HHH", "NPN..NPN", "..HHHH.."],
+	warm: ["N1N..N1N", "NPN..NPN", "J.H..H.J", "...HH..."],
+	attentive: [".HH..HH.", "N1N..N1N", "NPN..NPN", "...HH..."],
+	tired: ["HHH..HHH", "N1N..N1N", "NPN..NPN", "..HHHH.."],
 };
 
-// The pupils within their 3-pixel eyes: -1 to his right (the viewer's left), 0 at Gur, 1 the other way.
+// The pupils within their 3-pixel eyes: -1 to his right (the viewer's left), 0 at Gur, 1 the other way. Since the
+// polish pass an eye is two rows, the glint 1 over the pupil P in one column; the gaze moves that column, glint and
+// pupil together, and leaves the whites N round it.
 const EYES = [[0, 2], [5, 7]] as const;
 export function withGaze(face: Grid, gaze: Gaze): Grid {
 	return face.map((row) => {
 		const out = [...row];
 		for (const [from, to] of EYES) {
-			if (!out.slice(from, to + 1).includes("P")) continue;
-			for (let i = from; i <= to; i++) out[i] = "N";
-			out[from + 1 + gaze] = "P";
+			const i = out.slice(from, to + 1).findIndex((c) => c === "P" || c === "1");
+			if (i < 0) continue;
+			const ch = out[from + i];
+			for (let k = from; k <= to; k++) out[k] = "N";
+			out[from + 1 + gaze] = ch;
 		}
 		return out.join("");
 	});
 }
+// His eyes shut, one patch per face, the same size and place as the face (the polish pass's blink, actor.ts).
+export const BLINKS: Readonly<Record<FaceId, Grid>> = {
+	warm: ["........", "HHH..HHH", "J.H..H.J", "...HH..."],
+	attentive: [".HH..HH.", "JJJ..JJJ", "HHH..HHH", "...HH..."],
+	tired: ["HHH..HHH", "JJJ..JJJ", "HHH..HHH", "..HHHH.."],
+};
 export const faceCell = (face: FaceId, gaze: Gaze): number => FACE_IDS.indexOf(face) * 3 + gaze + 1;
+// The blink cells come after the nine face cells, one per face, in FACE_IDS order.
+export const blinkCell = (face: FaceId): number => FACE_IDS.length * 3 + FACE_IDS.indexOf(face);
 const GAZES: readonly Gaze[] = [-1, 0, 1];
-export const FACE_CELLS: readonly Grid[] = FACE_IDS.flatMap((f) => GAZES.map((g) => withGaze(FACES[f], g)));
+export const FACE_CELLS: readonly Grid[] = [...FACE_IDS.flatMap((f) => GAZES.map((g) => withGaze(FACES[f], g))), ...FACE_IDS.map((f) => BLINKS[f])];
+
+// The polish pass: the end of his scarf streaming behind him as he walks, two cells that swap (actor.ts TRAIL_MS).
+// Facing right, a cell's top-left sits at TRAIL_AT from the sprite's top-left, so its right edge overlaps the root of
+// the tail drawn in the walk frames (columns 0 and 1); facing left the renderer mirrors it onto the other side.
+export const TRAIL_W = 8;
+export const TRAIL_H = 6;
+export const TRAIL_AT = { x: -6, y: 12 } as const;
+export const TRAIL_CELLS: readonly Grid[] = [
+	["ZZHHHHHH", "HZZZZZZZ", ".HHZZZZZ", "...HHHHH", "........", "........"],
+	["......HH", "....HHZZ", "HH.HZZZZ", "ZZHZZZHH", "HZZZHH..", ".HHH...."],
+];
