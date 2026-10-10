@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { look, newActor } from "./actor";
-import { blocksOf } from "./blueprints";
+import { blocksOf, START_X } from "./blueprints";
 import { CASTLE_BLOCKS } from "./blueprints/castle";
 import { HALL } from "./blueprints/hall";
 import { ISLAND } from "./blueprints/island";
@@ -10,7 +10,7 @@ import { PALETTE } from "./palette";
 import { hashPixels, pixelPainter } from "./pixel-painter";
 import { snapshot } from "./png";
 import { colours, parseColor } from "./raster";
-import { artFor, drawSky, drawWorld, GHOST_ALPHA, HAZE, OUTLINE_ALPHA, sheetBitmap, type WorldScene } from "./render";
+import { artFor, drawSky, drawWorld, GHOST_ALPHA, HAZE, OUTLINE_ALPHA, sheetBitmap, type Painter, type WorldScene } from "./render";
 import { BIRD_CELL, CLOUD_CELL, CLOUD_GRIDS, HILLS } from "./backdrop";
 import { hslCss, skyAt, starField, twinkle } from "./sky";
 import { poolsOf, shadowed, SHADOW_ALPHA, variantOf } from "./texture";
@@ -355,6 +355,47 @@ describe("life in the world (polish pass)", () => {
 		expect(life.snow.length + life.smoke.length + life.birds.length + life.dust.length).toBeLessThanOrEqual(MAX_PARTICLES);
 		const night = pixelPainter(VIEW.w, VIEW.h, artFor("hsl(172 38% 50%)", 1));
 		expect(() => drawWorld(night, { ...scene(40), life, dark: 1 })).not.toThrow();
+	});
+});
+
+describe("the cost of a frame (review B1)", () => {
+	// A Painter that passes every call on and counts it.
+	const counting = (p: Painter) => {
+		const calls = { n: 0 };
+		const counted: Painter = {
+			get w() {
+				return p.w;
+			},
+			get h() {
+				return p.h;
+			},
+			clear: () => (calls.n++, p.clear()),
+			gradient: (...a) => (calls.n++, p.gradient(...a)),
+			rect: (...a) => (calls.n++, p.rect(...a)),
+			stamp: (...a) => (calls.n++, p.stamp(...a)),
+			glow: (...a) => (calls.n++, p.glow(...a)),
+			pool: (...a) => (calls.n++, p.pool(...a)),
+			shape: (...a) => (calls.n++, p.shape(...a)),
+		};
+		return { counted, calls };
+	};
+	// The whole castle laid, at night (lit windows, glows and pools) with the hills, the far islands, the haze and every
+	// kind of life at its cap, at 1920 by 1080: 1,758 painter calls today (1,174 stamps for the island's 507 blocks, the
+	// castle's 644, the clouds, the birds and him; 514 rects for the 164 haze rows, the shadow rows, 40 flakes of snow and
+	// the smoke; 45 glows, 18 pools, 6 shapes and the clear). Before the fix the hills alone added 27,357 rects for each
+	// period across the view (84,559 calls in all). The bound leaves room for more art, not for the hills to come back
+	// as runs.
+	it("draws the whole castle at 1920 by 1080, at night with all its life, in under 2,000 painter calls", { timeout: 60_000 }, () => {
+		const view = { w: 1920, h: 1080 };
+		const laid = Object.values(CASTLE_BLOCKS).flat();
+		const life = lifeAt({ wallMs: 20_000, now: 0, view, scale: 1, day: true, night: true, chimney: true, landing: null, motion: true, force: "all" });
+		const { counted, calls } = counting(pixelPainter(view.w, view.h, artFor("hsl(172 38% 50%)", 1)));
+		const him = newActor(START_X, 0, 23);
+		drawWorld(counted, {
+			camera: newCamera(START_X, view, 1), view, now: 0, clock: 0, ground: blocksOf(ISLAND), laid, ghost: null, outline: [],
+			him: { x: him.x, look: look(him, 0, "warm") }, sky: skyAt("hsl(172 38% 50%)", "hsl(212 38% 50%)", 23), dark: 1, life,
+		});
+		expect(calls.n).toBeLessThan(2_000);
 	});
 });
 

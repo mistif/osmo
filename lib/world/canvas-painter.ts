@@ -3,7 +3,7 @@
 import { TILE } from "./blueprints/types";
 import { FRAME_H, FRAME_NAMES, FRAME_W } from "./osmo-sprite";
 import { parseColor, sheetProblem } from "./raster";
-import { CELL, GLOW_STOPS, sheetBitmap, type Art, type Painter, type Sheet } from "./render";
+import { CELL, GLOW_STOPS, shapeCache, sheetBitmap, type Art, type Painter, type Sheet } from "./render";
 import { TILE_IDS } from "./tiles";
 
 export type Overrides = Partial<Record<"tiles" | "sprite", CanvasImageSource>>;
@@ -31,6 +31,15 @@ export function canvasPainter(ctx: CanvasRenderingContext2D, art: Art, overrides
 		atlases.set(key, c);
 		return c;
 	};
+	// The far islands and the hills, each kept as an offscreen canvas per set of tones (review B1): a frame draws each
+	// with one drawImage instead of a rect per run.
+	const shapes = shapeCache((bmp) => {
+		const c = document.createElement("canvas");
+		c.width = bmp.w;
+		c.height = bmp.h;
+		if (bmp.w > 0 && bmp.h > 0) c.getContext("2d")?.putImageData(new ImageData(bmp.data, bmp.w, bmp.h), 0, 0);
+		return c;
+	});
 	return {
 		get w() {
 			return ctx.canvas.width;
@@ -73,6 +82,13 @@ export function canvasPainter(ctx: CanvasRenderingContext2D, art: Art, overrides
 				ctx.drawImage(src, cell * cw, 0, cw, ch, x, y, bw, bh);
 			}
 			ctx.globalAlpha = 1;
+		},
+		shape(shape, tones, x, y, w, h) {
+			const src = shapes(shape, tones);
+			if (w <= 0 || h <= 0 || src.width === 0 || src.height === 0) return;
+			ctx.imageSmoothingEnabled = false;
+			ctx.globalAlpha = 1;
+			ctx.drawImage(src, x, y, w, h);
 		},
 		glow(x, y, r, color, alpha) {
 			const c = parseColor(color);

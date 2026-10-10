@@ -8,6 +8,7 @@
 // while any of this is on screen the loop runs at AMBIENT_MS (pace.ts), or at frame pace for the dust.
 import { WORKSHOP } from "./blueprints/workshop";
 import { TILE, type Block } from "./blueprints/types";
+import { toScreen, type Camera, type View } from "./camera";
 
 export const SNOW_MAX = 40;
 export const SMOKE_MAX = 6;
@@ -119,6 +120,22 @@ export function smokeAt(wallMs: number, always = false): Puff[] {
 		});
 	}
 	return out.slice(-SMOKE_MAX);
+}
+
+// Whether the chimney's plume could be on screen (review M1): the box a puff can reach over its life (it drifts
+// east and rises, and is drawn up to its grown radius round its centre), plus SMOKE_MARGIN world px all round, against
+// the view. Off screen the loop has no smoke to keep its ambient pace for, so the world passes chimney only when this
+// holds; the plume is a pure function of the clock, so it is whole the moment it comes into view.
+export const SMOKE_MARGIN = 16;
+const PLUME = (() => {
+	const life = SMOKE_LIFE_MS / 1000;
+	const r = Math.ceil((2 + life * 1.1) * 1.3); // the largest puff as drawn (render.ts PUFF.grow)
+	return { x0: SMOKE_FROM.x - 1.5 - r, x1: SMOKE_FROM.x + life * 5 + 1.5 + r, y0: SMOKE_FROM.y - life * 9 - r, y1: SMOKE_FROM.y + r };
+})();
+export function smokeSeen(camera: Camera, view: View, now: number): boolean {
+	const a = toScreen(camera, view, now, PLUME.x0 - SMOKE_MARGIN, PLUME.y0 - SMOKE_MARGIN);
+	const b = toScreen(camera, view, now, PLUME.x1 + SMOKE_MARGIN, PLUME.y1 + SMOKE_MARGIN);
+	return b.x > 0 && b.y > 0 && a.x < view.w && a.y < view.h;
 }
 
 // --- A block lands: it pops (drawn a world pixel bigger all round) for POP_MS, and DUST_MAX motes of dust spring

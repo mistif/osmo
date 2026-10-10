@@ -9,7 +9,7 @@ import type { AgentState } from "@/lib/agent/state";
 import { facingViewer, look, newActor, nextLookIn, pose, step, type Actor, type ActorEvent, type ActorKind, type ActorWorld } from "@/lib/world/actor";
 import { blocksOf, REST_X, standX, START_X } from "@/lib/world/blueprints";
 import { ISLAND } from "@/lib/world/blueprints/island";
-import { CASTLE_ROOMS, GROUND_Y, TILE, type CastleRoom } from "@/lib/world/blueprints/types";
+import { CASTLE_ROOMS, GROUND_Y, TILE, type Block, type CastleRoom } from "@/lib/world/blueprints/types";
 import { createSeenStore } from "@/lib/shell/rail";
 import { TALK, type Route } from "@/lib/shell/route";
 import { safeLocalStorage } from "@/components/osmo/use-rail-dots";
@@ -17,7 +17,7 @@ import { baseZoom, easing, follow, newCamera, settling, toScreen, zoomAt, zoomTo
 import { canvasPainter, loadSheets, type Overrides } from "@/lib/world/canvas-painter";
 import { bearing } from "@/lib/world/face";
 import { FRAME_H } from "@/lib/world/osmo-sprite";
-import { chimneyLaid, lifeAt, lifeWants, type Landing } from "@/lib/world/life";
+import { chimneyLaid, lifeAt, lifeWants, smokeSeen, type Landing } from "@/lib/world/life";
 import { AMBIENT_MS, FRAME_MS, nextTickIn, shouldDraw, SLOW_MS, type DrawKey } from "@/lib/world/pace";
 import type { VillageNews } from "@/lib/world/progress";
 import { artFor, drawSky, drawWorld } from "@/lib/world/render";
@@ -110,6 +110,11 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 	const skyPainter = canvasPainter(skyCtx, artFor(scarf));
 	let skyKey = "";
 	let drawn: DrawKey | null = null;
+	// The laid blocks and whether the chimney is among them, kept until the village drawn changes, so they are not
+	// scanned again every frame (review M3).
+	let laidFrom: Village | null = null;
+	let laidKept: readonly Block[] = [];
+	let chimneyKept = false;
 	let posed: { kind: ActorKind; since: number } | null = null;
 	let lastHour = Math.floor(hourNow());
 	let last = clock();
@@ -308,10 +313,17 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 		const key: DrawKey = { laid: v ? laidCount(v) : 0, kind: actor.kind, phase: phaseOf(hour), zoom: zoomAt(camera, now), tx: Math.floor(actor.x / TILE) };
 		root.toggleAttribute("data-show-hits", live.current.fixed?.hits === true);
 		// The life in the world this frame (polish pass, life.ts): none under reduced motion.
-		const laid = v ? laidBlocks(v) : [];
+		if (v !== laidFrom) {
+			laidFrom = v;
+			laidKept = v ? laidBlocks(v) : [];
+			chimneyKept = chimneyLaid(laidKept);
+		}
+		const laid = laidKept;
+		// Smoke counts only while its plume is in view (review M1): off screen it would hold the loop at its ambient pace
+		// for nothing.
 		const life = lifeAt({
-			wallMs: Date.now(), now, view, scale: zoomAt(camera, now), day: daylight(hour) >= 1, night: dark >= 0.5, chimney: chimneyLaid(laid),
-			landing, motion: !reduced, force: live.current.fixed?.life,
+			wallMs: Date.now(), now, view, scale: zoomAt(camera, now), day: daylight(hour) >= 1, night: dark >= 0.5,
+			chimney: !reduced && chimneyKept && smokeSeen(camera, view, now), landing, motion: !reduced, force: live.current.fixed?.life,
 		});
 		if (shouldDraw(reduced, drawn, key)) {
 			drawn = key;

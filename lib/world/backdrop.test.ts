@@ -27,8 +27,24 @@ describe("a hand-drawn silhouette (polish pass)", () => {
 		expect(at(1, 0)).toBe(1); // the shoulder beside it too
 		expect(at(5, 2)).toBe(0); // the body
 		expect(at(5, 9)).toBe(2); // the underside, in haze
+		expect(at(5, 6)).toBe(3); // between the two, the body dithered into the haze
 		expect(at(11, 5)).toBeUndefined();
 		expect(at(5, -5)).toBeUndefined();
+		expect([s.top, s.bottom]).toEqual([-4, 10]);
+	});
+	it("keeps a dithered row as one run, not a run a pixel (review B1)", () => {
+		const s = silhouette([[0, 0], [40, 0], [40, 20], [0, 20]]);
+		const dithered = s.runs.filter(([y]) => y / 20 > 0.5 && y / 20 <= 0.72);
+		expect(dithered.length).toBeGreaterThan(0);
+		for (const [, x0, x1, tone] of dithered) expect([x0, x1, tone]).toEqual([0, 40, 3]);
+	});
+	// The renderer draws each shape from a kept bitmap, so the runs cost nothing a frame; this budget only stops the
+	// dither (or anything else) from exploding them again. Before the fix the hills alone were 27,357 runs; now the
+	// hills are 759 and the three far islands 862 (372, 218, 272): about six runs a row, from the lit rims along the
+	// tree crowns, towers and keels.
+	it("keeps the hills and the far islands to a budget of runs (review B1)", () => {
+		const total = HILLS.runs.length + FAR_ISLANDS.reduce((n, f) => n + f.runs.length, 0);
+		expect(total).toBeLessThan(1_800);
 	});
 });
 
@@ -38,11 +54,13 @@ describe("the far islands", () => {
 		expect(FAR_ISLANDS.length).toBeLessThanOrEqual(3);
 		for (const f of FAR_ISLANDS) {
 			expect(f.runs.length).toBeGreaterThan(20);
-			for (const [, x0, x1, tone] of f.runs) {
+			for (const [y, x0, x1, tone] of f.runs) {
 				expect(x0).toBeGreaterThanOrEqual(0);
 				expect(x1).toBeLessThanOrEqual(f.w);
 				expect(x1).toBeGreaterThan(x0);
-				expect([0, 1, 2]).toContain(tone);
+				expect([0, 1, 2, 3]).toContain(tone);
+				expect(y).toBeGreaterThanOrEqual(f.top);
+				expect(y).toBeLessThan(f.bottom);
 			}
 		}
 	});

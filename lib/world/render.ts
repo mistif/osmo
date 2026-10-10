@@ -1,7 +1,7 @@
 // The village renderer (spec 2). It draws onto a Painter, so the same code draws to a canvas in the browser
 // (canvas-painter.ts) and to plain pixels in the tests (pixel-painter.ts). Drawing order is in drawWorld.
 import type { Look } from "./actor";
-import { BIRD_CELL, BIRD_GRIDS, CLOUD_CELL, CLOUD_GRIDS, CLOUD_SHAPES, FAR_ISLANDS, FAR_PARALLAX, HILLS } from "./backdrop";
+import { BIRD_CELL, BIRD_GRIDS, CLOUD_CELL, CLOUD_GRIDS, CLOUD_SHAPES, FAR_ISLANDS, FAR_PARALLAX, HILLS, type Shape } from "./backdrop";
 import { START_X } from "./blueprints";
 import { GROUND_Y, TILE, type Block } from "./blueprints/types";
 import { toScreen, zoomAt, type Camera, type View } from "./camera";
@@ -13,7 +13,7 @@ import {
 import { PALETTE } from "./palette";
 import { colours, nightColour, parseColor, rasterize, type Bitmap, type Colours, type Grid } from "./raster";
 import { CLOUD_SPAN, CLOUDS, cloudX, hslCss, PARALLAX, SKY_STOPS, skyHslAt, twinkle, type Sky, type Star } from "./sky";
-import { forgeBreath, litOf, poolsOf, SHADOW_ALPHA, SHADOW_COLOR, shadowed, variantOf } from "./texture";
+import { forgeBreath, litOf, poolsOf, SHADOW_ALPHA, SHADOW_COLOR, shadowed, variantOf, type Pool } from "./texture";
 import { TILE_IDS, TILES, tileIndex, type TileId } from "./tiles";
 
 export type Sheet = "tiles" | "sprite" | "faces" | "clouds" | "trail" | "birds";
@@ -39,12 +39,59 @@ export function artFor(scarf: string, dark = 0): Art {
 export const sheetBitmap = (art: Art, sheet: Sheet, scale: number): Bitmap =>
 	rasterize(art.grids[sheet], CELL[sheet].w, CELL[sheet].h, scale, art.colours);
 
+// A silhouette (backdrop.ts Shape) as a bitmap at scale 1 in its tones, row 0 at shape.top, its tone-3 runs dithered
+// pixel by pixel. The painters keep it per shape and tones (shapeCache), so a frame draws each far island and each
+// period of the hills with one call, however many runs they have (review B1: the hills were 27,000 rects a period).
+export function shapeBitmap(shape: Shape, tones: readonly string[]): Bitmap {
+	const w = Math.max(0, shape.w);
+	const h = Math.max(0, shape.bottom - shape.top);
+	const data = new Uint8ClampedArray(w * h * 4);
+	const cs = tones.map((t) => parseColor(t));
+	for (const [y, x0, x1, t] of shape.runs) {
+		if (y < shape.top || y >= shape.bottom) continue;
+		const row = (y - shape.top) * w;
+		for (let x = Math.max(0, x0); x < Math.min(w, x1); x++) {
+			const c = cs[t === 3 ? ((x + y) % 2 === 0 ? 2 : 0) : t];
+			if (!c) continue;
+			const o = (row + x) * 4;
+			data[o] = c[0];
+			data[o + 1] = c[1];
+			data[o + 2] = c[2];
+			data[o + 3] = 255;
+		}
+	}
+	return { w, h, data };
+}
+// What a painter keeps per shape: up to SHAPE_KEEP sets of tones (the tones change only when the sky's tint at that
+// height does, a step at a time), each made once from shapeBitmap.
+export const SHAPE_KEEP = 4;
+export function shapeCache<T>(make: (bmp: Bitmap) => T): (shape: Shape, tones: readonly string[]) => T {
+	const kept = new WeakMap<Shape, Map<string, T>>();
+	return (shape, tones) => {
+		const key = tones.join("|");
+		let byTones = kept.get(shape);
+		if (!byTones) {
+			byTones = new Map();
+			kept.set(shape, byTones);
+		}
+		const hit = byTones.get(key);
+		if (hit !== undefined) return hit;
+		const made = make(shapeBitmap(shape, tones));
+		const oldest = byTones.keys().next();
+		if (byTones.size >= SHAPE_KEEP && !oldest.done) byTones.delete(oldest.value);
+		byTones.set(key, made);
+		return made;
+	};
+}
+
 // What the renderer draws with. Coordinates are whole canvas pixels; stamp draws cell `cell` of a sheet at `scale`
 // with its top-left at (x, y), mirrored left to right when flip is set; given w and h it fills that box instead, pixel
 // for pixel from the cell at `scale` (nearest neighbour: how the world is drawn while the camera eases between two
 // scales). gradient fills the canvas top to bottom through its stops (a share of the height, a colour); glow adds a
 // warm light that falls off from (x, y) to radius r; pool is the same light squashed into an ellipse rx wide and ry
-// tall (the light a lamp spills on the ground).
+// tall (the light a lamp spills on the ground); shape draws a silhouette (backdrop.ts) opaque into the box (x, y, w, h)
+// from its bitmap at scale 1 (shapeBitmap), nearest neighbour, so at a whole scale every run lands where its own rect
+// would.
 export type Stop = readonly [at: number, color: string];
 export interface Painter {
 	readonly w: number;
@@ -55,6 +102,7 @@ export interface Painter {
 	stamp(sheet: Sheet, cell: number, x: number, y: number, scale: number, alpha: number, flip: boolean, w?: number, h?: number): void;
 	glow(x: number, y: number, r: number, color: string, alpha: number): void;
 	pool(x: number, y: number, rx: number, ry: number, color: string, alpha: number): void;
+	shape(shape: Shape, tones: readonly string[], x: number, y: number, w: number, h: number): void;
 }
 // The glow's falloff, shared by both painters: its strength at a share of the radius out from the centre.
 export const GLOW_STOPS: readonly (readonly [at: number, strength: number])[] = [[0, 1], [0.25, 0.55], [0.6, 0.18], [1, 0]];
@@ -140,6 +188,18 @@ export function hillTones(sky: Sky, at: number): [string, string, string] {
 	return [tone(0.74, -2), tone(1.02, 1), tone(0.86, 0)];
 }
 
+// The shadow rows and the pools of light depend only on the blocks, so they are worked out once per list of blocks
+// (the world keeps its lists until the village changes) instead of every frame (review M3).
+const SHADOWS = new WeakMap<readonly Block[], readonly Block[]>();
+const POOLS = new WeakMap<readonly Block[], readonly Pool[]>();
+function keep<T>(cache: WeakMap<readonly Block[], T>, blocks: readonly Block[], make: (blocks: readonly Block[]) => T): T {
+	const hit = cache.get(blocks);
+	if (hit !== undefined) return hit;
+	const made = make(blocks);
+	cache.set(blocks, made);
+	return made;
+}
+
 export function drawWorld(p: Painter, s: WorldScene): void {
 	p.clear();
 	// The zoom: a whole scale at rest, between two while the camera eases (polish pass). Every cell is then drawn from
@@ -161,15 +221,15 @@ export function drawWorld(p: Painter, s: WorldScene): void {
 		// Drawn a scale smaller than the island when zoomed in or on a phone, so they stay far away.
 		const fz = Math.max(1, z - 1);
 		const shift = (START_X - s.camera.x) * FAR_PARALLAX * fz;
+		// Each is one bitmap kept by the painter (review B1), drawn into the box its runs would cover.
 		for (const f of FAR_ISLANDS) {
 			const ox = f.fx * s.view.w + shift - (f.w * fz) / 2;
 			const oy = ground.y - f.lift * fz;
-			const tones = hazeTones(s.sky, s.view.h > 0 ? (oy + 20 * fz) / s.view.h : 0);
-			for (const [y, x0, x1, t] of f.runs) {
-				const left = Math.round(ox + x0 * fz);
-				const top = Math.round(oy + y * fz);
-				p.rect(left, top, Math.round(ox + x1 * fz) - left, Math.round(oy + (y + 1) * fz) - top, tones[t], 1);
-			}
+			const left = Math.round(ox);
+			const top = Math.round(oy + f.top * fz);
+			const w = Math.round(ox + f.w * fz) - left;
+			const h = Math.round(oy + f.bottom * fz) - top;
+			if (seen(left, top, w, h)) p.shape(f, hazeTones(s.sky, s.view.h > 0 ? (oy + 20 * fz) / s.view.h : 0), left, top, w, h);
 		}
 		// 1b. the hills (polish pass): nearer and lower than the far islands, repeating across the view, then the haze
 		// band over their foot
@@ -178,12 +238,13 @@ export function drawWorld(p: Painter, s: WorldScene): void {
 		const period = HILLS.w * fz;
 		const hshift = (START_X - s.camera.x) * HILLS.parallax * fz;
 		if (period > 0) {
+			// One draw of the kept bitmap per period across the view (two or three on a desktop), not one rect per run.
+			const top = Math.round(htop + HILLS.top * fz);
+			const h = Math.round(htop + HILLS.bottom * fz) - top;
 			for (let ox = (((hshift % period) + period) % period) - period; ox < s.view.w; ox += period) {
-				for (const [y, x0, x1, t] of HILLS.runs) {
-					const left = Math.round(ox + x0 * fz);
-					const top = Math.round(htop + y * fz);
-					p.rect(left, top, Math.round(ox + x1 * fz) - left, Math.round(htop + (y + 1) * fz) - top, hTones[t], 1);
-				}
+				const left = Math.round(ox);
+				const w = Math.round(ox + HILLS.w * fz) - left;
+				if (seen(left, top, w, h)) p.shape(HILLS, hTones, left, top, w, h);
 			}
 		}
 		const [hh, hs, hl] = skyHslAt(s.sky, 1);
@@ -221,7 +282,7 @@ export function drawWorld(p: Painter, s: WorldScene): void {
 	const block = (b: Block, alpha: number) => tile(variantOf(lit(b.tile), b.x, b.y), b.x * TILE, b.y * TILE, alpha);
 	for (const b of s.ground) block(b, 1);
 	for (const b of s.laid) block(b, 1);
-	for (const b of shadowed(s.laid)) {
+	for (const b of keep(SHADOWS, s.laid, shadowed)) {
 		const a = toScreen(s.camera, s.view, s.now, b.x * TILE, b.y * TILE);
 		const c = toScreen(s.camera, s.view, s.now, (b.x + 1) * TILE, b.y * TILE + 1);
 		if (seen(a.x, a.y, c.x - a.x, c.y - a.y)) p.rect(a.x, a.y, c.x - a.x, c.y - a.y, SHADOW_COLOR, SHADOW_ALPHA);
@@ -232,10 +293,16 @@ export function drawWorld(p: Painter, s: WorldScene): void {
 	// the smoke from the workshop's chimney
 	const pop = s.life?.pop;
 	if (pop) put("tiles", tileIndex(variantOf(lit(pop.tile), pop.x, pop.y)), pop.x * TILE - 1, pop.y * TILE - 1, TILE + 2, TILE + 2, 1);
+	// World px to screen px as toScreen does (parallax 1), without an object for each corner: a smoke puff is a few
+	// dozen of these rows a frame (review M3).
+	const sx = (wx: number) => Math.round((wx - s.camera.x) * z + s.view.w / 2);
+	const sy = (wy: number) => Math.round((wy - s.camera.y) * z + s.view.h / 2);
 	const dot = (wx: number, wy: number, ww: number, wh: number, color: string, alpha: number) => {
-		const a = toScreen(s.camera, s.view, s.now, wx, wy);
-		const c = toScreen(s.camera, s.view, s.now, wx + ww, wy + wh);
-		if (c.x > a.x && c.y > a.y && seen(a.x, a.y, c.x - a.x, c.y - a.y)) p.rect(a.x, a.y, c.x - a.x, c.y - a.y, color, alpha);
+		const ax = sx(wx);
+		const ay = sy(wy);
+		const cx = sx(wx + ww);
+		const cy = sy(wy + wh);
+		if (cx > ax && cy > ay && seen(ax, ay, cx - ax, cy - ay)) p.rect(ax, ay, cx - ax, cy - ay, color, alpha);
 	};
 	const dust = graded(DUST, dark);
 	for (const m of s.life?.dust ?? []) dot(Math.round(m.x), Math.round(m.y), m.size, m.size, dust, m.alpha);
@@ -256,11 +323,13 @@ export function drawWorld(p: Painter, s: WorldScene): void {
 	}
 	// 5b. after dark, each lantern and door spills a soft ellipse of warm light on the ground under it
 	if (dark > 0) {
-		for (const pool of poolsOf([...s.ground, ...s.laid])) {
-			const c = toScreen(s.camera, s.view, s.now, pool.x, pool.y);
-			const rx = pool.rx * z;
-			const ry = pool.ry * z;
-			if (seen(c.x - rx, c.y - ry, 2 * rx, 2 * ry)) p.pool(c.x, c.y, rx, ry, PALETTE.t, pool.strength * dark);
+		for (const pools of [keep(POOLS, s.ground, poolsOf), keep(POOLS, s.laid, poolsOf)]) {
+			for (const pool of pools) {
+				const c = toScreen(s.camera, s.view, s.now, pool.x, pool.y);
+				const rx = pool.rx * z;
+				const ry = pool.ry * z;
+				if (seen(c.x - rx, c.y - ry, 2 * rx, 2 * ry)) p.pool(c.x, c.y, rx, ry, PALETTE.t, pool.strength * dark);
+			}
 		}
 	}
 	// 6. him, his feet on the island's top edge; 7. his face, never mirrored
@@ -276,13 +345,15 @@ export function drawWorld(p: Painter, s: WorldScene): void {
 	if (look.face) put("faces", look.blink ? blinkCell(look.face) : faceCell(look.face, look.gaze), hx + FACE_AT.x, hy + FACE_AT.y, FACE_W, FACE_H, 1);
 	// 8. after dark, the warm light of each lamp and lit window falls on what is round it
 	if (dark > 0) {
-		for (const b of [...s.ground, ...s.laid]) {
-			const light = LIGHTS[lit(b.tile)];
-			if (!light) continue;
-			const c = toScreen(s.camera, s.view, s.now, b.x * TILE + light.x, b.y * TILE + light.y);
-			const r = light.r * z;
-			const strength = light.strength * (b.tile === "forge" ? forgeBreath(s.now) : 1);
-			if (seen(c.x - r, c.y - r, 2 * r, 2 * r)) p.glow(c.x, c.y, r, PALETTE.t, strength * dark);
+		for (const blocks of [s.ground, s.laid]) {
+			for (const b of blocks) {
+				const light = LIGHTS[lit(b.tile)];
+				if (!light) continue;
+				const c = toScreen(s.camera, s.view, s.now, b.x * TILE + light.x, b.y * TILE + light.y);
+				const r = light.r * z;
+				const strength = light.strength * (b.tile === "forge" ? forgeBreath(s.now) : 1);
+				if (seen(c.x - r, c.y - r, 2 * r, 2 * r)) p.glow(c.x, c.y, r, PALETTE.t, strength * dark);
+			}
 		}
 	}
 	// 9. polish pass: snow at night, in front of everything; screen px

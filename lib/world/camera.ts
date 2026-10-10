@@ -69,18 +69,20 @@ export function zoomTo(c: Camera, level: number, now: number, instant = false): 
 }
 
 // Where the camera heads for (centre, world px): he stays at the edge of the dead zone, or is centred when close. The
-// dead zone is measured from the aim, not from the gliding centre, so a glide never drags the zone along with it.
+// dead zone is measured from the aim, not from the gliding centre, so a glide never drags the zone along with it. The
+// aim is taken at the zoom the camera is heading for, not the one drawn now, so a zoom alone never moves it: zooming
+// back out, the glide starts with the zoom and runs alongside it as one motion (review M2), instead of being restarted
+// every frame while the zoom eases and only then setting off. vw: the visible width now, for the clamp at the edges.
 function aim(c: Camera, heX: number, v: View, now: number, close: boolean) {
 	const z = zoomAt(c, now);
-	const vw = v.w / z;
-	const vh = v.h / z;
-	const half = (isPhone(v) ? DEAD.phone : DEAD.desk) * vw;
+	const vwTo = v.w / c.to;
+	const half = (isPhone(v) ? DEAD.phone : DEAD.desk) * vwTo;
 	let tx = c.aimX;
 	if (close) tx = heX;
 	else if (heX > c.aimX + half) tx = heX - half;
 	else if (heX < c.aimX - half) tx = heX + half;
-	const ty = close ? GROUND_PX - HEAD_PX : centreY(vh);
-	return { z, vw, tx: clampAxis(tx, vw, WORLD_W * TILE), ty };
+	const ty = close ? GROUND_PX - HEAD_PX : centreY(v.h / c.to);
+	return { z, vw: v.w / z, tx: clampAxis(tx, vwTo, WORLD_W * TILE), ty };
 }
 // How much of the lag is left at `now` (1 at the start of a glide, 0 once it is over).
 const lagLeft = (c: Camera, now: number) => 1 - easeOutCubic((now - c.glideAt) / GLIDE_MS);
@@ -107,8 +109,8 @@ export function follow(c: Camera, heX: number, v: View, now: number, dt: number,
 }
 // True while the centre is more than half a screen pixel from where it heads for, so the loop keeps its frame pace.
 export function settling(c: Camera, heX: number, v: View, now: number, close: boolean): boolean {
-	const { z, tx, ty } = aim(c, heX, v, now, close);
-	return Math.abs(tx - c.x) * z > 0.5 || Math.abs(ty - c.y) * z > 0.5;
+	const { z, vw, tx, ty } = aim(c, heX, v, now, close);
+	return Math.abs(clampAxis(tx, vw, WORLD_W * TILE) - c.x) * z > 0.5 || Math.abs(ty - c.y) * z > 0.5;
 }
 
 // World px to canvas px, rounded so the pixels stay crisp. parallax < 1 for the layers behind the island.

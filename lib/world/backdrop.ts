@@ -71,16 +71,21 @@ export const CLOUD_SHAPES = CLOUD_GRIDS.map((g) => {
 });
 
 // --- The far islands and the hills: silhouettes as runs of pixels, one tone each (0 the body, 1 the lit rim along
-// the top, 2 the hazier underside). y is down from the silhouette's top line (negative above it: its trees, towers and
-// hills); x is across from its left end. ---
-export type Run = readonly [y: number, x0: number, x1: number, tone: 0 | 1 | 2];
-export type FarIsland = { runs: readonly Run[]; w: number; fx: number; lift: number };
+// the top, 2 the hazier underside, 3 the body dithered into that haze: tone 2 on every pixel whose x + y is even, tone
+// 0 on the rest). y is down from the silhouette's top line (negative above it: its trees, towers and hills); x is
+// across from its left end. A Shape also knows its rows: from top to bottom (exclusive). The renderer draws each shape
+// as one bitmap (render.ts shapeBitmap, kept by the painter), not run by run. ---
+export type Tone = 0 | 1 | 2 | 3;
+export type Run = readonly [y: number, x0: number, x1: number, tone: Tone];
+export type Shape = { runs: readonly Run[]; w: number; top: number; bottom: number };
+export type FarIsland = Shape & { fx: number; lift: number };
 export type Pt = readonly [x: number, y: number];
 
 // A hand-drawn outline (a closed polygon of points, clockwise or not) filled by scanlines into runs. A filled pixel
 // with sky one or two pixels above it is the lit rim; from hazeFrom of the way down to the outline's lowest point the
-// body dithers into the haze, and from hazeAll on it is all haze.
-export function silhouette(outline: readonly Pt[], hazeFrom = 0.5, hazeAll = 0.72): { runs: Run[]; w: number } {
+// body dithers into the haze (one run of tone 3, so the dither does not split a row into one-pixel runs: review B1),
+// and from hazeAll on it is all haze.
+export function silhouette(outline: readonly Pt[], hazeFrom = 0.5, hazeAll = 0.72): Shape {
 	const ys = outline.map((p) => p[1]);
 	const top = Math.floor(Math.min(...ys));
 	const bottom = Math.ceil(Math.max(...ys));
@@ -103,9 +108,9 @@ export function silhouette(outline: readonly Pt[], hazeFrom = 0.5, hazeAll = 0.7
 	const runs: Run[] = [];
 	for (const [y, row] of [...filled.entries()].sort((a, b) => a[0] - b[0])) {
 		const t = bottom > 0 ? y / bottom : 0;
-		const tone = (x: number): 0 | 1 | 2 => {
+		const tone = (x: number): Tone => {
 			if (!has(x, y - 1) || !has(x, y - 2)) return 1;
-			return t > hazeAll || (t > hazeFrom && (x + y) % 2 === 0) ? 2 : 0;
+			return t > hazeAll ? 2 : t > hazeFrom ? 3 : 0;
 		};
 		const xs = [...row].sort((a, b) => a - b);
 		let start = xs[0];
@@ -117,7 +122,8 @@ export function silhouette(outline: readonly Pt[], hazeFrom = 0.5, hazeAll = 0.7
 			start = x;
 		}
 	}
-	return { runs, w };
+	const rows = runs.map((r) => r[0]);
+	return { runs, w, top: Math.min(...rows), bottom: Math.max(...rows) + 1 };
 }
 
 // fx: where its centre sits across the view (a share of the width); lift: how far its top line stands above the
@@ -187,7 +193,7 @@ export const FAR_PARALLAX = 0.12;
 // The hills (polish pass): a long ridge nearer than the far islands, its top line HILLS.drop world px below the
 // island's snow (they lie lower, the island floats above them), repeating every HILLS.w px across the view, moving at
 // HILLS.parallax. Its foot sinks into the haze band the renderer lays at the horizon (render.ts HAZE).
-export type Hills = { runs: readonly Run[]; w: number; drop: number; parallax: number };
+export type Hills = Shape & { drop: number; parallax: number };
 // The ridge: four rounded summits (the highest at y 0, the last a double crown), a long gentle shoulder lined with
 // trees falling east of the highest, and its two ends at the same height so it wraps.
 const RIDGE: readonly Pt[] = [

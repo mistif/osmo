@@ -197,6 +197,25 @@ describe("gliding (polish pass)", () => {
 		const c = follow(settle(newCamera(512, V, 2), 512), 600, V, 0, 33, true, true);
 		expect(c.x).toBe(600);
 	});
+	it("zooms back out in one motion: the glide starts with the zoom and runs alongside it (review M2)", () => {
+		const v = { w: 1200, h: 800 };
+		let c = zoomTo(newCamera(START_X, v, 1), 3, 0);
+		for (let t = 33; t < 3000; t += 33) c = follow(c, START_X, v, t, 33, true); // close up on him, settled
+		const T = 3003;
+		c = zoomTo(c, 1, T); // he turns back to work
+		const ys: number[] = [];
+		const glides: number[] = [];
+		for (let t = T; t <= T + GLIDE_MS + 66; t += 33) {
+			c = follow(c, START_X, v, t, 33, false);
+			ys.push(c.y);
+			glides.push(c.glideAt);
+		}
+		expect(new Set(glides)).toEqual(new Set([T])); // one glide, started with the zoom, never restarted by it
+		expect(Math.abs(ys[3] - ys[0])).toBeGreaterThan(20); // already well under way 100 ms in, while the zoom eases
+		for (let i = 1; i < ys.length; i++) expect(ys[i]).toBeLessThanOrEqual(ys[i - 1] + 1e-9); // one way, no hold then slide
+		expect(c.y).toBeCloseTo(newCamera(START_X, v, 1).y, 6); // there by the end of the glide
+		expect(settling(c, START_X, v, T + GLIDE_MS + 66, false)).toBe(false);
+	});
 	it("counts the glide as settling until it is within half a pixel", () => {
 		const c = follow(settle(newCamera(512, V, 2), 512), 600, V, 0, 33, true);
 		expect(settling(c, 600, V, 0, true)).toBe(true);

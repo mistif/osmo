@@ -1,7 +1,7 @@
 // A Painter over a plain RGBA buffer, with a canvas's source-over blending. The tests draw with it (node has no
 // canvas, and no package for one is added) and hash the pixels.
 import { parseColor, type Bitmap } from "./raster";
-import { CELL, GLOW_STOPS, sheetBitmap, type Art, type Painter } from "./render";
+import { CELL, GLOW_STOPS, shapeCache, sheetBitmap, type Art, type Painter } from "./render";
 
 export type PixelPainter = Painter & { readonly data: Uint8ClampedArray<ArrayBuffer> };
 
@@ -16,6 +16,7 @@ export function pixelPainter(w: number, h: number, art: Art): PixelPainter {
 		data[o + 2] = Math.round(b * a + data[o + 2] * keep);
 		data[o + 3] = Math.round(255 * a + data[o + 3] * keep);
 	};
+	const shapes = shapeCache((bmp) => bmp);
 	return {
 		w,
 		h,
@@ -72,6 +73,22 @@ export function pixelPainter(w: number, h: number, art: Art): PixelPainter {
 					const sx = Math.floor(((flip ? bw - 1 - dx : dx) * cw) / bw);
 					const s = (sy * bmp.w + cell * cw + sx) * 4;
 					blend((ty * w + tx) * 4, bmp.data[s], bmp.data[s + 1], bmp.data[s + 2], (bmp.data[s + 3] / 255) * alpha);
+				}
+			}
+		},
+		// The kept bitmap into the box, nearest neighbour, as the canvas painter's drawImage with smoothing off.
+		shape(shape, tones, x, y, bw, bh) {
+			const bmp = shapes(shape, tones);
+			if (bw <= 0 || bh <= 0 || bmp.w === 0 || bmp.h === 0) return;
+			for (let dy = 0; dy < bh; dy++) {
+				const ty = y + dy;
+				if (ty < 0 || ty >= h) continue;
+				const sy = Math.floor((dy * bmp.h) / bh);
+				for (let dx = 0; dx < bw; dx++) {
+					const tx = x + dx;
+					if (tx < 0 || tx >= w) continue;
+					const s = (sy * bmp.w + Math.floor((dx * bmp.w) / bw)) * 4;
+					blend((ty * w + tx) * 4, bmp.data[s], bmp.data[s + 1], bmp.data[s + 2], bmp.data[s + 3] / 255);
 				}
 			}
 		},

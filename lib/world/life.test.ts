@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { CASTLE_BLOCKS } from "./blueprints/castle";
+import { START_X } from "./blueprints";
 import { TILE, type Block } from "./blueprints/types";
+import { newCamera } from "./camera";
 import {
 	BIRD_CYCLE_MS, BIRD_FLIGHT_MS, BIRDS_MAX, birdsAt, CHIMNEY, chimneyLaid, DUST_MAX, DUST_MS, dustAt, lifeAt, lifeWants, MAX_PARTICLES,
-	NO_LIFE, particleCount, POP_MS, popOf, SMOKE_CYCLE_MS, SMOKE_FROM, SMOKE_LIFE_MS, SMOKE_MAX, SMOKE_SPELL_MS, smokeAt, SNOW_CYCLE_MS,
+	NO_LIFE, particleCount, POP_MS, popOf, SMOKE_CYCLE_MS, SMOKE_FROM, SMOKE_LIFE_MS, SMOKE_MAX, SMOKE_SPELL_MS, smokeAt, smokeSeen, SNOW_CYCLE_MS,
 	SNOW_MAX, SNOW_ON_MS, snowAt, snowShare, type LifeInput,
 } from "./life";
 
@@ -119,6 +121,26 @@ describe("smoke", () => {
 			expect(p.alpha).toBeGreaterThanOrEqual(0);
 			expect(p.alpha).toBeLessThanOrEqual(0.55);
 		}
+	});
+	it("keeps the ambient pace only while the chimney's plume is in view, with a margin (review M1)", () => {
+		const phone = { w: 375, h: 700 };
+		const desk = { w: 1920, h: 1080 };
+		const inSpell = { ...base, wallMs: 5_000, day: false, night: false };
+		const wants = (view: { w: number; h: number }, x: number, scale: number) => {
+			const camera = newCamera(x, view, scale);
+			return lifeWants(lifeAt({ ...inSpell, view, scale, chimney: chimneyLaid(CASTLE_BLOCKS.workshop) && smokeSeen(camera, view, 0) }));
+		};
+		// On a phone at the yard the chimney is well off to the side: no smoke to keep the loop going.
+		expect(smokeSeen(newCamera(START_X, phone, 2), phone, 0)).toBe(false);
+		expect(wants(phone, START_X, 2)).toBeNull();
+		// The same phone looking at the workshop, and a desktop at the yard, see it.
+		expect(smokeSeen(newCamera(SMOKE_FROM.x, phone, 2), phone, 0)).toBe(true);
+		expect(wants(phone, SMOKE_FROM.x, 2)).toBe("ambient");
+		expect(wants(desk, START_X, 1)).toBe("ambient");
+		// The margin: a plume just past the edge still counts, one well past it does not.
+		const edge = (dx: number) => smokeSeen(newCamera(SMOKE_FROM.x + dx, phone, 2), phone, 0);
+		expect(edge(-(phone.w / 4 + 20))).toBe(true); // the chimney 20 world px past the right edge
+		expect(edge(-(phone.w / 4 + 60))).toBe(false); // 60 px past it
 	});
 	it("stops between spells once the last puff has faded", () => {
 		expect(smokeAt(SMOKE_SPELL_MS + SMOKE_LIFE_MS + 100)).toEqual([]);
