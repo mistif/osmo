@@ -10,9 +10,10 @@ import { PALETTE } from "./palette";
 import { hashPixels, pixelPainter } from "./pixel-painter";
 import { snapshot } from "./png";
 import { colours, parseColor } from "./raster";
-import { artFor, drawSky, drawWorld, GHOST_ALPHA, OUTLINE_ALPHA, sheetBitmap, type WorldScene } from "./render";
-import { CLOUD_CELL, CLOUD_GRIDS } from "./backdrop";
-import { hslCss, skyAt, starField } from "./sky";
+import { artFor, drawSky, drawWorld, GHOST_ALPHA, HAZE, OUTLINE_ALPHA, sheetBitmap, type WorldScene } from "./render";
+import { CLOUD_CELL, CLOUD_GRIDS, HILLS } from "./backdrop";
+import { hslCss, skyAt, starField, twinkle } from "./sky";
+import { poolsOf, shadowed, SHADOW_ALPHA, variantOf } from "./texture";
 import { TILE_IDS, TILES } from "./tiles";
 
 const art = artFor("hsl(172 38% 50%)");
@@ -48,7 +49,7 @@ describe("the world", () => {
 		const p = paint(scene(40));
 		snapshot("world-40", p);
 		expect(hashPixels(p.data)).toBe(hashPixels(paint(scene(40)).data));
-		expect(hashPixels(p.data)).toMatchInlineSnapshot(`"b35a965d"`);
+		expect(hashPixels(p.data)).toMatchInlineSnapshot(`"5598240d"`);
 	});
 	it("changes the picture when one more block is laid", () => {
 		expect(hashPixels(paint(scene(40)).data)).not.toBe(hashPixels(paint(scene(41)).data));
@@ -85,7 +86,8 @@ describe("the world", () => {
 				const wx = Math.floor((x - VIEW.w / 2) / 2 + s.camera.x);
 				const block = s.ground.find((b) => b.y === GROUND_Y && b.x === Math.floor(wx / TILE));
 				expect(block?.tile, `${x},${y}`).toBe("snow");
-				const letter = TILES.snow[(y - rows.y0) >> 1][wx % TILE];
+				// Since the polish pass a snow cell may show a variant (texture.ts); its top rows are snow as well.
+				const letter = TILES[variantOf("snow", Math.floor(wx / TILE), GROUND_Y)][(y - rows.y0) >> 1][wx % TILE];
 				expect(px(withIsland, x, y), `the island's snow at ${x},${y}`).toEqual([...cols[letter]]);
 				const [r, g, b, a] = px(withIsland, x, y);
 				expect(a, `${x},${y}`).toBe(255);
@@ -208,6 +210,72 @@ describe("the world", () => {
 			}
 		}
 		expect(checked).toBeGreaterThan(2000);
+	});
+	it("lays a row of shadow under the eaves' timber, over the top of the wall below (polish pass)", () => {
+		const done = scene(hall.length);
+		const s = { ...done, ghost: null, camera: { ...done.camera, y: 320 } }; // up a little: world y 270 to 370 in view
+		const under = shadowed(s.laid).filter((b) => b.y === 19 && b.x >= 29 && b.x <= 35); // under the beam at y 18
+		expect(under.length).toBeGreaterThan(0);
+		const b = under[0];
+		const data = paint(s).data;
+		const at = toScreen(s.camera, VIEW, 0, b.x * TILE, b.y * TILE);
+		const cols = colours();
+		// The wall's top row, drawn: darker than the tile's own pixel by the shadow's share; the row below it is not.
+		const tileId = variantOf(b.tile, b.x, b.y);
+		for (let dx = 0; dx < 2 * TILE; dx += 5) {
+			const own = cols[TILES[tileId][0][dx >> 1]];
+			const drawn = px(data, at.x + dx, at.y);
+			expect(drawn[0], `${dx}`).toBe(Math.round(own[0] * (1 - SHADOW_ALPHA) + 11 * SHADOW_ALPHA));
+			const next = px(data, at.x + dx, at.y + 2);
+			expect(next.slice(0, 3)).toEqual([...cols[TILES[tileId][1][dx >> 1]]].slice(0, 3));
+		}
+	});
+	it("pools warm light on the ground under the lanterns and the door after dark (polish pass)", () => {
+		const done = scene(hall.length);
+		const pools = poolsOf(done.laid);
+		expect(pools.length).toBe(3); // two lanterns and the door
+		const pool = pools[0];
+		const c = toScreen(done.camera, VIEW, 0, pool.x, pool.y);
+		const bright = (d: Uint8ClampedArray) => px(d, c.x, c.y + 1).slice(0, 3).reduce((a, b) => a + b, 0); // out of the lanterns' glow
+		const night = pixelPainter(VIEW.w, VIEW.h, artFor("hsl(172 38% 50%)", 1));
+		drawWorld(night, { ...done, dark: 1 });
+		const unlit = pixelPainter(VIEW.w, VIEW.h, artFor("hsl(172 38% 50%)", 1));
+		drawWorld(unlit, { ...done, dark: 0 });
+		expect(bright(night.data)).toBeGreaterThan(bright(unlit.data) + 20);
+	});
+	it("draws the hills and the haze band only when given the sky (polish pass)", () => {
+		const wide = { w: 1600, h: 500 }; // wide enough that the island leaves the first 300 px clear
+		const base = { ...scene(40), view: wide, camera: newCamera(32 * TILE, wide, 1) };
+		const draw = (sc: WorldScene) => {
+			const p = pixelPainter(wide.w, wide.h, art);
+			drawWorld(p, sc);
+			return p.data;
+		};
+		const a = draw({ ...base, sky: skyAt("hsl(172 38% 50%)", "hsl(212 38% 50%)", 12) });
+		const b = draw(base);
+		// Below the island's snow (the far islands all stand above it): only the hills and the haze differ there.
+		const ground = toScreen(base.camera, wide, 0, 0, GROUND_Y * TILE).y;
+		let differ = 0;
+		for (let y = ground + 4; y < Math.min(wide.h, ground + 100); y++) {
+			for (let x = 0; x < 300; x++) if (a[(y * wide.w + x) * 4 + 3] !== b[(y * wide.w + x) * 4 + 3]) differ++;
+		}
+		expect(differ).toBeGreaterThan(500);
+		expect(Math.max(...HILLS.runs.map(([y]) => y))).toBeGreaterThanOrEqual(HAZE.hold); // their foot is lost in the haze
+	});
+	it("twinkles some stars from one slow tick to the next, and keeps the rest steady (polish pass)", () => {
+		const sky = skyAt("hsl(172 38% 50%)", "hsl(212 38% 50%)", 0);
+		const stars = starField();
+		const p0 = pixelPainter(VIEW.w, VIEW.h, art);
+		drawSky(p0, { sky, stars, tick: 0 });
+		const p1 = pixelPainter(VIEW.w, VIEW.h, art);
+		drawSky(p1, { sky, stars, tick: 1 });
+		const changed = stars.filter((_, i) => twinkle(i, 0) !== twinkle(i, 1));
+		expect(changed.length).toBeGreaterThan(0);
+		for (const star of changed) {
+			const x = Math.round(star.fx * VIEW.w);
+			const y = Math.round(star.fy * VIEW.h);
+			expect(px(p0.data, x, y)).not.toEqual(px(p1.data, x, y));
+		}
 	});
 	it("copes with a canvas of no size", () => {
 		expect(() => drawWorld(pixelPainter(0, 0, art), { ...scene(40), view: { w: 0, h: 0 } })).not.toThrow();
