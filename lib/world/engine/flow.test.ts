@@ -1,15 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { cellsOf } from "../blueprints";
+import { cellsOf, START_X } from "../blueprints";
 import { CASTLE_BLOCKS } from "../blueprints/castle";
 import { TILE } from "../blueprints/types";
 import { layBuild, resumeBuilds } from "../build/state";
 import type { BuildRow } from "../build/types";
-import { DOCK_DECK, HOME_ISLAND, shiftBlocks } from "../map/home";
+import { DOCK_DECK, HOME_ISLAND, homePx, shiftBlocks } from "../map/home";
+import { balloonPath, idleSpot } from "../travel/travel";
 import { worldMayTake } from "../view/input";
 import { pinnedVillage } from "../village";
 import {
-	beginDecision, cameraAfter, catchUpStep, decisionStarted, decksOf, drawLists, endDecision, followZoom, lapseRuns, lightsOf, mayDecide, modeOf, NO_ROOM_MS,
-	OPEN_GATE, shiftedVillage, showHome, startOf, WILL_LINE_MS,
+	beginDecision, cameraAfter, catchUpStep, decisionStarted, decksOf, drawLists, endDecision, followZoom, goalsOf, IDLE_SLOT_MS, lapseRuns, lightsOf, mayDecide, modeOf,
+	NO_ROOM_MS, OPEN_GATE, rowsOf, shiftedVillage, showHome, startOf, WILL_LINE_MS, yardOf,
 } from "./flow";
 
 const NOW = "2026-10-11T12:00:00.000Z";
@@ -123,5 +124,46 @@ describe("decisions (spec 4.8: one at most per due moment, two tabs at once)", (
 		expect(catchUpStep({ left: 406, decided: 3, allowed: 3 }, idle)).toEqual({ kind: "done" });
 		expect(catchUpStep({ left: 0, decided: 0, allowed: 3 }, going)).toEqual({ kind: "done" });
 		expect(catchUpStep({ left: 50, decided: 0, allowed: 3 }, resumeBuilds([freeRow("a", 2)], ["hall"], NOW))).toEqual({ kind: "done" });
+	});
+});
+
+describe("where he goes (spec 3.4 and 4.6: he walks, or rides the balloon)", () => {
+	const east = { id: 1, x0: 600, x1: 700, ground: 80, top: Array.from({ length: 100 }, () => 80), home: false };
+	const map = { seed: 3, gen: 1, islands: [HOME_ISLAND, east], ground: [] };
+	const at = (island: number, col: number) => ({ island, x: (col + 0.5) * TILE });
+	const none = { visit: null, rest: false, work: null };
+	it("goes to the open panel's room, from another island by the balloon first", () => {
+		expect(goalsOf(map, [], at(0, 470), { ...none, visit: at(0, 480) })).toEqual({ visit: 480.5 * TILE, via: null, next: null, board: null });
+		expect(goalsOf(map, [], at(1, 650), { ...none, visit: at(0, 480) })).toEqual({ visit: 603.5 * TILE, via: null, next: null, board: null });
+		const g = goalsOf(map, [], at(1, 603), { ...none, visit: at(0, 480) });
+		expect(g.visit).toBe(603.5 * TILE);
+		expect(g.board).toEqual({ kind: "board", path: balloonPath({ x: 603.5 * TILE, y: 80 * TILE }, { x: 502.5 * TILE, y: 86 * TILE }), island: 0 });
+	});
+	it("rests where he is at night, with nothing to walk to or ride", () => {
+		expect(goalsOf(map, [], at(1, 650), { visit: null, rest: true, work: { x: 470, y: 85, tile: "brick", layer: "walls" } })).toEqual({ visit: null, via: null, next: null, board: null });
+	});
+	it("walks to the next block on his island or across a deck, and to the dock first for one on another island", () => {
+		const onHome = { x: 470, y: 85, tile: "brick" as const, layer: "walls" as const };
+		const onEast = { x: 650, y: 79, tile: "brick" as const, layer: "walls" as const };
+		expect(goalsOf(map, [], at(0, 460), { ...none, work: onHome })).toEqual({ visit: null, via: null, next: 470.5 * TILE, board: null });
+		expect(goalsOf(map, [], at(0, 460), { ...none, work: onEast })).toEqual({ visit: null, via: 508.5 * TILE, next: null, board: null });
+		const g = goalsOf(map, [], at(0, 508), { ...none, work: onEast });
+		expect([g.via, g.next, g.board?.island]).toEqual([508.5 * TILE, null, 1]);
+		const bridge = { x0: 506, x1: 600, rows: Array.from({ length: 94 }, () => 86), from: 0, to: 1 };
+		expect(goalsOf(map, [bridge], at(0, 460), { ...none, work: onEast })).toEqual({ visit: null, via: null, next: 650.5 * TILE, board: null });
+	});
+	it("waits in the yard while the castle waits, else by his finished builds on his island, a new spot every five minutes", () => {
+		expect(yardOf(null, map, 0, 0)).toBe(homePx(START_X));
+		expect(yardOf(resumeBuilds([], ["hall"], NOW), map, 0, 0)).toBe(homePx(START_X));
+		const b = resumeBuilds([freeRow("a", 6, { x: 640, y: 76 }), freeRow("b", 6, { x: 300, y: 76 })], [], NOW);
+		const wall = 7 * IDLE_SLOT_MS + 5;
+		expect(yardOf(b, map, 1, wall)).toBe(idleSpot(map, [641.5 * TILE], 1, 7, 3));
+		expect(yardOf(b, map, 0, wall)).toBe(idleSpot(map, [], 0, 7, 3));
+	});
+	it("gives the planner every build that has a row, at this page's own count", () => {
+		const b = layBuild(resumeBuilds([freeRow("a", 5)], ["hall"], NOW), NOW).builds;
+		expect(rowsOf(b)).toEqual([freeRow("a", 5)]);
+		const done = layBuild(resumeBuilds([freeRow("a", 5)], [], NOW), NOW).builds;
+		expect(rowsOf(done)).toEqual([freeRow("a", 6)]);
 	});
 });

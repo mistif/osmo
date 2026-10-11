@@ -1,16 +1,17 @@
 // The big world's engine, its pure part (I1 of the free-will plan): which world runs, the village's castle moved into the
-// big world, the lists the builds draw, what a catch-up laid and what it does next, the decks he walks, the zoom he is
-// framed at, who moves the camera, where a gesture starts, and the gate that keeps decisions to one at a time.
-import { cellsOf } from "../blueprints";
+// big world, the lists the builds draw, what a catch-up laid and what it does next, the decks he walks, where he goes
+// and where he waits, the builds as the planner reads them, the zoom he is framed at, who moves the camera, where a
+// gesture starts, and the gate that keeps decisions to one at a time.
+import { cellsOf, START_X } from "../blueprints";
 import { TILE, type Block } from "../blueprints/types";
 import { roomOfRecipe } from "../build/castle-sites";
-import { castleWaiting, freeInProgress, laidBuildBlocks } from "../build/state";
-import type { BuildProgress, Builds } from "../build/types";
+import { castleWaiting, finishedFree, freeInProgress, laidBuildBlocks } from "../build/state";
+import type { BuildProgress, BuildRow, Builds } from "../build/types";
 import { baseZoom, ZOOM_IN } from "../camera";
-import { DOCK_DECK, shiftBlocks } from "../map/home";
+import { DOCK_DECK, homePx, shiftBlocks } from "../map/home";
 import { islandAt } from "../map/lookup";
-import { HOME_DX, HOME_DY, type Deck, type WorldMap } from "../map/types";
-import { deckOf } from "../travel/travel";
+import { HOME_DX, HOME_DY, type Deck, type Leg, type WorldMap } from "../map/types";
+import { deckOf, idleSpot, nextLeg, standFor } from "../travel/travel";
 import type { LapseRun } from "../travel/timelapse";
 import { laidBlocks, nextBlock, type Village } from "../village";
 
@@ -65,6 +66,48 @@ export function decksOf(b: Builds, map: Pick<WorldMap, "islands">, dock: boolean
 	return out;
 }
 export const followZoom = (cssW: number, cssH: number, close: boolean, dpr: number): number => (baseZoom(cssW, cssH) + (close ? ZOOM_IN : 0)) * dpr;
+
+// Where he goes next and how (spec 3.4 and 4.6), as actor.ts's ActorWorld takes it, in its order: the open panel's room
+// (from another island the leg toward it first), nothing at night's rest, then the next block's stand spot: `next` when
+// it is on his island or joined to it by decks, else `via`, a walk to his island's boarding spot. Standing at the
+// boarding spot of a leg to another island, `board` is the balloon trip to take (and he stands where he is till then).
+export type Goals = { visit: number | null; via: number | null; next: number | null; board: Extract<Leg, { kind: "board" }> | null };
+export type Wants = { visit: { island: number; x: number } | null; rest: boolean; work: Block | null };
+export function goalsOf(map: Pick<WorldMap, "islands">, decks: readonly Deck[], him: { island: number; x: number }, want: Wants): Goals {
+	const none: Goals = { visit: null, via: null, next: null, board: null };
+	if (want.visit) {
+		const leg = nextLeg(map, decks, him, want.visit);
+		return leg.kind === "walk" ? { ...none, visit: leg.x } : { ...none, visit: him.x, board: leg };
+	}
+	if (want.rest || !want.work) return none;
+	const s = standFor(want.work, map);
+	const leg = nextLeg(map, decks, him, s);
+	if (leg.kind === "board") return { ...none, via: him.x, board: leg };
+	return leg.x === s.x ? { ...none, next: s.x } : { ...none, via: leg.x };
+}
+// Where he waits with nothing to lay (spec 4.7): on the home island in the yard before the hall while the castle waits
+// or the builds are not read yet; otherwise, the budget dry, by one of his finished builds on the island he is on, or
+// anywhere on it, a new spot every IDLE_SLOT_MS (travel.ts idleSpot). World px x.
+export const IDLE_SLOT_MS = 300_000;
+export function yardOf(b: Builds | null, map: Pick<WorldMap, "islands" | "seed">, island: number, wallMs: number): number {
+	if (island === 0 && (!b || castleWaiting(b))) return homePx(START_X);
+	const spots = (b ? finishedFree(b) : []).flatMap((p) => {
+		const mid = p.x + (p.footprint.map[0]?.length ?? 0) / 2;
+		return islandAt(map, mid)?.id === island ? [mid * TILE] : [];
+	});
+	return idleSpot(map, spots, island, Math.floor(wallMs / IDLE_SLOT_MS), map.seed);
+}
+// The builds as the planner and the day's count read them: every build with a saved row (a castle room not saved yet
+// has none), at this page's own count and times, which may be ahead of the table's.
+export const rowsOf = (b: Builds): BuildRow[] =>
+	b.list.flatMap((p) =>
+		p.id === null
+			? []
+			: [{
+					id: p.id, recipe: p.recipe, params: p.params, island: p.island, x: p.x, y: p.y, footprint: p.footprint, total: p.total, laid: p.laid,
+					reason: p.reason, started_at: p.startedAt, finished_at: p.finishedAt,
+				}],
+	);
 
 // Who moves the camera (spec 3.2 and 4.7): following him; steering (Gur panned, zoomed, pinched, wheeled or used the
 // keys: following stops); or the time-lapse visiting its sites. home (Back to Osmo, a tap on him, the Home key, a
