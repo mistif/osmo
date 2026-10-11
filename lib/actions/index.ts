@@ -112,7 +112,8 @@ export async function listEnabledActions(userId: string, deps: Deps = realDeps()
 		if (!sameOwner(db, userId)) return null;
 		const profile = await loadProfile(db);
 		if (profile.paused) return null;
-		const defs = deps.registry.filter((d) => levelVerdict(d, levelOf(profile, d.connector)) !== "refuse");
+		// Building things is offered only with its own switch on as well, so the model never sets a build the gate refuses.
+		const defs = deps.registry.filter((d) => (d.name !== "build" || deps.env.OSMO_BUILD === "on") && levelVerdict(d, levelOf(profile, d.connector)) !== "refuse");
 		if (defs.length === 0) return null;
 		return {
 			names: defs.map((d) => d.name),

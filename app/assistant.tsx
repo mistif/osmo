@@ -309,6 +309,8 @@ export default function AgentChat() {
 	// the flag says: a confirmation may still wait from before a reload, from another tab, or after a later answer
 	// cleared the flag. A crisis is rare, and the server's cancel is cheap.
 	function cancelConfirmation() {
+		// A crisis also stops a build in progress (artifacts spec 9).
+		buildRef.current?.cancel();
 		confirmWaitingRef.current = null;
 		void ensureSession().catch(() => null).then((s) => s && sendDecision(fetch, s.access_token, "crisis", "typed"));
 	}
@@ -670,7 +672,8 @@ export default function AgentChat() {
 					deliver(answer.reply);
 					if (answer.build) buildRef.current?.start(answer.build);
 				} else if (answer?.kind === "crisis") {
-					// The model saw talk of self-harm that the code missed: the reply is code's.
+					// The model saw talk of self-harm that the code missed: the reply is code's, and a build stops.
+					buildRef.current?.cancel();
 					deliver(CRISIS_REPLY);
 				} else {
 					// Any other answer (a fallback, a failed request, no session): today's reply for the branch.
