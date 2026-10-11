@@ -19,6 +19,7 @@ export type PaceInput = {
 	reducedMotion: boolean;
 	lookIn?: number | null;
 	ambient?: number | null;
+	interacting?: boolean; // Gur is dragging, pinching or wheeling the world (free-will spec 3.3): see framePace
 };
 
 export function nextTickIn(p: PaceInput): number | null {
@@ -26,7 +27,7 @@ export function nextTickIn(p: PaceInput): number | null {
 	if (a.hidden) return null;
 	const frame = p.reducedMotion ? CALM_FRAME_MS : FRAME_MS;
 	const wait = (ms: number) => Math.min(SLOW_MS, Math.max(frame, Math.ceil(ms)));
-	if (a.kind === "walking" || a.kind === "building" || a.kind === "turning" || p.easing) return frame;
+	if (a.kind === "walking" || a.kind === "building" || a.kind === "turning" || a.kind === "riding" || p.easing) return frame;
 	let ms = SLOW_MS;
 	if (a.kind === "facing") ms = a.talk === "speaking" ? frame : wait(a.quietSince + FOLLOW_UP_MS - p.now);
 	else if (a.kind === "idle" && p.hasWork) ms = wait(a.nextAt - p.now);
@@ -36,8 +37,16 @@ export function nextTickIn(p: PaceInput): number | null {
 	return ms;
 }
 
-export type DrawKey = { laid: number; kind: string; phase: string; zoom: number; tx: number }; // tx: his tile column
+// tx: his tile column; cx, cy: the camera's centre, whole world px (a pan redraws a still frame; unset in the small world)
+export type DrawKey = { laid: number; kind: string; phase: string; zoom: number; tx: number; cx?: number; cy?: number };
 export function shouldDraw(reducedMotion: boolean, prev: DrawKey | null, next: DrawKey): boolean {
 	if (!reducedMotion || !prev) return true;
-	return prev.laid !== next.laid || prev.kind !== next.kind || prev.phase !== next.phase || prev.zoom !== next.zoom || prev.tx !== next.tx;
+	return prev.laid !== next.laid || prev.kind !== next.kind || prev.phase !== next.phase || prev.zoom !== next.zoom || prev.tx !== next.tx || prev.cx !== next.cx || prev.cy !== next.cy;
+}
+
+// The frame source (free-will spec 3.3): animation frames while Gur drags, pinches or wheels the world; otherwise the
+// timer nextTickIn asks for, or none while hidden.
+export function framePace(p: PaceInput): "raf" | number | null {
+	if (p.actor.hidden) return null;
+	return p.interacting ? "raf" : nextTickIn(p);
 }

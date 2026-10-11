@@ -47,8 +47,9 @@ export function routeOf(room: CastleRoom, shipped: readonly PanelId[] = SHIPPED_
 export const clickable = (finished: readonly CastleRoom[], shipped: readonly PanelId[] = SHIPPED_PANELS): CastleRoom[] =>
 	CASTLE_ROOMS.filter((room) => finished.includes(room) && routeOf(room, shipped) !== null);
 
-// Where he stands for a place (world px): before the room's door, or the yard at the hall's door.
-export const spotX = (place: Place): number => (place === "yard" ? START_X : (DOOR_X[place] + 0.5) * TILE);
+// Where he stands for a place (world px): before the room's door, or the yard at the hall's door. dx: the castle's
+// offset in the big world (world px).
+export const spotX = (place: Place, dx = 0): number => (place === "yard" ? START_X : (DOOR_X[place] + 0.5) * TILE) + dx;
 
 // The label a room's hit area reads out.
 export const ROOM_LABELS: Readonly<Record<CastleRoom, string>> = {
@@ -75,15 +76,16 @@ export const ROOM_BOXES: Readonly<Record<CastleRoom, Box>> = Object.fromEntries(
 
 export type Hit = Box & { room: CastleRoom; seen: boolean };
 // The rooms' hit areas on the canvas (canvas px), for the DOM buttons laid over it. seen is false when none of the
-// box is in view: that button is hidden, so the keyboard never lands on something off screen.
-export function hitAreas(rooms: readonly CastleRoom[], camera: Camera, view: View, now: number): Hit[] {
+// box is in view: that button is hidden, so the keyboard never lands on something off screen. shift: the castle's
+// offset in the big world (world px). Below minZoom the buttons hide: the big world passes scale 1.
+export function hitAreas(rooms: readonly CastleRoom[], camera: Camera, view: View, now: number, shift: { x: number; y: number } = { x: 0, y: 0 }, minZoom = 0): Hit[] {
 	const z = zoomAt(camera, now);
 	return rooms.map((room) => {
 		const b = ROOM_BOXES[room];
-		const at = toScreen(camera, view, now, b.x, b.y);
+		const at = toScreen(camera, view, now, b.x + shift.x, b.y + shift.y);
 		const w = b.w * z;
 		const h = b.h * z;
-		return { room, x: at.x, y: at.y, w, h, seen: at.x + w > 0 && at.y + h > 0 && at.x < view.w && at.y < view.h };
+		return { room, x: at.x, y: at.y, w, h, seen: z >= minZoom - 1e-9 && at.x + w > 0 && at.y + h > 0 && at.x < view.w && at.y < view.h };
 	});
 }
 

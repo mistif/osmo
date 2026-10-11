@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { newActor, type Actor } from "./actor";
-import { AMBIENT_MS, CALM_FRAME_MS, FRAME_MS, nextTickIn, shouldDraw, SLOW_MS } from "./pace";
+import { AMBIENT_MS, CALM_FRAME_MS, FRAME_MS, framePace, nextTickIn, shouldDraw, SLOW_MS } from "./pace";
 
 const a = newActor(200, 0, 12);
 type Over = Partial<{ now: number; easing: boolean; hasWork: boolean; reducedMotion: boolean; lookIn: number | null; ambient: number | null }>;
@@ -58,5 +58,22 @@ describe("the redraw pace", () => {
 		expect(shouldDraw(true, k, { ...k, zoom: 4 })).toBe(true);
 		expect(shouldDraw(true, k, { ...k, tx: 11 })).toBe(true); // he walks tile by tile, not in one jump on arrival
 		expect(shouldDraw(false, k, { ...k })).toBe(true);
+	});
+});
+
+describe("the big world's pace (free-will spec 3.3)", () => {
+	it("runs frames while he rides the balloon", () => {
+		expect(nextTickIn(input({ ...a, kind: "riding" }))).toBe(FRAME_MS);
+	});
+	it("asks for animation frames while Gur drags or pinches, and nothing while hidden", () => {
+		expect(framePace({ ...input(a, { hasWork: false }), interacting: true })).toBe("raf");
+		expect(framePace({ ...input(a, { hasWork: false }), interacting: false })).toBe(SLOW_MS);
+		expect(framePace({ ...input({ ...a, hidden: true }), interacting: true })).toBeNull();
+	});
+	it("redraws a still frame under reduced motion when the camera has moved", () => {
+		const key = { laid: 3, kind: "idle", phase: "day", zoom: 1, tx: 5, cx: 7640, cy: 1300 };
+		expect(shouldDraw(true, key, { ...key })).toBe(false);
+		expect(shouldDraw(true, key, { ...key, cx: 7700 })).toBe(true);
+		expect(shouldDraw(true, key, { ...key, cy: 1250 })).toBe(true);
 	});
 });
