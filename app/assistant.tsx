@@ -316,6 +316,7 @@ export default function AgentChat() {
 	// A crisis message that arrives while Osmo waits on another turn is answered at once, never dropped. The
 	// waiting turn owns this step of his heart, so it isn't stepped here; that turn finishes quietly instead.
 	function takeCrisis(text: string, options: SendOptions): boolean {
+		buildRef.current?.cancel();
 		setPendingLearning(null);
 		aiStoppedRef.current = true;
 		cancelConfirmation();
@@ -667,6 +668,7 @@ export default function AgentChat() {
 				applyTurn(keptTurn<TurnResult>(answer?.kind === "model" ? "model" : "code", prepared, turn), { detection: detectionOf(answer), crisis: answer?.kind === "crisis" });
 				if (answer?.kind === "model") {
 					deliver(answer.reply);
+					if (answer.build) buildRef.current?.start(answer.build);
 				} else if (answer?.kind === "crisis") {
 					// The model saw talk of self-harm that the code missed: the reply is code's.
 					deliver(CRISIS_REPLY);

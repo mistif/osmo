@@ -24,8 +24,9 @@ export type Usage = { usedToday: number; usable: number };
 export type FallbackReason = "off" | "allowance" | "error" | "empty" | "crisis";
 // waiting: the turn's action is waiting for Gur's yes or no. pendingId: the row that waits (null when none does), which
 // the room sends back with his yes or no so it answers that row only, never one held from another tab.
+// build: the build action's ticket (artifacts spec 3.2): the room starts a build from it. Absent unless the turn started one.
 export type ChatAnswer =
-	| { source: "model"; reply: string; usage: Usage; detection: Detection | null; waiting: boolean; pendingId: string | null }
+	| { source: "model"; reply: string; usage: Usage; detection: Detection | null; waiting: boolean; pendingId: string | null; build?: { brief: string; actionId: number | null } }
 	| { source: "fallback"; reason: FallbackReason; usage: Usage | null };
 // GET /api/chat, and the room's aiUsage.
 export type ChatStatus = { enabled: boolean; usedToday: number | null; usable: number | null };

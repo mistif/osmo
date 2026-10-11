@@ -56,23 +56,23 @@ describe("askForReply", () => {
 		const { fetchFn } = answering(() =>
 			json({ source: "model", reply: "Jazz rewards patience. I rather like it.", usage: { ...USAGE, pool: "mini" }, debug: "x" }),
 		);
-		expect(await askForReply(fetchFn, "t", BODY)).toEqual({ kind: "model", reply: "Jazz rewards patience. I rather like it.", usage: USAGE, detection: null, waiting: false, pendingId: null });
+		expect(await askForReply(fetchFn, "t", BODY)).toEqual({ kind: "model", reply: "Jazz rewards patience. I rather like it.", usage: USAGE, detection: null, waiting: false, pendingId: null, build: null });
 	});
 
 	it("hands back the detection the route sent, unchecked: the room validates it", async () => {
 		const { fetchFn } = answering(() => json({ source: "model", reply: "Hi.", usage: USAGE, detection: { tones: ["sad"] } }));
-		expect(await askForReply(fetchFn, "t", BODY)).toEqual({ kind: "model", reply: "Hi.", usage: USAGE, detection: { tones: ["sad"] }, waiting: false, pendingId: null });
+		expect(await askForReply(fetchFn, "t", BODY)).toEqual({ kind: "model", reply: "Hi.", usage: USAGE, detection: { tones: ["sad"] }, waiting: false, pendingId: null, build: null });
 	});
 
 	it("reads waiting: true as a model answer that is waiting for Gur's yes or no", async () => {
 		const { fetchFn } = answering(() => json({ source: "model", reply: "Delete the note buy milk? Say yes to go ahead, or no.", usage: USAGE, detection: null, waiting: true }));
-		expect(await askForReply(fetchFn, "t", BODY)).toEqual({ kind: "model", reply: "Delete the note buy milk? Say yes to go ahead, or no.", usage: USAGE, detection: null, waiting: true, pendingId: null });
+		expect(await askForReply(fetchFn, "t", BODY)).toEqual({ kind: "model", reply: "Delete the note buy milk? Say yes to go ahead, or no.", usage: USAGE, detection: null, waiting: true, pendingId: null, build: null });
 	});
 
 	it("keeps the waiting row's id, so his yes or no answers that row only", async () => {
 		const id = "7c0e5a2b-3d41-4f8e-9b6a-1e2d3c4b5a69";
-		const { fetchFn } = answering(() => json({ source: "model", reply: "Delete the note buy milk? Say yes to go ahead, or no.", usage: USAGE, detection: null, waiting: true, pendingId: id }));
-		expect(await askForReply(fetchFn, "t", BODY)).toEqual({ kind: "model", reply: "Delete the note buy milk? Say yes to go ahead, or no.", usage: USAGE, detection: null, waiting: true, pendingId: id });
+		const { fetchFn } = answering(() => json({ source: "model", reply: "Delete the note buy milk? Say yes to go ahead, or no.", usage: USAGE, detection: null, waiting: true, pendingId: id, build: null }));
+		expect(await askForReply(fetchFn, "t", BODY)).toEqual({ kind: "model", reply: "Delete the note buy milk? Say yes to go ahead, or no.", usage: USAGE, detection: null, waiting: true, pendingId: id, build: null });
 		const longest = answering(() => json({ source: "model", reply: "Hi.", usage: USAGE, waiting: true, pendingId: "a".repeat(100) }));
 		expect(await askForReply(longest.fetchFn, "t", BODY)).toMatchObject({ kind: "model", waiting: true, pendingId: "a".repeat(100) });
 	});
@@ -90,7 +90,7 @@ describe("askForReply", () => {
 		];
 		for (const [label, extra] of sent) {
 			const { fetchFn } = answering(() => json({ source: "model", reply: "Hi.", usage: USAGE, ...extra }));
-			expect(await askForReply(fetchFn, "t", BODY), label).toEqual({ kind: "model", reply: "Hi.", usage: USAGE, detection: null, waiting: extra.waiting === true, pendingId: null });
+			expect(await askForReply(fetchFn, "t", BODY), label).toEqual({ kind: "model", reply: "Hi.", usage: USAGE, detection: null, waiting: extra.waiting === true, pendingId: null, build: null });
 		}
 	});
 
@@ -104,7 +104,34 @@ describe("askForReply", () => {
 		];
 		for (const [label, extra] of sent) {
 			const { fetchFn } = answering(() => json({ source: "model", reply: "Hi.", usage: USAGE, ...extra }));
-			expect(await askForReply(fetchFn, "t", BODY), label).toEqual({ kind: "model", reply: "Hi.", usage: USAGE, detection: null, waiting: false, pendingId: null });
+			expect(await askForReply(fetchFn, "t", BODY), label).toEqual({ kind: "model", reply: "Hi.", usage: USAGE, detection: null, waiting: false, pendingId: null, build: null });
+		}
+	});
+
+	it("passes on a valid build ticket, with or without an action id", async () => {
+		for (const build of [{ brief: "a tip splitter", actionId: 7 }, { brief: "a timer", actionId: null }, { brief: "x".repeat(500), actionId: 0 }]) {
+			const { fetchFn } = answering(() => json({ source: "model", reply: "Hi.", usage: USAGE, build }));
+			expect(await askForReply(fetchFn, "t", BODY), JSON.stringify(build).slice(0, 40)).toEqual({ kind: "model", reply: "Hi.", usage: USAGE, detection: null, waiting: false, pendingId: null, build });
+		}
+	});
+
+	it("reads a missing or malformed build ticket as none, never a bad answer, so an older server still works", async () => {
+		const sent: [string, unknown][] = [
+			["missing", undefined],
+			["null", null],
+			["a string", "a tip splitter"],
+			["an array", []],
+			["a brief that is a number", { brief: 3, actionId: 7 }],
+			["an action id that is text", { brief: "a tip splitter", actionId: "7" }],
+			["an action id that is not whole", { brief: "a tip splitter", actionId: 1.5 }],
+			["no action id", { brief: "a tip splitter" }],
+			["an empty brief", { brief: "", actionId: 7 }],
+			["a brief of 501 characters", { brief: "x".repeat(501), actionId: 7 }],
+			["an extra key", { brief: "a tip splitter", actionId: 7, from: "" }],
+		];
+		for (const [label, build] of sent) {
+			const { fetchFn } = answering(() => json({ source: "model", reply: "Hi.", usage: USAGE, build }));
+			expect(await askForReply(fetchFn, "t", BODY), label).toEqual({ kind: "model", reply: "Hi.", usage: USAGE, detection: null, waiting: false, pendingId: null, build: null });
 		}
 	});
 
@@ -118,7 +145,7 @@ describe("askForReply", () => {
 		];
 		for (const [label, extra] of sent) {
 			const { fetchFn } = answering(() => json({ source: "model", reply: "Hi.", usage: USAGE, ...extra }));
-			expect(await askForReply(fetchFn, "t", BODY), label).toEqual({ kind: "model", reply: "Hi.", usage: USAGE, detection: null, waiting: false, pendingId: null });
+			expect(await askForReply(fetchFn, "t", BODY), label).toEqual({ kind: "model", reply: "Hi.", usage: USAGE, detection: null, waiting: false, pendingId: null, build: null });
 		}
 	});
 
@@ -374,7 +401,7 @@ describe("nextUsage", () => {
 
 	it("shows today's numbers from any other answer that carries them", () => {
 		const carrying: AskResult[] = [
-			{ kind: "model", reply: "Hello.", usage: USAGE, detection: null, waiting: false, pendingId: null },
+			{ kind: "model", reply: "Hello.", usage: USAGE, detection: null, waiting: false, pendingId: null, build: null },
 			{ kind: "crisis", usage: USAGE },
 			{ kind: "fallback", why: "allowance", usage: USAGE, stop: false },
 			{ kind: "fallback", why: "error", usage: USAGE, stop: false },

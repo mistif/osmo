@@ -410,8 +410,8 @@ describe("detectionOf", () => {
 
 	it("gives the model answer's detection and nothing for any other answer", () => {
 		const detection = { tones: ["sad"] };
-		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection, waiting: false, pendingId: null })).toBe(detection);
-		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection: null, waiting: false, pendingId: null })).toBeNull();
+		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection, waiting: false, pendingId: null, build: null })).toBe(detection);
+		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection: null, waiting: false, pendingId: null, build: null })).toBeNull();
 		const others: (AskResult | null)[] = [{ kind: "crisis", usage }, { kind: "fallback", why: "error", usage, stop: false }, null];
 		for (const answer of others) expect(detectionOf(answer), JSON.stringify(answer)).toBeNull();
 	});
@@ -444,7 +444,7 @@ describe("waitingAfter", () => {
 	const usage = { usedToday: 1, usable: 2 };
 	const ID = "7c0e5a2b-3d41-4f8e-9b6a-1e2d3c4b5a69";
 	const HELD: Waiting = { pendingId: ID };
-	const model = (waiting: boolean, pendingId: string | null = null): AskResult => ({ kind: "model", reply: "Delete it? Say yes to go ahead, or no.", usage, detection: null, waiting, pendingId });
+	const model = (waiting: boolean, pendingId: string | null = null): AskResult => ({ kind: "model", reply: "Delete it? Say yes to go ahead, or no.", usage, detection: null, waiting, pendingId, build: null });
 
 	it("leaves the confirmation waiting through a guest's turn, for the same row", () => {
 		expect(waitingAfter(HELD, { on: "guest" })).toEqual(HELD);

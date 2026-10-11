@@ -11,9 +11,13 @@ export const ASK_TIMEOUT_MS = 25_000;
 const CHAT_URL = "/api/chat";
 
 export type AskResult =
-	| { kind: "model"; reply: string; usage: Usage; detection: unknown; waiting: boolean; pendingId: string | null }
+	| { kind: "model"; reply: string; usage: Usage; detection: unknown; waiting: boolean; pendingId: string | null; build: BuildTicket | null }
 	| { kind: "crisis"; usage: Usage | null }
 	| { kind: "fallback"; why: FallbackReason | "http" | "network" | "timeout" | "aborted" | "bad_answer"; usage: Usage | null; stop: boolean };
+
+// The build action's ticket (artifacts spec 3.2), as the route sends it.
+export type BuildTicket = { brief: string; actionId: number | null };
+const MAX_BRIEF = 500;
 
 type Why = Extract<AskResult, { kind: "fallback" }>["why"];
 type Halt = "timeout" | "aborted";
@@ -64,6 +68,15 @@ function usageOf(value: unknown): Usage | null | undefined {
 	return isCount(usedToday) && isCount(usable) ? { usedToday, usable } : undefined;
 }
 
+// The ticket, read strictly: exactly a brief of 1 to 500 characters and an id that is a whole number or null. Anything else is none.
+function buildOf(value: unknown): BuildTicket | null {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+	const ticket = value as Record<string, unknown>;
+	const { brief, actionId } = ticket;
+	if (Object.keys(ticket).length !== 2 || typeof brief !== "string" || brief.length < 1 || brief.length > MAX_BRIEF) return null;
+	return actionId === null || (typeof actionId === "number" && Number.isInteger(actionId)) ? { brief, actionId } : null;
+}
+
 // The route's answer, read strictly: anything unexpected is a bad answer, never a guess.
 function answerOf(json: unknown): AskResult {
 	if (typeof json !== "object" || json === null) return failed("bad_answer");
@@ -85,6 +98,7 @@ function answerOf(json: unknown): AskResult {
 			detection: typeof answer.detection === "object" && answer.detection !== null ? answer.detection : null,
 			waiting,
 			pendingId: waiting && typeof id === "string" && id.length > 0 && id.length <= MAX_PENDING_ID ? id : null,
+			build: buildOf(answer.build),
 		};
 	}
 	const reason = answer.source === "fallback" ? REASONS.find((known) => known === answer.reason) : undefined;

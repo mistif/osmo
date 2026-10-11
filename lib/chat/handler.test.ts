@@ -1564,18 +1564,61 @@ describe("handleChat POST: actions", () => {
 		expect((await read(await handleChat(post(body()), deps))).reply).toBe(THREE);
 	});
 
-	it("never offers building a thing until the room can start one from its ticket", async () => {
+	describe("the build ticket", () => {
 		const BUILD_LINE = "build makes a small working thing for Gur. Tier 2.";
 		const withBuild: EnabledActions = { ...ENABLED, names: ["reminder_set", "build", "reminder_list"], lines: [ENABLED.lines[0], BUILD_LINE, ENABLED.lines[1]] };
-		const both = rig({ fetcher: openai({ text: turn("Pasta is quick.", null) }), actions: fakeActions({ list: withBuild }) });
-		expect((await read(await handleChat(post(body()), both.deps))).reply).toBe("Pasta is quick.");
-		expect(formatOf(sentTo(both.fetcher))).toEqual(turnFormat(ENABLED.names));
-		expect(sentTo(both.fetcher).instructions).toBe(buildInstructions(body(), "json", ENABLED));
-		// With only building on, nothing is offered: today's request.
-		const only = rig({ fetcher: openai({ text: turn("Pasta is quick.", null) }), actions: fakeActions({ list: { ...ENABLED, names: ["build"], lines: [BUILD_LINE] } }) });
-		expect((await read(await handleChat(post(body()), only.deps))).reply).toBe("Pasta is quick.");
-		expect(formatOf(sentTo(only.fetcher))).toEqual(TURN_FORMAT);
-		expect(sentTo(only.fetcher).instructions).toBe(buildInstructions(body()));
+		const BUILD = { name: "build", args: JSON.stringify({ brief: "a tip splitter" }) };
+		const HOLD = "Certainly. I will start on that now, and it will appear beside me.";
+		const ticket = { brief: "a tip splitter", actionId: 7 };
+
+		it("offers building like any other action, in the list and in the format", async () => {
+			const { deps, fetcher } = rig({ fetcher: openai({ text: turn("Pasta is quick.", null) }), actions: fakeActions({ list: withBuild }) });
+			expect((await read(await handleChat(post(body()), deps))).reply).toBe("Pasta is quick.");
+			expect(formatOf(sentTo(fetcher))).toEqual(turnFormat(withBuild.names));
+			expect(sentTo(fetcher).instructions).toBe(buildInstructions(body(), "json", withBuild));
+			expect(sentTo(fetcher).instructions).toContain(BUILD_LINE);
+			// With only building on, it is still offered.
+			const only: EnabledActions = { ...ENABLED, names: ["build"], lines: [BUILD_LINE] };
+			const alone = rig({ fetcher: openai({ text: turn("Pasta is quick.", null) }), actions: fakeActions({ list: only }) });
+			await handleChat(post(body()), alone.deps);
+			expect(formatOf(sentTo(alone.fetcher))).toEqual(turnFormat(["build"]));
+			expect(sentTo(alone.fetcher).instructions).toBe(buildInstructions(body(), "json", only));
+		});
+
+		it("answers with the model's holding sentence, no trailing space, and the ticket, in one call", async () => {
+			const run: ActionOutcome = { kind: "done", line: "", result: null, ticket };
+			const actions = fakeActions({ list: withBuild, run });
+			const { deps, fetcher } = rig({ fetcher: openai({ text: turn(HOLD, BUILD) }), actions });
+			expect(await read(await handleChat(post(body()), deps))).toEqual({ source: "model", reply: HOLD, usage: USED, detection: null, waiting: false, pendingId: null, build: ticket });
+			expect(fetcher).toHaveBeenCalledTimes(1);
+			expect(actions.run).toHaveBeenCalledWith(BUILD, { userId: GUR, surface: "room", now: NOW });
+		});
+
+		it("carries a ticket whose action id is null", async () => {
+			const run: ActionOutcome = { kind: "done", line: "", result: null, ticket: { brief: "a timer", actionId: null } };
+			const { deps } = rig({ fetcher: openai({ text: turn(HOLD, BUILD) }), actions: fakeActions({ list: withBuild, run }) });
+			expect((await read(await handleChat(post(body()), deps))).build).toEqual({ brief: "a timer", actionId: null });
+		});
+
+		it("has no build when the action is done without a ticket", async () => {
+			const run: ActionOutcome = { kind: "done", line: DONE_LINE, result: null };
+			const { deps } = rig({ fetcher: openai({ text: turn("I will set that for you.", SET) }), actions: fakeActions({ list: withBuild, run }) });
+			const answer = await read(await handleChat(post(body()), deps));
+			expect(answer.reply).toBe(`I will set that for you. ${DONE_LINE}`);
+			expect(answer).not.toHaveProperty("build");
+		});
+
+		it("lets a failed or refused line replace the reply, with no build", async () => {
+			for (const run of [
+				{ kind: "failed", line: "That did not work just now." },
+				{ kind: "refused", line: "Building things is off in Settings." },
+			] as ActionOutcome[]) {
+				const { deps } = rig({ fetcher: openai({ text: turn(HOLD, BUILD) }), actions: fakeActions({ list: withBuild, run }) });
+				const answer = await read(await handleChat(post(body()), deps));
+				expect(answer.reply, run.kind).toBe("line" in run ? run.line : "");
+				expect(answer, run.kind).not.toHaveProperty("build");
+			}
+		});
 	});
 
 	it("fits call 2 again with its result, so a turn trimmed to the ceiling still gets call 2's answer", async () => {

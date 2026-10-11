@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { after } from "next/server";
 import { cancelWaiting, listEnabledActions, realDeps, runAction, type ActionContext, type ActionOutcome, type ActionProposal, type EnabledActions } from "../actions";
+import type { BuildTicket } from "../actions/types";
 import { validateDetection, type Detection } from "../agent/detection";
 import { bearerToken, requireUser, type ServerUser } from "../server/auth";
 import { CALL_CEILING, dayKey, estimateTokens, fits, MAX_OUTPUT_TOKENS, ownerId, readConfig, sameUser, type Env, type ModelEntry } from "./allowance";
@@ -156,7 +157,7 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 	// strict is trimmed by the FEELING prompt it is sent; before actions it was measured with the slightly shorter JSON one.)
 	const form = entry.strict ? "json" : "feeling";
 	const listed = entry.strict ? await quietly(deps, "list", () => deps.actions.list(user.id), null) : null;
-	const actions = offered(listed);
+	const actions = listed !== null && listed.names.length > 0 ? listed : null;
 	const body = fitToCeiling(checked.body, CALL_CEILING, { format: form, actions });
 	const instructions = buildInstructions(body, form, actions);
 	const input = buildInput(body);
@@ -185,6 +186,7 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 	let reply = result.reply,
 		waiting = false,
 		pendingId: string | null = null,
+		build: BuildTicket | null = null,
 		final = usage;
 	const proposal = result.action;
 	if (actions !== null && proposal !== null && !left()) {
@@ -195,8 +197,11 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 			waiting = true;
 			pendingId = out.pendingId ?? null;
 		} else if (out.kind === "failed" || out.kind === "refused") reply = out.line;
-		else if (out.kind === "done" && out.result === null) reply = `${reply} ${out.line}`;
-		else if (out.kind === "done" && left()) reply = out.line;
+		else if (out.kind === "done" && out.result === null) {
+			// A build's code line is empty: the holding sentence stands alone, and the ticket goes to the room.
+			reply = [reply, out.line].filter(Boolean).join(" ");
+			build = out.ticket ?? null;
+		} else if (out.kind === "done" && left()) reply = out.line;
 		else if (out.kind === "done" && out.result !== null) {
 			const read = { name: proposal.name, text: out.result };
 			const fitted = fitToCeiling(body, CALL_CEILING, { format: form, actions, result: read });
@@ -210,18 +215,10 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 			reply = second !== null && !("reason" in second) && second.whole ? second.reply : out.line;
 		}
 	}
-	return answer({ source: "model", reply, usage: final, detection: result.detection, waiting, pendingId });
+	return answer({ source: "model", reply, usage: final, detection: result.detection, waiting, pendingId, ...(build ? { build } : {}) });
 }
 
 const IGNORED: ActionOutcome = { kind: "ignored" };
-
-// Building things is not offered until the room can start a build from the action's ticket (artifacts, task B8):
-// until then a build would be logged and counted while nothing appears. Null when nothing else is on.
-function offered(listed: EnabledActions | null): EnabledActions | null {
-	if (listed === null) return null;
-	const kept = listed.names.flatMap((name, i) => (name === "build" ? [] : [{ name, line: listed.lines[i] }]));
-	return kept.length === 0 ? null : { ...listed, names: kept.map((k) => k.name), lines: kept.map((k) => k.line) };
-}
 
 // The actions seam never breaks a turn: a throw reads as nothing on, nothing run or nothing cancelled, and only the step is logged.
 async function quietly<T>(deps: ChatDeps, step: "list" | "run" | "cancel", work: () => Promise<T>, otherwise: T): Promise<T> {
