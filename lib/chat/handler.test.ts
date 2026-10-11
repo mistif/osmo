@@ -8,7 +8,7 @@ import type { ActionOutcome, EnabledActions } from "../actions";
 import { CRISIS_KEY } from "../actions/profile";
 import { bearerToken } from "../server/auth";
 import { CALL_CEILING, estimateTokens, MAX_OUTPUT_TOKENS, MODELS, type Env } from "./allowance";
-import { chatDeps, handleChat, spend, type ChatDeps } from "./handler";
+import { chatDeps, handleChat, reserveCall, spend, type ChatDeps } from "./handler";
 import { ledgerKey, reservationRow, settlingRow, supabaseLedger, type LedgerRow, type LedgerStore } from "./ledger";
 import { RESPONSES_URL } from "./openai";
 import { buildInput, buildInstructions } from "./prompt";
@@ -1165,6 +1165,56 @@ describe("spend: one reserve, call and settle", () => {
 		expect(await spend(s, hello)).toEqual({ kind: "skip", reason: "allowance", usage: { usedToday: 2 * SPENT, usable } });
 		expect(fetcher).toHaveBeenCalledTimes(2);
 		expect(ledger.rows).toHaveLength(4);
+	});
+});
+
+describe("reserveCall: a booking with its own output cap", () => {
+	const entry = MODELS.find((m) => m.model === MODEL)!;
+	const setup = (usable = USABLE) => {
+		const made = rig();
+		return { ...made, s: { deps: made.deps, user: { id: GUR }, entry, key: KEY, usable, store: made.ledger.store } };
+	};
+
+	it("reserves the call's own output cap and the rest as input, and settles it with a signed row", async () => {
+		const { ledger, s } = setup();
+		const booked = await reserveCall(s, { estimate: 5000, maxOutput: 4000 });
+		expect(booked.kind).toBe("booked");
+		if (booked.kind !== "booked") return;
+		expect(booked.usage).toEqual({ usedToday: 5000, usable: USABLE });
+		expect(ledger.rows).toHaveLength(1);
+		expect(ledger.rows[0]).toMatchObject({ day: "2026-09-30", pool: "mini", model: MODEL, input_tokens: 1000, output_tokens: 4000, settles: null });
+		expect(await booked.settle({ input: 700, cached: 0, output: 900, reasoning: 0 }, MODEL)).toBe(true);
+		expect(ledger.rows).toHaveLength(2);
+		expect(ledger.rows[1]).toMatchObject({ model: MODEL, input_tokens: 700, output_tokens: 900, settles: ledger.rows[0].id });
+		expect(ledger.rows[1].signature).toMatch(/^[0-9a-f]{64}$/);
+	});
+
+	it("skips for the allowance, without a row, when a second call no longer fits the share", async () => {
+		const { ledger, s } = setup(9000);
+		const one = await reserveCall(s, { estimate: 5000, maxOutput: 4000 });
+		expect(one.kind).toBe("booked");
+		expect(await reserveCall(s, { estimate: 5000, maxOutput: 4000 })).toEqual({ kind: "skip", reason: "allowance", usage: { usedToday: 5000, usable: 9000 } });
+		expect(ledger.rows).toHaveLength(1);
+	});
+
+	it("skips for an error, without a row, when the day was stopped", async () => {
+		const { ledger, s } = setup();
+		const other = { id: 1, day: "2026-09-30", pool: "mini" as const, model: MODEL, estimate: 5000 };
+		await ledger.store.insert(reservationRow({ ...other, maxOutput: MAX_OUTPUT_TOKENS }));
+		await ledger.store.insert(settlingRow(ledgerKey(KEY), GUR, other, { input: 900, cached: 0, output: 30, reasoning: 0 }, "gpt-5.4-mini-2026-09-01"));
+		expect(await reserveCall(s, { estimate: 5000, maxOutput: 4000 })).toEqual({ kind: "skip", reason: "error", usage: { usedToday: 930, usable: USABLE } });
+		expect(ledger.rows).toHaveLength(2);
+	});
+
+	it("keeps booking a spend at 360 when it names no cap, and books its own cap when it does", async () => {
+		const { ledger, fetcher, s } = setup();
+		const call = { instructions: "Say hello to Gur.", input: [{ role: "user" as const, content: "Hi." }], format: TURN_FORMAT };
+		await spend(s, call);
+		expect(ledger.rows[0]).toMatchObject({ output_tokens: MAX_OUTPUT_TOKENS, input_tokens: estimateTokens(call.instructions, call.input) - MAX_OUTPUT_TOKENS });
+		expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body)).max_output_tokens).toBe(MAX_OUTPUT_TOKENS);
+		await spend(s, { ...call, maxOutput: 4000 });
+		expect(ledger.rows[2]).toMatchObject({ settles: null, output_tokens: 4000, input_tokens: estimateTokens(call.instructions, call.input) - MAX_OUTPUT_TOKENS });
+		expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body)).max_output_tokens).toBe(4000);
 	});
 });
 

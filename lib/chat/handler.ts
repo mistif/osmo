@@ -95,7 +95,7 @@ export async function handleChat(request: Request, deps: ChatDeps): Promise<Resp
 
 // Step 1, for both methods: a signed-in caller (401), and only Gur (403). No owner set means nobody,
 // Gur included, because Supabase sign-ups are open.
-async function owner(request: Request, deps: ChatDeps, env: Env): Promise<{ user: ServerUser; token: string } | Response> {
+export async function owner(request: Request, deps: ChatDeps, env: Env): Promise<{ user: ServerUser; token: string } | Response> {
 	const token = deps.token(request);
 	const user = token === null ? null : await deps.user(request);
 	if (token === null || user === null) return fail(401, "unauthorized");
@@ -233,16 +233,21 @@ async function quietly<T>(deps: ChatDeps, step: "list" | "run" | "cancel", work:
 	}
 }
 
-type Spend = { deps: ChatDeps; user: ServerUser; entry: ModelEntry; key: string; usable: number; store: LedgerStore };
+export type Spend = { deps: ChatDeps; user: ServerUser; entry: ModelEntry; key: string; usable: number; store: LedgerStore };
 // A skip names the fallback the turn answers with; a call that ran was always answered, since spend logs and skips the rest.
-type Spent = { kind: "skip"; reason: FallbackReason; usage: Usage | null } | { kind: "called"; outcome: Answered; usage: Usage };
+type Skipped = { kind: "skip"; reason: FallbackReason; usage: Usage | null };
+type Spent = Skipped | { kind: "called"; outcome: Answered; usage: Usage };
 type Answered = Extract<ModelOutcome, { kind: "answered" }>;
+// A call that fits and is reserved: usage is the day with its estimate counted, and settle books what it really spent
+// (false when the settling row does not save, and the estimate then stays counted).
+export type Booked = { kind: "booked"; reservation: Reservation; usage: Usage; settle(counts: Counts, model: string): Promise<boolean> };
 
-// Steps 5 to 11 for one model call, so every call of a turn is booked the same way: read the day, check the
-// budget, reserve, read again, call once, settle.
-export async function spend(s: Spend, call: { instructions: string; input: InputItem[]; format: unknown }): Promise<Spent> {
+// Steps 5 to 9 for one model call: read the day, check the budget, reserve, read again, and withdraw if the room is gone.
+// The caller makes the one call and settles. maxOutput is the call's own output cap, which is what the reservation holds
+// as output: a build books 4000, a turn 360.
+export async function reserveCall(s: Spend, c: { estimate: number; maxOutput: number }): Promise<Booked | Skipped> {
 	const { deps, user, entry, usable, store } = s;
-	const estimate = estimateTokens(call.instructions, call.input);
+	const { estimate, maxOutput } = c;
 
 	// 5. Today's rows. The clock is read once, so a call that crosses midnight UTC stays on one day.
 	const day = dayKey(deps.now());
@@ -262,7 +267,7 @@ export async function spend(s: Spend, call: { instructions: string; input: Input
 	if (estimate > CALL_CEILING || !fits(before.used, estimate, usable)) return { kind: "skip", reason: "allowance", usage: { usedToday: before.used, usable } };
 
 	// 8. Reserve the estimate.
-	const booked = await store.insert(reservationRow({ day, pool: entry.pool, model: entry.model, estimate, maxOutput: MAX_OUTPUT_TOKENS }));
+	const booked = await store.insert(reservationRow({ day, pool: entry.pool, model: entry.model, estimate, maxOutput }));
 	if (!booked.ok) {
 		deps.log("chat.ledger", { step: "reserve", code: booked.code });
 		return { kind: "skip", reason: "error", usage: { usedToday: before.used, usable } };
@@ -288,16 +293,28 @@ export async function spend(s: Spend, call: { instructions: string; input: Input
 		const withdrawn = await settle(ZERO, entry.model);
 		return { kind: "skip", reason: after.stopped ? "error" : "allowance", usage: { usedToday: withdrawn ? after.used - estimate : after.used, usable } };
 	}
+	return { kind: "booked", reservation, usage: { usedToday: after.used, usable }, settle };
+}
+
+// Steps 5 to 11 for one model call, so every call of a turn is booked the same way: reserveCall, the call once, settle.
+// maxOutput is the call's output cap (default MAX_OUTPUT_TOKENS).
+export async function spend(s: Spend, call: { instructions: string; input: InputItem[]; format: unknown; maxOutput?: number }): Promise<Spent> {
+	const { deps, user, entry } = s;
+	const maxOutput = call.maxOutput ?? MAX_OUTPUT_TOKENS;
+	const estimate = estimateTokens(call.instructions, call.input, maxOutput);
+	const reserved = await reserveCall(s, { estimate, maxOutput });
+	if (reserved.kind === "skip") return reserved;
+	const { reservation, settle } = reserved;
 
 	// 10. The one call, with no retries.
 	const safetyId = createHash("sha256").update(user.id).digest("hex");
-	const outcome = await callModel(deps.fetch, s.key, { entry, instructions: call.instructions, input: call.input, safetyId, maxOutput: MAX_OUTPUT_TOKENS, format: call.format });
+	const outcome = await callModel(deps.fetch, s.key, { entry, instructions: call.instructions, input: call.input, safetyId, maxOutput, format: call.format });
 
 	// 11. Settle. usedToday is the second read's count with this call's estimate replaced by what was settled.
-	let usedToday = after.used;
-	const settled = settlement(outcome, reservation);
+	let usedToday = reserved.usage.usedToday;
+	const settled = settlement(outcome, reservation, maxOutput);
 	if (settled !== null && (await settle(settled.counts, settled.model))) usedToday += settled.counts.input + settled.counts.output - estimate;
-	const usage: Usage = { usedToday, usable };
+	const usage: Usage = { usedToday, usable: s.usable };
 	if (outcome.kind !== "answered") {
 		deps.log("chat.openai", {
 			status: outcome.status,
@@ -314,14 +331,14 @@ export async function spend(s: Spend, call: { instructions: string; input: Input
 // refused (a 4xx), because nothing ran. Null means no settling row, so the estimate stays: a timeout, a
 // 5xx or an unreadable body may still have been served. A served model that isn't the one asked for is
 // always settled under its own name, at the estimate when there are no counts, so the ledger stops the day.
-function settlement(outcome: ModelOutcome, reservation: Reservation): { counts: Counts; model: string } | null {
+function settlement(outcome: ModelOutcome, reservation: Reservation, maxOutput: number): { counts: Counts; model: string } | null {
 	if (outcome.kind === "rejected") return { counts: ZERO, model: reservation.model };
 	if (outcome.kind === "unknown") return null;
 	const served = outcome.parsed.model ?? reservation.model;
 	if (outcome.parsed.usage !== null) return { counts: outcome.parsed.usage, model: served };
 	if (served === reservation.model) return null;
 	return {
-		counts: { input: reservation.estimate - MAX_OUTPUT_TOKENS, cached: 0, output: MAX_OUTPUT_TOKENS, reasoning: 0 },
+		counts: { input: reservation.estimate - maxOutput, cached: 0, output: maxOutput, reasoning: 0 },
 		model: served,
 	};
 }
