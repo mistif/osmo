@@ -444,8 +444,12 @@ function buildBigWorld(
 			if (!g.dead) hooks.line?.(null);
 		}, WILL_LINE_MS);
 	};
+	// Put away (the stage unmounts, or the dev page starts another world): his line and the Back to Osmo button go with it.
 	g.undo.push(() => {
 		if (lineTimer !== null) clearTimeout(lineTimer);
+		lineTimer = null;
+		hooks.line?.(null);
+		hooks.away?.(false);
 	});
 	const showLineAfterLapse = (text: string) => {
 		if (lapse) lineAfterLapse = text;
