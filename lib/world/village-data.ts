@@ -2,6 +2,7 @@
 // owner's only (RLS). The import is relative so the test can stand in for the client.
 import { supabase } from "../supabase";
 import { CASTLE_ROOMS } from "./blueprints/types";
+import { BUILDS } from "./flags";
 import { isVillageRow, saveRow, type RoomProgress, type VillageRow } from "./progress";
 
 // Sent on window once the rows are gone; the world drops what it holds and reads the village again. Other open tabs
@@ -15,6 +16,8 @@ let inFlight: Promise<unknown> = Promise.resolve();
 // A clear that never settles (a stalled fetch) must not hold every save of this tab: after this long it gives up, says
 // so once, and saves start again. (A delete that lands late is found by the world's re-read when the page is shown again.)
 export const CLEAR_TIMEOUT_MS = 10_000;
+// Postgres 42501 (no permission) and 42P01 / PostgREST PGRST205 (no such table).
+const GONE_OR_LOCKED: readonly string[] = ["42501", "42P01", "PGRST205"];
 
 // ok is false when it could not be read (a network error, or the table is not migrated yet): then he does not build
 // and nothing is saved this visit, rather than building on a count that may be wrong.
@@ -35,9 +38,19 @@ export async function saveRoom(p: RoomProgress): Promise<boolean> {
 	return !error;
 }
 
-// Deletes every room of Gur's village. True when the rows are gone (also when there were none).
-export async function clearVillage(): Promise<boolean> {
+// A save of the builds table (builds-data.ts) a clear must wait for, as it waits for the village's own saves.
+export function trackSave<T>(run: Promise<T>): Promise<T> {
+	inFlight = run.catch(() => undefined);
+	return run;
+}
+export const clearingNow = (): boolean => clearing;
+
+// Deletes every room of Gur's village. True when the rows are gone (also when there were none). With builds on (Clear
+// the world, spec 4.9), every build is deleted first, the castle's rooms included; the islands (the world row) stay;
+// the old village rows go too while the table is there and writable.
+export async function clearVillage(opts: { builds?: boolean } = {}): Promise<boolean> {
 	if (clearing) return false;
+	const builds = opts.builds ?? BUILDS;
 	clearing = true;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	try {
@@ -46,7 +59,14 @@ export async function clearVillage(): Promise<boolean> {
 		});
 		const gone = (async () => {
 			await inFlight;
-			return supabase.from("village").delete().in("room", [...CASTLE_ROOMS]);
+			if (builds) {
+				const b = await supabase.from("builds").delete().not("id", "is", null);
+				if (b.error) return b;
+			}
+			const v = await supabase.from("village").delete().in("room", [...CASTLE_ROOMS]);
+			// No permission (main made village read-only) or no such table (main dropped it): the builds are what Clear the world clears.
+			if (builds && v.error && GONE_OR_LOCKED.includes(v.error.code)) return { error: null };
+			return v;
 		})();
 		gone.catch(() => undefined); // if the timer wins, a later failure of the delete is not an unhandled rejection
 		const result = await Promise.race([gone, late]);
