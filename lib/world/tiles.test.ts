@@ -146,3 +146,70 @@ describe("the tiles", () => {
 		expect(bmp.w).toBe(TILE_IDS.length * 64);
 	});
 });
+
+describe("the free-will tiles (spec 4.5)", () => {
+	const OPAQUE: TileId[] = ["plank-wall", "stone-wall", "back-wood", "back-stone", "leaves", "fruit-leaves", "hedge", "water", "water-top", "soil", "glass-wall", "thatch-flat", "plank-wall-2", "stone-wall-2"];
+	const SEE_THROUGH: TileId[] = ["post", "rope", "bridge-board", "flowers", "balloon-tl", "balloon-tr", "balloon-bl", "balloon-br", "basket", "bell", "awning", "sail", "statue", "arch", "rail", "thatch-l", "thatch-r", "thatch-peak", "glass-roof-l", "glass-roof-r"];
+	const LIT_NEW: TileId[] = ["plank-wall", "stone-wall", "back-wood", "back-stone", "hedge", "soil", "thatch-flat", "plank-wall-2", "stone-wall-2"];
+	it("draws every one of them, none a placeholder box any more", () => {
+		for (const id of FREE_WILL as TileId[]) {
+			const g = TILES[id];
+			const inside = new Set(g.slice(1, 15).map((r) => r.slice(1, 15)).join(""));
+			expect(inside.size, `${id} is still one flat fill`).toBeGreaterThan(2);
+		}
+	});
+	it.each(OPAQUE)("%s has no transparent pixel", (id) => {
+		expect(TILES[id].join("")).not.toContain(".");
+	});
+	it.each(SEE_THROUGH)("%s lets the sky through somewhere", (id) => {
+		expect(TILES[id].join("")).toContain(".");
+	});
+	it.each(LIT_NEW)("%s is lit from the top left", (id) => {
+		const g = TILES[id];
+		expect(mean([...g[0]])).toBeGreaterThanOrEqual(mean([...g[15]]));
+		expect(mean(g.map((r) => r[0]))).toBeGreaterThanOrEqual(mean(g.map((r) => r[15])) - 2);
+	});
+	it("draws the back walls darker than the walls they stand behind", () => {
+		expect(mean([...TILES["back-wood"].join("")])).toBeLessThan(mean([...TILES["plank-wall"].join("")]) - 15);
+		expect(mean([...TILES["back-stone"].join("")])).toBeLessThan(mean([...TILES["stone-wall"].join("")]) - 15);
+	});
+	it("gives the thatch and the glass roof the shingle roof's outline, so they meet a wall the same way", () => {
+		for (const [shingle, other] of [["roof-left", "thatch-l"], ["roof-right", "thatch-r"], ["roof-left", "glass-roof-l"], ["roof-right", "glass-roof-r"]] as const) {
+			for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) expect(TILES[other][y][x] === ".", `${other} ${x},${y}`).toBe(TILES[shingle][y][x] === ".");
+		}
+	});
+	it("puts the water's bright line on top", () => {
+		expect(mean([...TILES["water-top"][0]])).toBeGreaterThan(mean([...TILES.water[0]]));
+	});
+	it.each([["plank-wall", "plank-wall-2"], ["stone-wall", "stone-wall-2"]] as const)("%s's variant %s keeps its ring and differs inside", (base, variant) => {
+		const b = TILES[base];
+		const v = TILES[variant];
+		expect(v[0]).toBe(b[0]);
+		expect(v[15]).toBe(b[15]);
+		for (let y = 0; y < 16; y++) {
+			expect(v[y][0]).toBe(b[y][0]);
+			expect(v[y][15]).toBe(b[y][15]);
+		}
+		let differ = 0;
+		for (let y = 1; y < 15; y++) for (let x = 1; x < 15; x++) if (v[y][x] !== b[y][x]) differ++;
+		expect(differ).toBeGreaterThanOrEqual(12);
+		expect(differ).toBeLessThanOrEqual(150);
+	});
+	it("writes a contact sheet of the new tiles, and a few of them put together, when WORLD_SNAPSHOT_DIR is set", () => {
+		snapshot("tiles-free-will", rasterize((FREE_WILL as TileId[]).map((id) => TILES[id]), 16, 16, 6, cols));
+		// cells of tile ids (null: sky) to one picture, 16 px a cell
+		const compose = (cells: (TileId | null)[][]): string[] =>
+			cells.flatMap((row) => Array.from({ length: 16 }, (_, y) => row.map((id) => (id ? TILES[id][y] : ".".repeat(16))).join("")));
+		const samples: Record<string, (TileId | null)[][]> = {
+			cottage: [[null, null, "thatch-peak", null, null], [null, "thatch-l", "thatch-flat", "thatch-r", null], ["thatch-l", "thatch-flat", "thatch-flat", "thatch-flat", "thatch-r"], ["post", "plank-wall", "window-top", "plank-wall-2", "post"], ["post", "plank-wall", "window", "plank-wall", "post"], ["step", "step", "step", "step", "step"]],
+			greenhouse: [[null, "glass-roof-l", "roof-peak", "glass-roof-r", null], ["glass-roof-l", "glass", "glass", "glass", "glass-roof-r"], ["post", "glass-wall", "glass-wall", "glass-wall", "post"], ["flowers", "flowers", null, "flowers", "flowers"], ["soil", "soil", "step", "soil", "soil"]],
+			pond: [["stone-wall", "water-top", "water-top", "water-top", "stone-wall"], ["stone-wall", "water", "water", "water", "stone-wall-2"]],
+			balloon: [["balloon-tl", "balloon-tr"], ["balloon-bl", "balloon-br"], [null, null], ["basket", null]],
+			orchard: [["fruit-leaves", "leaves", "fruit-leaves", null, "hedge", "hedge"], ["leaves", "fruit-leaves", "leaves", null, "hedge", "hedge"], [null, "trunk", null, null, "rail", "rail"], [null, "trunk-base", null, "bell", "bridge-board", "bridge-board"]],
+			stall: [["awning", "awning", "awning"], ["post", "back-wood", "post"], ["post", "back-wood", "post"], ["post", "back-stone", "post"]],
+			gate: [["arch", "arch", "arch"], ["stone-wall", null, "stone-wall"], ["stone-wall", "statue", "stone-wall-2"], ["sail", "rope", "shutter"]],
+		};
+		for (const [name, cells] of Object.entries(samples)) snapshot(`sample-${name}`, rasterize([compose(cells)], cells[0].length * 16, cells.length * 16, 4, cols));
+		expect(Object.keys(samples)).toHaveLength(7);
+	});
+});

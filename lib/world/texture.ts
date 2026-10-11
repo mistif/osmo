@@ -6,11 +6,14 @@ import { GROUND_Y, TILE, type Block } from "./blueprints/types";
 import type { TileId } from "./tiles";
 
 // --- Variants: a fixed hash of the cell's tile position picks the tile, so the same cell always shows the same one
-// and the 16 px repeat stops showing on long walls and the island's top. Each variant in about one cell in six. ---
+// and the 16 px repeat stops showing on long walls and the island's top. Each variant in about one cell in six. The
+// free-will walls have one variant each: their pair's second is the base itself.
 const VARIANTS: Partial<Record<TileId, readonly [TileId, TileId]>> = {
 	brick: ["brick-2", "brick-3"],
 	stone: ["stone-2", "stone-3"],
 	snow: ["snow-2", "snow-3"],
+	"plank-wall": ["plank-wall-2", "plank-wall"],
+	"stone-wall": ["stone-wall-2", "stone-wall"],
 };
 export const VARIANT_SHARE = 1 / 6;
 export function cellHash(x: number, y: number): number {
@@ -39,9 +42,10 @@ const LIT: Partial<Record<TileId, TileId>> = {
 export const litOf = (id: TileId, dark: number): TileId => (dark >= LIT_FROM ? (LIT[id] ?? id) : id);
 
 // --- Shadows: a block of CASTERS darkens the top world pixel row of the block right below it, when that block is a
-// wall (RECEIVERS): under the eaves' timber, under a window's sill, under the bookcase window's sill. ---
+// wall (RECEIVERS): under the eaves' timber, under a window's sill, under the bookcase window's sill. The free-will
+// walls and back walls receive it too. ---
 const CASTERS: ReadonlySet<TileId> = new Set<TileId>(["beam-h", "window", "shelf-window"]);
-const RECEIVERS: ReadonlySet<TileId> = new Set<TileId>(["brick", "brick-dark", "pillar"]);
+const RECEIVERS: ReadonlySet<TileId> = new Set<TileId>(["brick", "brick-dark", "pillar", "plank-wall", "stone-wall", "back-wood", "back-stone"]);
 export const SHADOW_ALPHA = 0.3;
 export const SHADOW_COLOR = "#0b0d12";
 // The blocks that receive a shadow on their top row, from the blocks laid so far. A cell can hold two blocks (a
