@@ -28,6 +28,121 @@ export function cleanOutput(text: string): string {
 const IMPORT = /\bimport\b\s*([^'"();]*?)\s*(?:from\s*)?(["'])([^"']*)\2/g;
 // export * from "x" and export { a } from "x" load a module just as import does.
 const REEXPORT = /\bexport\s*(?:\*(?:\s*as\s+[\w$]+)?|\{[^}]*\})\s*from\s*(["'])([^"']*)\1/g;
+// Finds an exclamation mark in text a person would read: string and template literals, JSX text and JSX attribute strings.
+// Comments, the operators ! != !==, !important and regex literals are not text. A small scanner, not a parser.
+export function visibleBang(s: string): string | null {
+	const n = s.length;
+	let hit = null as string | null;
+	let prev = "";
+	const found = (text: string) => {
+		const m = hit === null ? /!(?!important\b)/.exec(text) : null;
+		if (m) hit = text.slice(Math.max(0, m.index - 30), m.index + 10).replace(/\s+/g, " ").trim();
+	};
+	const tail = (i: number) => s.slice(Math.max(0, i - 12), i);
+	const str = (i: number, q: string, escapes: boolean): number => {
+		let j = i + 1;
+		while (j < n && s[j] !== q && !(escapes && s[j] === "\n")) j += escapes && s[j] === "\\" ? 2 : 1;
+		found(s.slice(i + 1, Math.min(j, n)));
+		return s[j] === q ? j + 1 : Math.min(j, n);
+	};
+	const tpl = (i: number): number => {
+		let start = i;
+		while (i < n) {
+			if (s[i] === "\\") i += 2;
+			else if (s[i] === "`") {
+				found(s.slice(start, i));
+				return i + 1;
+			} else if (s[i] === "$" && s[i + 1] === "{") {
+				found(s.slice(start, i));
+				i = code(i + 2, true);
+				start = i;
+			} else i++;
+		}
+		return n;
+	};
+	const regex = (i: number): number => {
+		let j = i + 1;
+		let inClass = false;
+		while (j < n && s[j] !== "\n") {
+			if (s[j] === "\\") j++;
+			else if (s[j] === "[") inClass = true;
+			else if (s[j] === "]") inClass = false;
+			else if (s[j] === "/" && !inClass) return j + 1;
+			j++;
+		}
+		return Math.min(j, n);
+	};
+	const jsx = (i: number): number => {
+		if (s[i + 1] === "/") {
+			const e = s.indexOf(">", i);
+			return e < 0 ? n : e + 1;
+		}
+		i++;
+		while (i < n) {
+			const c = s[i];
+			if (c === '"' || c === "'") i = str(i, c, false);
+			else if (c === "{") i = code(i + 1, true);
+			else if (c === "/" && s[i + 1] === ">") return i + 2;
+			else if (c === ">") {
+				i++;
+				break;
+			} else i++;
+		}
+		let start = i;
+		while (i < n) {
+			if (s[i] === "{") {
+				found(s.slice(start, i));
+				i = code(i + 1, true);
+				start = i;
+			} else if (s[i] === "<") {
+				found(s.slice(start, i));
+				const closing = s[i + 1] === "/";
+				i = jsx(i);
+				if (closing) return i;
+				start = i;
+			} else i++;
+		}
+		return n;
+	};
+	function code(i: number, inBrace: boolean): number {
+		let depth = 0;
+		while (i < n) {
+			const c = s[i];
+			const next = s[i + 1];
+			if (c === "/" && next === "/") {
+				const e = s.indexOf("\n", i);
+				i = e < 0 ? n : e;
+			} else if (c === "/" && next === "*") {
+				const e = s.indexOf("*/", i + 2);
+				i = e < 0 ? n : e + 2;
+			} else if (c === '"' || c === "'") {
+				i = str(i, c, true);
+				prev = "a";
+			} else if (c === "`") {
+				i = tpl(i + 1);
+				prev = "a";
+			} else if (c === "/" && (prev === "" || "(,=:[!&|?{};".includes(prev) || /\b(?:return|typeof)\s*$/.test(tail(i)))) {
+				i = regex(i);
+				prev = "a";
+			} else if (c === "<" && /[A-Za-z>]/.test(next ?? "") && (prev === "" || "(,=:[?&|{;>".includes(prev) || /\b(?:return|default)\s*$/.test(tail(i)))) {
+				i = jsx(i);
+				prev = "a";
+			} else {
+				if (c === "{") depth++;
+				else if (c === "}") {
+					if (depth === 0 && inBrace) return i + 1;
+					depth = Math.max(0, depth - 1);
+				}
+				if (!/\s/.test(c)) prev = c;
+				i++;
+			}
+		}
+		return n;
+	}
+	code(0, false);
+	return hit;
+}
+
 export function checkSource(source: string): { ok: true } | { ok: false; error: string } {
 	const no = (error: string) => ({ ok: false as const, error });
 	if (bytes(source) > LIMITS.sourceBytes) return no("The source is larger than 12288 bytes.");
@@ -46,6 +161,8 @@ export function checkSource(source: string): { ok: true } | { ok: false; error: 
 	}
 	if ((source.match(/\bexport\s+default\b/g) ?? []).length !== 1) return no("There must be exactly one export default.");
 	if (/export\s+default\s+(?:async\s+)?function\s*[\w$]*\s*\(\s*[^\s)]/.test(source)) return no("The component must take no props.");
+	const bang = visibleBang(source);
+	if (bang) return no(`Visible text has an exclamation mark: "${bang}". Remove it.`);
 	return { ok: true };
 }
 export type CompileResult = { ok: true; code: string } | { ok: false; error: string };
