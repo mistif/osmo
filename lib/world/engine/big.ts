@@ -11,11 +11,12 @@
 // when one is due, travels by the balloon and his bridges, and catches up on return with a time-lapse. With OSMO_WILL on
 // the server, the model picks one of the three candidates and writes his line (phase 3); otherwise code does.
 import { facingViewer, look, newActor, nextLookIn, pose, PRESENT_MS, step, type Actor, type ActorEvent, type ActorKind, type ActorWorld } from "../actor";
-import { REST_X, START_X } from "../blueprints";
+import { cellsOf, REST_X, START_X } from "../blueprints";
+import { CASTLE_BLOCKS } from "../blueprints/castle";
 import { CASTLE_ROOMS, TILE, type Block, type CastleRoom } from "../blueprints/types";
-import { accrued, spendBudget, splitReturn } from "../build/budget";
+import { accrued, MS_PER_BLOCK, spendBudget, splitReturn } from "../build/budget";
 import { insertBuild, loadBuilds, saveBuild } from "../build/builds-data";
-import { CASTLE_RECTS, castleRecipeId, roomOfRecipe } from "../build/castle-sites";
+import { CASTLE_RECTS, castleAt, castleFootprint, castleRecipeId, roomOfRecipe } from "../build/castle-sites";
 import { compile } from "../build/compile";
 import { PARTS } from "../build/parts";
 import { RECIPES } from "../build/recipes";
@@ -81,6 +82,18 @@ const NO_DECKS: readonly Deck[] = [];
 const NO_LIGHTS: readonly { x: number; y: number }[] = [];
 const NOTHING: Lists = { laid: [], ghost: null, lights: NO_LIGHTS };
 
+// The dev page's finished castle: the six rooms' rows, every block laid (builds mode), or the village's (big mode).
+const doneCastleRows = (nowIso: string): BuildRow[] =>
+	CASTLE_ROOMS.map((room) => {
+		const at = castleAt(room);
+		const footprint = castleFootprint(room);
+		const recipe = castleRecipeId(room);
+		const total = cellsOf(footprint, at.x, at.y, recipe).length;
+		return { id: `dev-${recipe}`, recipe, params: {}, island: 0, x: at.x, y: at.y, footprint, total, laid: total, reason: null, started_at: nowIso, finished_at: nowIso };
+	});
+const doneVillageRows = (nowIso: string): VillageRow[] =>
+	CASTLE_ROOMS.map((room) => ({ room, laid: CASTLE_BLOCKS[room].length, started_at: nowIso, finished_at: nowIso }));
+
 // localStorage, or null where it is blocked (as components/osmo/use-rail-dots.ts reads it).
 function storage(): Storage | null {
 	try {
@@ -143,10 +156,12 @@ function buildBigWorld(
 	let intents: Intent[] = [];
 	let lastWheel = Number.NEGATIVE_INFINITY;
 
-	// big mode: today's village; the dev page builds the whole castle from nothing, room by room (or pins its rooms).
-	let village: Village | null = persist || withBuilds ? null : resumeVillage([], CASTLE_ROOMS, iso());
-	// builds mode: the castle's rooms and his own builds; the dev page's from nothing, every room open.
-	let builds: Builds | null = persist || !withBuilds ? null : resumeBuilds([], CASTLE_ROOMS, iso());
+	// The dev page's castle: every room open, built live from nothing, or (castle "done") all six finished, in memory.
+	const castleDone = !persist && fixed()?.castle === "done";
+	// big mode: today's village (the dev page's, or its pinned rooms).
+	let village: Village | null = persist || withBuilds ? null : resumeVillage(castleDone ? doneVillageRows(iso()) : [], CASTLE_ROOMS, iso());
+	// builds mode: the castle's rooms and his own builds.
+	let builds: Builds | null = persist || !withBuilds ? null : resumeBuilds(castleDone ? doneCastleRows(iso()) : [], CASTLE_ROOMS, iso());
 	let counts: VillageCounts | null = null;
 	let settingsOpened = createSeenStore(storage(), iso).peek(SETTINGS_SEEN) !== null;
 	let gen = 0; // a clear or a re-read bumps it: a read or a save begun before is dropped
@@ -168,6 +183,7 @@ function buildBigWorld(
 	let lineTimer: ReturnType<typeof setTimeout> | null = null;
 	let devN = 0;
 	let willOff = false; // the will answered "off" this visit: code picks from then on
+	let grantAt: number | null = null; // the dev page's last grant
 
 	let overrides: Overrides = {};
 	let scarf = live.current.colorA;
@@ -904,6 +920,13 @@ function buildBigWorld(
 			scarf = live.current.colorA;
 			dark = darkAt(hour);
 			repaint();
+		}
+		// The dev page's grant (a new `at`): the budget set that many blocks back, then the catch-up, as on a return.
+		const grant = fixed()?.grant;
+		if (!persist && withBuilds && grant && grant.at !== grantAt) {
+			grantAt = grant.at;
+			budgetAt = new Date(wall - Math.max(0, grant.blocks) * MS_PER_BLOCK).toISOString();
+			catchUpSoon();
 		}
 		advanceLapse(now);
 		// 6. the camera: following him, drifting where Gur left it, or gliding to the time-lapse's sites
