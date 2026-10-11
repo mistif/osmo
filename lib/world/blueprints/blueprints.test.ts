@@ -3,7 +3,7 @@ import { SKY_TILES, TALLEST_TILES } from "../camera";
 import { TILE_IDS, TILES } from "../tiles";
 import { CASTLE, CASTLE_BLOCKS, DOOR_X } from "./castle";
 import { HALL } from "./hall";
-import { blocksOf, ISLAND_LEFT, ISLAND_RIGHT, REST_X, standX, START_X } from "./index";
+import { blocksOf, cellsOf, ISLAND_LEFT, ISLAND_RIGHT, REST_X, standX, START_X } from "./index";
 import { ISLAND } from "./island";
 import { CASTLE_ROOMS, GROUND_Y, LAYER_ORDER, TILE, WORLD_H, WORLD_W, type Blueprint, type CastleRoom } from "./types";
 
@@ -46,7 +46,14 @@ describe("the hall", () => {
 		expect(new Set(blocks.map((b) => `${b.x},${b.y},${decor(b) ? "decor" : "map"}`)).size).toBe(180);
 	});
 	it("counts each layer", () => {
-		expect(LAYER_ORDER.map((l) => blocks.filter((b) => b.layer === l).length)).toEqual([0, 17, 99, 52, 4, 2, 2, 4]);
+		expect(LAYER_ORDER.map((l) => blocks.filter((b) => b.layer === l).length)).toEqual([0, 17, 0, 99, 52, 4, 2, 2, 4]);
+	});
+	it("is laid by cellsOf at its own place exactly as blocksOf lays it", () => {
+		expect(cellsOf(HALL, HALL.x, HALL.y, "hall")).toEqual(blocks);
+		expect(() => cellsOf({ map: ["x"], decor: [], legend: {} }, 0, 0, "test")).toThrow('test: no legend entry for "x" at 0,0');
+	});
+	it("lays a back wall after the floor and before the walls (free-will spec 4.1)", () => {
+		expect(LAYER_ORDER).toEqual(["ground", "floor", "backwall", "walls", "roof", "windows", "door", "lanterns", "banners"]);
 	});
 	it("lays the floor, the walls upward, the roof, then windows, door, lanterns and banners", () => {
 		const rank = blocks.map((b) => LAYER_ORDER.indexOf(b.layer));

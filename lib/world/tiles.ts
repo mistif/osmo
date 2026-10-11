@@ -4,6 +4,7 @@
 // Brick is shaded by a small helper from hand-laid maps (one letter per brick); the rest is drawn from per-pixel
 // rules and a few hand-drawn grids. Texture comes from a fixed hash, so every run draws the same pixels.
 import type { Grid } from "./raster";
+import { MORE_TILE_IDS, MORE_TILES } from "./tiles-more";
 
 export const TILE_IDS = [
 	"snow", "snow-edge-l", "snow-edge-r", "stone", "stone-dark", "stone-edge-l", "stone-edge-r", "stone-bottom",
@@ -18,6 +19,8 @@ export const TILE_IDS = [
 	// Appended in the polish pass; the 61 above keep their cells. Two variants each of brick, the island's stone and
 	// snow (the renderer chooses per cell, texture.ts), and the bookcase window and the dome lit for the night.
 	"brick-2", "brick-3", "stone-2", "stone-3", "snow-2", "snow-3", "shelf-window-lit", "dome-l-lit", "dome-lit", "dome-r-lit",
+	// Appended for the free-will builds (tiles-more.ts); the 71 above keep their cells.
+	...MORE_TILE_IDS,
 ] as const;
 export type TileId = (typeof TILE_IDS)[number];
 
@@ -1329,6 +1332,7 @@ export const TILES: Readonly<Record<TileId, Grid>> = {
 	"dome-l-lit": make((x, y) => domeEdgeLit(x, y, "l")),
 	"dome-lit": make((x, y) => domeGlassLit(x, y, 0)),
 	"dome-r-lit": make((x, y) => domeEdgeLit(x, y, "r")),
+	...MORE_TILES,
 };
 
 const INDEX = new Map<TileId, number>(TILE_IDS.map((id, i) => [id, i]));

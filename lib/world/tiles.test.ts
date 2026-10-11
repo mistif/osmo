@@ -20,6 +20,13 @@ const ROOMS = ["tower-cap", "shelf-window", "forge", "dome-l", "dome", "dome-r"]
 const POLISH = [
 	"brick-2", "brick-3", "stone-2", "stone-3", "snow-2", "snow-3", "shelf-window-lit", "dome-l-lit", "dome-lit", "dome-r-lit",
 ];
+// Appended for the free-will builds (tiles-more.ts), after the 71.
+const FREE_WILL = [
+	"plank-wall", "stone-wall", "back-wood", "back-stone", "post", "shutter", "thatch-l", "thatch-r", "thatch-flat", "thatch-peak",
+	"rope", "bridge-board", "leaves", "fruit-leaves", "hedge", "water", "water-top", "flowers", "soil", "glass-wall",
+	"glass-roof-l", "glass-roof-r", "balloon-tl", "balloon-tr", "balloon-bl", "balloon-br", "basket", "bell", "awning", "sail",
+	"statue", "arch", "rail", "plank-wall-2", "stone-wall-2",
+];
 // Tiles with no transparent pixel.
 const FILLED: TileId[] = [
 	"snow", "stone", "stone-dark", "brick", "brick-dark", "plank", "beam-h", "glass", "window", "window-top",
@@ -43,14 +50,16 @@ const mean = (chars: string[]) => {
 };
 
 describe("the tiles", () => {
-	it("are the 38 tiles in the fixed cell order, then the look pass's, the rooms' and the polish pass's, appended", () => {
-		expect([...TILE_IDS]).toEqual([...ORDER, ...ADDED, ...ROOMS, ...POLISH]);
-		expect(Object.keys(TILES).sort()).toEqual([...ORDER, ...ADDED, ...ROOMS, ...POLISH].sort());
+	it("are the 38 tiles in the fixed cell order, then the look pass's, the rooms', the polish pass's and the free-will tiles, appended", () => {
+		expect([...TILE_IDS]).toEqual([...ORDER, ...ADDED, ...ROOMS, ...POLISH, ...FREE_WILL]);
+		expect(Object.keys(TILES).sort()).toEqual([...ORDER, ...ADDED, ...ROOMS, ...POLISH, ...FREE_WILL].sort());
 		expect(tileIndex("fence")).toBe(54);
 		expect(tileIndex("tower-cap")).toBe(55);
 		expect(tileIndex("dome-r")).toBe(60);
 		expect(tileIndex("brick-2")).toBe(61);
 		expect(tileIndex("dome-r-lit")).toBe(70);
+		expect(tileIndex("plank-wall")).toBe(71);
+		expect(tileIndex("stone-wall-2")).toBe(105);
 		expect(tileIndex("snow")).toBe(0);
 		expect(tileIndex("step")).toBe(30);
 		expect(tileIndex("cloud-small")).toBe(37);

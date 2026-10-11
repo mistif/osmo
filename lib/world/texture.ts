@@ -65,11 +65,13 @@ const POOLS: Partial<Record<TileId, { rx: number; ry: number; strength: number }
 	lantern: { rx: 26, ry: 5, strength: 0.34 },
 	door: { rx: 20, ry: 4, strength: 0.26 },
 };
-export function poolsOf(blocks: readonly Block[]): Pool[] {
+// floorY: the world px y of the ground's top edge under a block. The small world's is its one snow row; the big world
+// passes its surface (T2).
+export function poolsOf(blocks: readonly Block[], floorY: (b: Block) => number = () => GROUND_Y * TILE): Pool[] {
 	const out: Pool[] = [];
 	for (const b of blocks) {
 		const p = POOLS[b.tile];
-		if (p) out.push({ x: (b.x + 0.5) * TILE, y: GROUND_Y * TILE + 1, ...p });
+		if (p) out.push({ x: (b.x + 0.5) * TILE, y: floorY(b) + 1, ...p });
 	}
 	return out;
 }

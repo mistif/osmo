@@ -1,0 +1,58 @@
+import { describe, expect, it } from "vitest";
+import { hash01, partsOf, pickIndex, roofRows, rowsAt, sizeOf } from "./util";
+
+describe("the seeded hash", () => {
+	it("is the same every time, in 0..1, and differs by key", () => {
+		expect(hash01(7, 3)).toBe(hash01(7, 3));
+		const all = Array.from({ length: 200 }, (_, k) => hash01(42, k));
+		for (const h of all) {
+			expect(h).toBeGreaterThanOrEqual(0);
+			expect(h).toBeLessThan(1);
+		}
+		expect(new Set(all).size).toBeGreaterThan(190);
+		expect(hash01(1, 0)).not.toBe(hash01(2, 0));
+	});
+	it("picks an index inside the list", () => {
+		for (let k = 0; k < 50; k++) expect(pickIndex(9, k, 3)).toBeLessThan(3);
+		expect(pickIndex(9, 0, 0)).toBe(0);
+	});
+});
+
+describe("row parts at a width", () => {
+	it("centres the pattern so the windows sit evenly", () => {
+		expect(rowsAt(["hhhhh", "IBvBI", "IBwBI", "IBBBI"], 7)).toEqual(["hhhhhhh", "IBBvBBI", "IBBwBBI", "IBBBBBI"]);
+		expect(rowsAt(["IBBvBI"], 9)).toEqual(["IBvBBBvBI"]);
+	});
+	it("keeps only the caps at width 2, and refuses less or a ragged part", () => {
+		expect(rowsAt(["SSS"], 2)).toEqual(["SS"]);
+		expect(() => rowsAt(["SSS"], 1)).toThrow("a row is at least 2 wide, not 1");
+		expect(() => rowsAt(["SSS", "SSSS"], 5)).toThrow();
+	});
+});
+
+describe("roofs at a width", () => {
+	it("narrows a gable by one each side per row, to a peak", () => {
+		expect(roofRows("<=>^", 5, "gable")).toEqual(["..^..", ".<=>.", "<===>"]);
+		expect(roofRows("<=>^", 4, "gable")).toEqual([".<>.", "<==>"]);
+		expect(roofRows("<=>^", 1, "gable")).toEqual(["^"]);
+	});
+	it("narrows a spire every second row", () => {
+		expect(roofRows("<=>^", 3, "spire")).toEqual([".^.", ".^.", "<=>", "<=>"]);
+	});
+	it("refuses a part that is not four letters", () => {
+		expect(() => roofRows("<=>", 5, "gable")).toThrow();
+	});
+});
+
+describe("a variation's parts and a build's size", () => {
+	it("lists every part once: tiers, door, decor, sides", () => {
+		const v = {
+			width: 7, material: "stone" as const, tiers: { floor: { part: "f", count: 1 }, storey: { part: "s", count: 2 }, chimney: null, roof: { part: "r", count: 1 } },
+			door: "d", decor: [{ part: "l", spot: 0 }, { part: "l", spot: 3 }], sides: [{ part: "b", at: "left" as const }],
+		};
+		expect(partsOf(v)).toEqual(["f", "s", "r", "d", "l", "b"]);
+	});
+	it("calls under 80 blocks small, under 200 medium, the rest large", () => {
+		expect([sizeOf(79), sizeOf(80), sizeOf(199), sizeOf(200)]).toEqual(["small", "medium", "medium", "large"]);
+	});
+});

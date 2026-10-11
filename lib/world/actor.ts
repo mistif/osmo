@@ -2,16 +2,21 @@
 // what he is doing and whether he laid a block this step. He never teleports: one tick moves him at most MAX_DT of
 // walking, and a hidden tab freezes him where he is.
 import { FOLLOW_UP_MS } from "../voice/machine";
+import { GROUND_Y, TILE } from "./blueprints/types";
+import type { Ride } from "./map/types";
 import type { FaceId, FrameName, Gaze } from "./osmo-sprite";
 import { isNight } from "./sky";
 
 export { FOLLOW_UP_MS };
-export type ActorKind = "idle" | "walking" | "building" | "turning" | "facing" | "resting";
+export type ActorKind = "idle" | "walking" | "building" | "turning" | "facing" | "resting" | "riding";
 export type Talk = "quiet" | "listening" | "speaking";
 type Purpose = "build" | "rest" | "visit";
 export type Actor = {
 	kind: ActorKind;
 	x: number; // his feet's centre, world px
+	y: number; // his feet, world px: the top edge of the tile he stands on (the small world: its snow row)
+	island: number; // the island he is on (0 is home, the small world's only one)
+	ride: Ride | null; // the balloon trip he is on, while riding (T10)
 	dir: 1 | -1; // the way his profile faces
 	since: number; // when this kind began (ms); drives the animation
 	target: number | null;
@@ -50,9 +55,9 @@ export const BLOCK_GAP_MS = 1800;
 export const PRESENT_MS = 10 * 60_000;
 export const MAX_DT = 250;
 
-export function newActor(x: number, now: number, hour: number): Actor {
+export function newActor(x: number, now: number, hour: number, at: { y: number; island: number } = { y: GROUND_Y * TILE, island: 0 }): Actor {
 	return {
-		kind: "idle", x, dir: 1, since: now, target: null, purpose: null, toward: "work", talk: "quiet",
+		kind: "idle", x, y: at.y, island: at.island, ride: null, dir: 1, since: now, target: null, purpose: null, toward: "work", talk: "quiet",
 		quietSince: now, lastMessage: null, nextAt: now, night: isNight(hour), hidden: false,
 	};
 }
@@ -133,6 +138,8 @@ function tick(a: Actor, now: number, dt: number, w: ActorWorld): Step {
 			if (visiting || restWanted || w.next === null || Math.abs(w.next - a.x) >= 0.5) return to(idle(a));
 			if (now - a.since < LAY_MS) return to(a);
 			return to({ ...idle(a), nextAt: now + BLOCK_GAP_MS }, true);
+		case "riding":
+			return to(a); // T10 moves him along the balloon's path
 	}
 }
 
