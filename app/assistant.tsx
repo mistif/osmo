@@ -53,6 +53,7 @@ import { Figure } from "@/components/osmo/figure";
 import { useBuild } from "@/components/osmo/use-build";
 import { ThingPanel } from "@/components/osmo/thing-panel";
 import { SHELL2, WORLD } from "@/lib/shell/flag";
+import { chatShape, clearEcho, ECHO_MS, echoStep, noEcho } from "@/lib/room/chatbox";
 import { useShell } from "@/components/osmo/use-shell";
 import { Rail } from "@/components/osmo/rail";
 import { ShellPanels } from "@/components/osmo/shell-panels";
@@ -704,12 +705,27 @@ export default function AgentChat() {
 	// The subtitle under him: the sentence he's saying. After the last word it keeps the reply's last
 	// sentence while it fades (figure.module.css shows it only while data-speaking is set).
 	const spokenText = speaking ? messages[speaking.index]?.text.slice(0, speaking.chars) : [...messages].reverse().find((m) => m.role === "agent")?.text;
-	// A browser that can't listen has no way in but typing, so it shows the conversation whatever the setting.
-	const voiceOnly = !voice.showChat && voice.listenSupported;
+	// What the room shows of the conversation (lib/room/chatbox.ts). voiceOnly means the log is hidden: with the village on
+	// that is the default, and the composer stays; off, a device that can't listen shows the conversation whatever the setting.
+	const shape = chatShape({ world: WORLD, showChat: voice.showChat, listenSupported: voice.listenSupported });
+	const voiceOnly = !shape.log;
+	// With the village on, the owner's own new line stays for a moment where what he heard goes.
+	const [echo, setEcho] = useState(noEcho);
+	if (WORLD) {
+		const next = echoStep(echo, messages, ready);
+		if (next !== echo) setEcho(next);
+	}
+	const echoed = echo.text !== null;
+	useEffect(() => {
+		if (!echoed) return;
+		const n = echo.n;
+		const timer = setTimeout(() => setEcho((current) => clearEcho(current, n)), ECHO_MS);
+		return () => clearTimeout(timer);
+	}, [echoed, echo.n]);
 	// Voice only: while he thinks, "One moment…" sits under him, and what he heard you say sits above him.
 	const said = thinking && voiceOnly ? "One moment…" : spokenText ? currentSentence(spokenText) : null;
 	const lastHeard = [...messages].reverse().find((m) => m.role === "user")?.text ?? null;
-	const heard = voiceOnly ? (voice.liveText ?? (thinking ? lastHeard : null)) : null;
+	const heard = voiceOnly ? (voice.liveText ?? (thinking ? lastHeard : echo.text)) : null;
 
 	const stageStyle = {
 		"--aura-a": theme.colorA,
@@ -731,7 +747,7 @@ export default function AgentChat() {
 			data-building={build.view?.phase === "building" ? "" : undefined}
 			data-built={build.built ? "" : undefined}
 			data-listening={voice.mode === "awake" || voice.mode === "followup" ? "" : undefined}
-			data-chat={voiceOnly ? undefined : ""}
+			data-chat={shape.composer ? "" : undefined}
 			data-fade={voice.fadeSaid ? "" : undefined}
 		>
 			{WORLD ? (

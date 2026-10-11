@@ -593,6 +593,14 @@
 .stage[data-world] .composer {
 	margin-top: auto;
 }
+/* A chat box and no history (lib/room/chatbox.ts): with the log gone, the composer's own box (its gaps and padding) must
+   not take clicks meant for a room button behind it either; the field and the buttons still do. */
+.stage[data-world] .composer {
+	pointer-events: none;
+}
+.stage[data-world] .composer > * {
+	pointer-events: auto;
+}
 /* Polish pass: a faint glass behind the conversation's lines, so the words sit on something while the world shows
    through: blurred where the browser can, a translucent fill where it cannot. Review B2: it is the log's own box (only
    as tall as its messages, its top fading under the header with the log's mask), not a band the height of the column,

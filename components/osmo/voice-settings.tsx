@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import type { VoiceControls } from "./use-voice";
+import { showChatNote } from "@/lib/room/chatbox";
+import { WORLD } from "@/lib/shell/flag";
 import { VoiceTeaching } from "./voice-teaching";
 import styles from "./panels.module.css";
 
@@ -58,14 +60,9 @@ export function VoiceSettings({ voice }: { voice: VoiceControls }) {
 			{voice.listenSupported && voice.wakeReady === false && <p className={styles.note}>His wake word isn&apos;t trained yet.</p>}
 
 			<Switch label="Show the conversation as text" on={voice.showChat} onChange={voice.setShowChat} />
-			<p className={styles.note}>
-				{voice.showChat
-					? "You can type to me, and everything we say stays on screen."
-					: voice.listenSupported
-						? "The room is just me and the mic. Turn this on to type instead."
-						: "This browser cannot listen, so the conversation stays on screen here."}
-			</p>
-			{voice.showChat && <Switch label="Speak typed replies too" on={voice.speakTyped} onChange={voice.setSpeakTyped} disabled={voice.voiceName === null} />}
+			<p className={styles.note}>{showChatNote({ world: WORLD, showChat: voice.showChat, listenSupported: voice.listenSupported })}</p>
+			{/* With the village on the owner can always type, so this switch is always there. */}
+			{(WORLD || voice.showChat) && <Switch label="Speak typed replies too" on={voice.speakTyped} onChange={voice.setSpeakTyped} disabled={voice.voiceName === null} />}
 			<Switch label="Fade my words after I say them" on={voice.fadeSaid} onChange={voice.setFadeSaid} />
 
 			{voice.teaching ? (
