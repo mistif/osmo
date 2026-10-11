@@ -71,7 +71,6 @@ const ask = async ({ instructions, input }) => {
 
 if (stream) {
 	const { instructions, input } = buildPrompt(BRIEFS[0]);
-	const events = new Set();
 	let first = null;
 	const t0 = performance.now();
 	const controller = new AbortController();
@@ -79,7 +78,7 @@ if (stream) {
 		fetch,
 		key,
 		{ entry, instructions, input, safetyId, maxOutput: LIMITS.outputTokens },
-		(delta) => {
+		() => {
 			if (first === null) first = Math.round(performance.now() - t0);
 			return true;
 		},
