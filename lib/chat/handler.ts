@@ -173,6 +173,7 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 	const result = judge(deps, outcome, entry.model, { args: actions !== null, quoted: null });
 	if ("reason" in result) {
 		if (result.reason === "crisis") await cancel();
+		if (result.reason === "empty" && result.cut) return answer({ source: "model", reply: CUT_LINE, usage, detection: null, waiting: false, pendingId: null });
 		return fallback(result.reason, usage);
 	}
 
@@ -219,6 +220,10 @@ async function chatTurn(request: Request, deps: ChatDeps): Promise<Response> {
 }
 
 const IGNORED: ActionOutcome = { kind: "ignored" };
+
+// What he says when the output cap cut his reply before one full sentence ended: his own line, so the room never falls back to
+// the rule chain's unknown-word line for an answer that was too long.
+export const CUT_LINE = "That is more than I can say in one breath. Ask me for a part of it.";
 
 // The actions seam never breaks a turn: a throw reads as nothing on, nothing run or nothing cancelled, and only the step is logged.
 async function quietly<T>(deps: ChatDeps, step: "list" | "run" | "cancel", work: () => Promise<T>, otherwise: T): Promise<T> {
@@ -343,7 +348,7 @@ function settlement(outcome: ModelOutcome, reservation: Reservation, maxOutput: 
 // whole: the reply is all the model wrote, with nothing cut by the output cap or dropped to fit what Osmo says.
 type Verdict =
 	| { reply: string; detection: Detection | null; action: ModelOutput["action"]; whole: boolean }
-	| { reason: "error" | "crisis" | "empty"; why: "model" | "refusal" | "content_filter" | "status" | "incomplete" | "format" | null };
+	| { reason: "error" | "crisis" | "empty"; why: "model" | "refusal" | "content_filter" | "status" | "incomplete" | "format" | null; cut?: boolean };
 
 // Step 12 for either call: the verdict, with why a reply was refused logged by name. copies: what the turn may copy (see flagged).
 function judge(deps: ChatDeps, outcome: Answered, model: string, copies: Copies): Verdict {
@@ -391,5 +396,6 @@ function verdict(parsed: Parsed, model: string, copies: Copies): Verdict {
 	if (out === null) return { reason: "error", why: "format" };
 	const reply = speakable(parsed.status === "incomplete" ? lastFullSentence(out.reply) : out.reply);
 	const whole = parsed.status === "completed" && saidWhole(out.reply);
-	return reply === "" ? { reason: "empty", why: null } : { reply, detection: validateDetection(out.detection, "model"), action: out.action, whole };
+	// cut: the output cap stopped the reply and no full sentence of it remains (the room says CUT_LINE, not the dictionary's line).
+	return reply === "" ? { reason: "empty", why: null, cut: parsed.status === "incomplete" } : { reply, detection: validateDetection(out.detection, "model"), action: out.action, whole };
 }

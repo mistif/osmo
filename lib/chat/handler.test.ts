@@ -8,7 +8,7 @@ import type { ActionOutcome, EnabledActions } from "../actions";
 import { CRISIS_KEY } from "../actions/profile";
 import { bearerToken } from "../server/auth";
 import { CALL_CEILING, estimateTokens, MAX_OUTPUT_TOKENS, MODELS, type Env } from "./allowance";
-import { chatDeps, handleChat, reserveCall, spend, type ChatDeps } from "./handler";
+import { chatDeps, CUT_LINE, handleChat, reserveCall, spend, type ChatDeps } from "./handler";
 import { ledgerKey, reservationRow, settlingRow, supabaseLedger, type LedgerRow, type LedgerStore } from "./ledger";
 import { RESPONSES_URL } from "./openai";
 import { buildInput, buildInstructions } from "./prompt";
@@ -867,14 +867,34 @@ describe("handleChat POST: the reply", () => {
 	});
 
 	it("answers empty, with the tokens counted, when nothing speakable is left", async () => {
-		const EMPTY: [string, Served][] = [
-			["all symbols", { text: "**🙂** (🙂)" }],
-			["cut off before a full sentence", { status: "incomplete", incomplete: "max_output_tokens", text: "Well, if you want something quick tonight you could" }],
+		const { deps } = rig({ fetcher: openai({ text: "**\u{1F642}** (\u{1F642})" }) });
+		expect(await read(await handleChat(post(body()), deps))).toEqual({ source: "fallback", reason: "empty", usage: { usedToday: SPENT, usable: USABLE } });
+	});
+
+	it("answers with his own line, never the dictionary's, when the output cap cut the reply before one full sentence", async () => {
+		expect(CUT_LINE).toBe("That is more than I can say in one breath. Ask me for a part of it.");
+		expect(CUT_LINE).not.toContain("!");
+		const text = "Well, if you want something quick tonight you could";
+		// Plain sentences from the strict model, from a model that is not strict, and a JSON turn that closed before the cap stopped it.
+		const strict = JSON.stringify({ reply: text, crisis: false, tone: [], intensity: 1, about: "gur", wants: "nothing", note: "", action: null });
+		const cases: [string, Env, Served][] = [
+			["plain sentences", ENV, { status: "incomplete", incomplete: "max_output_tokens", text }],
+			["a model that is not strict", { ...ENV, OSMO_CHAT_MODEL: "gpt-4.1-mini-2025-04-14" }, { status: "incomplete", incomplete: "max_output_tokens", text, model: "gpt-4.1-mini-2025-04-14" }],
+			["a JSON turn", ENV, { status: "incomplete", incomplete: "max_output_tokens", text: strict }],
 		];
-		for (const [label, served] of EMPTY) {
-			const { deps } = rig({ fetcher: openai(served) });
-			expect(await read(await handleChat(post(body()), deps)), label).toEqual({ source: "fallback", reason: "empty", usage: { usedToday: SPENT, usable: USABLE } });
+		for (const [label, env, served] of cases) {
+			const { deps, fetcher } = rig({ env, fetcher: openai(served) });
+			expect(await read(await handleChat(post(body()), deps)), label).toEqual({ source: "model", reply: CUT_LINE, usage: { usedToday: SPENT, usable: USABLE }, detection: null, waiting: false, pendingId: null });
+			expect(fetcher, label).toHaveBeenCalledTimes(1);
 		}
+	});
+
+	it("runs no action when the reply was cut before one full sentence", async () => {
+		const actions = fakeActions({ list: { names: ["reminder_list"], lines: ["reminder_list lists the reminders. Tier 1."], today: "Wednesday 30 September 2026", timezone: "Europe/Stockholm", place: null }, run: { kind: "done", line: "x", result: null } });
+		const cut = JSON.stringify({ reply: "Let me look at what you have", crisis: false, tone: [], intensity: 1, about: "gur", wants: "nothing", note: "", action: { name: "reminder_list", args: "{}" } });
+		const { deps } = rig({ fetcher: openai({ status: "incomplete", incomplete: "max_output_tokens", text: cut }), actions });
+		expect((await read(await handleChat(post(body()), deps))).reply).toBe(CUT_LINE);
+		expect(actions.run).not.toHaveBeenCalled();
 	});
 
 	it("answers crisis for each way the model can flag it", async () => {
