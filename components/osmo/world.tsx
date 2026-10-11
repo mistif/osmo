@@ -26,7 +26,7 @@ import { roomEvents, type RoomSignals } from "@/lib/world/signals";
 import { daylight, hourOf, phaseOf, skyAt, starField, sunAt } from "@/lib/world/sky";
 import { openRooms, SETTINGS_SEEN, type VillageCounts } from "@/lib/world/unlock";
 import {
-	admit, adoptRead, dueSaves, finishedRooms, laidBlocks, laidCount, layNext, markRoomSaved, nextBlock, outlineBlocks, pinnedVillage, resumeVillage,
+	admit, adoptRead, dueSaves, finishedRooms, laidBlocks, laidCount, layNext, markRoomSaved, nextBlock, pinnedVillage, resumeVillage,
 	type Village,
 } from "@/lib/world/village";
 import { readVillageCounts } from "@/lib/world/village-counts";
@@ -330,7 +330,7 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 			const face = bearing(live.current.agent, Date.now(), hour).face;
 			const sky = skyAt(live.current.colorA, live.current.colorB, hour);
 			drawWorld(painter, {
-				camera, view, now, clock: now, ground, laid, ghost: v ? nextBlock(v) : null, outline: v ? outlineBlocks(v) : [],
+				camera, view, now, clock: now, ground, laid, ghost: v ? nextBlock(v) : null, outline: [], // the room never shows what he is building towards (Gur, 2026-10-11); /dev/world still can
 				him: { x: actor.x, look: look(actor, now, face, !reduced) }, sky, dark, life,
 			});
 			const head = toScreen(camera, view, now, actor.x, GROUND_Y * TILE - FRAME_H);
