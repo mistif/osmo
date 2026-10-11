@@ -130,3 +130,59 @@
 .world[data-show-hits] .hit {
 	outline: 1px dashed color-mix(in oklab, var(--bone) 70%, transparent);
 }
+
+/* Free will (spec 3.2): the world takes the pointer where nothing of the conversation is drawn: behind the canvases (which
+   let the pointer through), under the room buttons. A drag or a pinch here moves the camera, never the page. */
+.input {
+	position: absolute;
+	inset: 0;
+	z-index: -3;
+	pointer-events: auto;
+	touch-action: none;
+	cursor: grab;
+	outline: none;
+}
+.input:focus-visible {
+	box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--bone) 70%, transparent);
+}
+.world[data-drag] .input {
+	cursor: grabbing;
+}
+/* Back to Osmo: shown while he is off screen after Gur has steered the camera. */
+.home {
+	position: absolute;
+	top: 4.5rem;
+	left: 50%;
+	translate: -50% 0;
+	z-index: 1;
+	padding: 0.4rem 0.9rem;
+	border: 1px solid color-mix(in oklab, var(--bone) 35%, transparent);
+	border-radius: 999px;
+	background: color-mix(in oklab, var(--base, #111) 70%, transparent);
+	color: var(--bone);
+	font: inherit;
+	font-size: 0.9rem;
+	pointer-events: auto;
+	cursor: pointer;
+}
+.home:focus-visible {
+	outline: 2px solid var(--bone);
+	outline-offset: 2px;
+}
+/* His line for a build he starts (spec 5.5), about six seconds, never hidden by the fade setting as .said is. */
+.will {
+	margin: 0;
+	padding: 0 0.25rem;
+	text-align: center;
+	text-wrap: balance;
+	line-height: 1.5;
+	font-size: 1rem;
+	font-style: italic;
+	color: var(--bone);
+	text-shadow: 0 1px 2px rgb(0 0 0 / 0.7), 0 0 10px rgb(0 0 0 / 0.55);
+}
+@media (prefers-reduced-motion: reduce) {
+	.home {
+		transition: none;
+	}
+}
