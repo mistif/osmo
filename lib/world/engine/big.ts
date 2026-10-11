@@ -8,7 +8,8 @@
 // Two modes. big (phase 1): the castle is today's village table, its blocks moved by the home offset where they are
 // drawn, and he stays on the home island. builds (phase 2): the castle's rooms and his own builds are rows of the builds
 // table; the castle comes first and outside the budget; free blocks spend the work budget; he decides what to build
-// when one is due, travels by the balloon and his bridges, and catches up on return with a time-lapse.
+// when one is due, travels by the balloon and his bridges, and catches up on return with a time-lapse. With OSMO_WILL on
+// the server, the model picks one of the three candidates and writes his line (phase 3); otherwise code does.
 import { facingViewer, look, newActor, nextLookIn, pose, PRESENT_MS, step, type Actor, type ActorEvent, type ActorKind, type ActorWorld } from "../actor";
 import { REST_X, START_X } from "../blueprints";
 import { CASTLE_ROOMS, TILE, type Block, type CastleRoom } from "../blueprints/types";
@@ -39,7 +40,7 @@ import { GEN, HOME_DX, HOME_DY, START_ISLANDS, type Deck, type WorldMap, type Wo
 import { createWorld, loadWorld, saveWorld } from "../map/world-data";
 import { FRAME_H } from "../osmo-sprite";
 import { AMBIENT_MS, FRAME_MS, framePace, shouldDraw, SLOW_MS, type DrawKey } from "../pace";
-import { decidedToday, decisionDue, fallbackLine, moodOf, newRow, pickByCode, plan, returnDecisions, type PlanDeps } from "../plan/planner";
+import { decidedToday, decisionDue, fallbackLine, moodOf, newRow, pickByCode, plan, returnDecisions, willBody, type PlanDeps } from "../plan/planner";
 import type { VillageNews, VillageRow } from "../progress";
 import { artFor, drawSky, drawWorld } from "../render";
 import { clickable, hitAreas, placeOf, roomContext, spotX } from "../rooms";
@@ -52,7 +53,10 @@ import { interacting, NO_GESTURE, onKey, onPointer, onWheel, worldMayTake, type 
 import { admit, adoptRead, dueSaves, finishedRooms, layNext, markRoomSaved, pinnedVillage, resumeVillage, type Village } from "../village";
 import { readVillageCounts } from "../village-counts";
 import { CLEARED_KEY, loadVillage, saveRoom, VILLAGE_CLEARED } from "../village-data";
+import { askWill } from "../will/ask";
+import { moodWords } from "../../agent/slow-mood";
 import { createSeenStore } from "../../shell/rail";
+import { supabase } from "../../supabase";
 import { TALK } from "../../shell/route";
 import {
 	beginDecision, cameraAfter, catchUpStep, decisionStarted, decksOf, drawLists, endDecision, followZoom, goalsOf, lapseRuns, mayDecide, OPEN_GATE, rowsOf,
@@ -163,6 +167,7 @@ function buildBigWorld(
 	let lineAfterLapse: string | null = null;
 	let lineTimer: ReturnType<typeof setTimeout> | null = null;
 	let devN = 0;
+	let willOff = false; // the will answered "off" this visit: code picks from then on
 
 	let overrides: Overrides = {};
 	let scarf = live.current.colorA;
@@ -435,6 +440,14 @@ function buildBigWorld(
 	// are land, so a bridge east of home starts on its far board.
 	const planDeps = (): PlanDeps => ({ compile, check: checkBuild, choose: chooseVariation, vary, world: (taken) => ruleWorldOf(map, taken, [DOCK_DECK]) });
 	const devRow = (c: Candidate, line: string): BuildRow => ({ ...newRow(c, line), id: `dev-${++devN}`, started_at: iso(), finished_at: null });
+	// Gur's access token for /api/will, or null without a session (code picks then).
+	const accessToken = async (): Promise<string | null> => {
+		try {
+			return (await supabase.auth.getSession()).data.session?.access_token ?? null;
+		} catch {
+			return null;
+		}
+	};
 
 	// One decision (spec 4.8): three candidates, code's pick and line, the row inserted. Whether a build started: ours, or
 	// another tab's adopted (its reason shown instead).
@@ -451,8 +464,25 @@ function buildBigWorld(
 				planDeps(),
 			);
 			if (cands.length === 0) return false;
-			const pick = pickByCode(cands, map.seed, n);
-			const line = fallbackLine(cands[pick]);
+			let pick = pickByCode(cands, map.seed, n);
+			let line = fallbackLine(cands[pick]);
+			// The will (spec 5): with three candidates, in the room, and the will not known to be off this visit, the model
+			// picks one and says why. Its line failed the server's checks: code's line for its pick. Off: code picks for the
+			// rest of the visit. Any other fallback (no session, the allowance spent, an error): code's pick and line.
+			if (cands.length === 3 && persist && !willOff) {
+				const token = await accessToken();
+				if (g.dead || gen !== mine || !builds) return false;
+				if (token) {
+					const a = await askWill((...args: Parameters<typeof fetch>) => fetch(...args), token, willBody(cands, moodWords(live.current.agent.mood), rows, RECIPES));
+					if (g.dead || gen !== mine || !builds) return false;
+					if (a.source === "model") {
+						pick = a.pick;
+						line = a.line ?? fallbackLine(cands[a.pick]);
+					} else if (a.reason === "off") {
+						willOff = true;
+					}
+				}
+			}
 			// The build before it is saved finished first, so the table takes the new one (one unfinished at a time).
 			if (persist) await saveBuilds("hidden");
 			if (g.dead || gen !== mine || !builds) return false;
