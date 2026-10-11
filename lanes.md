@@ -40,8 +40,8 @@ Osmo's inner life, his room, his listening, the database and shipping.
   - this brain's `lanes.md` and `project.md`;
   - settling it when two lanes want the same thing.
 
-### Language: understanding and answering (the conversation)
-How Osmo reads a message and what he says back, whether code or an AI model writes the words.
+### Language: understanding and answering (the conversation), and the world
+How Osmo reads a message and what he says back, whether code or an AI model writes the words. Since 2026-10-11 (Gur's call) also Osmo's world: `lib/world/**`, `components/osmo/world.tsx`, `components/osmo/world.module.css`, `app/dev/world/**`, the village specs and plans, and the free-will project (`handoffs/2026-10-11-osmo-free-will.md`). Main keeps the room's part of `app/assistant.tsx`, the shell, every migration and every push.
 - **Code:** `lib/agent/talk.ts`, `context.ts`, `safety.ts`, `dictionary.ts`, `dictionary-store.ts`, `vocabulary-store.ts`, `lib/agent/lexicon/*`, `lib/facts.ts`, `scripts/build-word-list.mjs`.
 - **Tests:** `talk`, `context`, `safety`, `dictionary`, `chatlog`, `voice`, `typos`, `facts`.
 - **The AI conversation** (since 2026-09-29): Osmo's replies written by an OpenAI model inside the free daily allowance (see `decisions.md`).
