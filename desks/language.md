@@ -3,7 +3,8 @@
 Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk.
 
 ## Now
-**Connectors phase 0, language's part is on local main** (see Just landed). 0.17 (the action probe) and 0.18's measured half wait for Gur's yes in chat. Next for me: artifacts A6, then B5 to B8.
+**Osmo's free will, the big world and the build grammar (2026-10-11, handed over by main at Gur's request; brief `handoffs/2026-10-11-osmo-free-will.md`).** The world is mine now: `lib/world/**`, `components/osmo/world.tsx`, `world.module.css`, `app/dev/world/**`, and the village specs and plans. Step 1 is brainstorming with Gur, section by section; then the spec `docs/superpowers/specs/2026-10-11-osmo-free-will-design.md`. No code yet.
+**Connectors phase 0, language's part is on local main** (see Just landed). 0.17 (the action probe) and 0.18's measured half wait for Gur's yes in chat. Artifacts A6 and B5 to B8 wait behind the world.
 **The fallback v2 spec is written and waiting for Gur's review:** `docs/superpowers/specs/2026-10-02-osmo-fallback-v2-design.md` (`201887d`; guests reach tier 2, Gur's answer, `d9317ae`). Gur chose gpt-4.1-mini as tier 2, a short honest line with no model, and the dictionary for no-model only. Cloud's eight points are folded in (the crisis check keeps its typo tolerance with a small generated list; one budget split 90/10 between the tiers; timing 6 s plus the rest of 12 s; retry only on errors another model can fix; the quota day-stop). **→ main:** it removes vocabulary learning, so `user_words` goes unread (your migration, later). `chatlog.test.ts` replies will change when small talk goes.
 
 ## Just landed
