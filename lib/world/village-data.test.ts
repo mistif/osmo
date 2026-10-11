@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // What reached the table, in order, and a way to hold an upsert open or make the delete fail.
 const log: string[] = [];
 let holdUpsert: Promise<void> | null = null;
-let deleteError: { message: string } | null = null;
+let deleteError: { code?: string; message: string } | null = null;
 let deleted: { column: string; values: string[] } | null = null;
 
 vi.mock("../supabase", () => ({
@@ -20,6 +20,10 @@ vi.mock("../supabase", () => ({
 					log.push(`delete ${table}`);
 					return { error: deleteError };
 				},
+				not: async () => {
+					log.push(`delete ${table} all`);
+					return { error: null };
+				},
 			}),
 		}),
 	},
@@ -27,7 +31,7 @@ vi.mock("../supabase", () => ({
 
 import { CASTLE_ROOMS } from "./blueprints/types";
 import { resume } from "./progress";
-import { CLEAR_TIMEOUT_MS, CLEARED_KEY, clearVillage, saveRoom, VILLAGE_CLEARED } from "./village-data";
+import { CLEAR_TIMEOUT_MS, CLEARED_KEY, clearingNow, clearVillage, saveRoom, trackSave, VILLAGE_CLEARED } from "./village-data";
 
 const NOW = "2026-10-10T12:00:00.000Z";
 const hall = (laid: number) => ({ ...resume([], "hall", 180, NOW), laid });
@@ -112,5 +116,41 @@ describe("clearing the village", () => {
 		expect(await clearVillage()).toBe(false);
 		expect(log).toEqual(["delete village"]);
 		expect(await saveRoom(hall(3))).toBe(true);
+	});
+});
+
+describe("Clear the world (free-will spec 4.9)", () => {
+	it("deletes every build before the village rows when builds are on", async () => {
+		expect(await clearVillage({ builds: true })).toBe(true);
+		expect(log).toEqual(["delete builds all", "delete village", "cleared"]);
+	});
+	it("touches no build when builds are off, as before", async () => {
+		expect(await clearVillage()).toBe(true);
+		expect(log).toEqual(["delete village", "cleared"]);
+	});
+	it("waits for a build's save in flight before it deletes", async () => {
+		let release = () => {};
+		const held = trackSave(new Promise<void>((r) => (release = r)));
+		const clearing = clearVillage({ builds: true });
+		expect(clearingNow()).toBe(true);
+		await Promise.resolve();
+		expect(log).toEqual([]);
+		release();
+		await held;
+		expect(await clearing).toBe(true);
+		expect(log).toEqual(["delete builds all", "delete village", "cleared"]);
+		expect(clearingNow()).toBe(false);
+	});
+	it("still clears the world when village is read-only or gone (main's later steps), and not when builds are off", async () => {
+		for (const code of ["42501", "42P01", "PGRST205"]) {
+			log.length = 0;
+			deleteError = { code, message: "no village" };
+			expect(await clearVillage({ builds: true }), code).toBe(true);
+			expect(log).toEqual(["delete builds all", "delete village", "cleared"]);
+		}
+		deleteError = { code: "42501", message: "no village" };
+		expect(await clearVillage()).toBe(false);
+		deleteError = { code: "08006", message: "connection" };
+		expect(await clearVillage({ builds: true })).toBe(false);
 	});
 });
