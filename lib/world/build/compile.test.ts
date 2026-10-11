@@ -1,0 +1,105 @@
+import { describe, expect, it } from "vitest";
+import { cellsOf } from "../blueprints";
+import type { Layer } from "../blueprints/types";
+import type { TileId } from "../tiles";
+import { compile } from "./compile";
+import type { Part, Recipe, Site, Variation } from "./types";
+
+const L = (tile: TileId, layer: Layer) => ({ tile, layer });
+const FAKE: Part[] = [
+	{ id: "f", name: "floor", group: "structure", role: "floor", material: null, fit: "row", overhang: 1, map: ["SSS"], legend: { S: L("step", "floor") } },
+	{ id: "s", name: "wall", group: "structure", role: "storey", material: null, fit: "row", map: ["hhhhh", "IBvBI", "IBwBI", "IBBBI"],
+		legend: { h: L("beam-h", "walls"), I: L("pillar", "walls"), B: L("brick", "walls"), v: L("window-top", "windows"), w: L("window", "windows") } },
+	{ id: "w", name: "wood wall", group: "structure", role: "storey", material: "wood", fit: "row", map: ["hhh", "pPp", "pPp", "pPp"], legend: { h: L("beam-h", "walls"), p: L("pillar", "walls"), P: L("plank", "walls") } },
+	{ id: "r", name: "roof", group: "tops", role: "roof", material: null, fit: "gable", map: ["<=>^"], legend: { "<": L("roof-left", "roof"), "=": L("roof-flat", "roof"), ">": L("roof-right", "roof"), "^": L("roof-peak", "roof") } },
+	{ id: "t", name: "battlements", group: "tops", role: "roof", material: null, fit: "row", map: ["TTT"], legend: { T: L("battlement", "roof") } },
+	{ id: "c", name: "chimney", group: "tops", role: "chimney", material: null, fit: "fixed", map: ["T", "C"], legend: { T: L("battlement", "roof"), C: L("brick", "roof") } },
+	{ id: "d", name: "door", group: "structure", role: "door", material: null, fit: "fixed", map: ["a", "d"], legend: { a: L("door-top", "door"), d: L("door", "door") } },
+	{ id: "l", name: "lantern", group: "additions", role: "decor", material: null, fit: "fixed", map: ["l"], legend: { l: L("lantern", "lanterns") } },
+	{ id: "b", name: "banner", group: "additions", role: "decor", material: null, fit: "fixed", map: ["b", "e"], legend: { b: L("banner", "banners"), e: L("banner-end", "banners") } },
+	{ id: "bench", name: "bench", group: "around", role: "side", material: null, fit: "fixed", map: ["n"], legend: { n: L("bench", "walls") } },
+	{ id: "span", name: "deck", group: "travel", role: "span", material: "wood", fit: "row", map: ["rrr", "BBB"], legend: { r: L("fence", "walls"), B: L("plank", "floor") } },
+	{ id: "post", name: "post", group: "travel", role: "anchor", material: "wood", fit: "fixed", map: ["p", "p", "p"], legend: { p: L("pillar", "walls") } },
+];
+const HUT: Recipe = {
+	id: "hut", name: "hut", kind: "cottage", size: "small", site: "level", width: [7, 9], materials: ["stone", "wood"],
+	tiers: [
+		{ slot: "floor", role: "floor", parts: ["f"] },
+		{ slot: "storey", role: "storey", parts: ["s", "w"], count: [1, 2] },
+		{ slot: "roof", role: "roof", parts: ["r", "t"] },
+		{ slot: "chimney", role: "chimney", parts: ["c"], optional: true },
+	],
+	doors: ["d"], decor: { parts: ["l", "b"], max: 2 }, sides: { parts: ["bench"], max: 1 },
+};
+const BRIDGE: Recipe = {
+	id: "bridge", name: "bridge", kind: "rope-bridge", size: "medium", site: "bridge", width: [1, 1], materials: ["wood"],
+	tiers: [{ slot: "span", role: "span", parts: ["span"] }, { slot: "anchor", role: "anchor", parts: ["post"] }],
+	doors: [], decor: { parts: [], max: 0 }, sides: { parts: [], max: 0 },
+};
+const V1: Variation = {
+	width: 7, material: "stone", tiers: { floor: { part: "f", count: 1 }, storey: { part: "s", count: 1 }, roof: { part: "r", count: 1 }, chimney: null },
+	door: "d", decor: [{ part: "l", spot: 0 }], sides: [{ part: "bench", at: "left" }],
+};
+const SITE: Site = { kind: "ground", island: 1, x: 100, w: 20, ground: 60, cliff: null };
+
+describe("the compiler (spec 4.2)", () => {
+	const c = compile(HUT, V1, SITE, FAKE);
+	const blocks = cellsOf(c.footprint, c.x, c.y, "hut");
+	it("stacks floor, storey and roof, places it centred on its site, bottom row on the row above the ground", () => {
+		expect([c.recipe, c.x, c.y, c.w, c.h, c.total]).toEqual(["hut", 104, 51, 11, 9, 55]);
+		expect(blocks.filter((b) => b.layer === "floor").every((b) => b.y === 59)).toBe(true);
+		expect(blocks.filter((b) => b.layer === "floor")).toHaveLength(9);
+	});
+	it("gives each tile and layer its own letter in first-seen order", () => {
+		expect(c.footprint.map[0]).toBe("......A....");
+		expect(c.footprint.map[5]).toBe("...FGGGGGF.");
+		expect(c.footprint.map[7]).toBe("...FGGIGGF.");
+		expect(c.footprint.map[8]).toBe("J.KKKKKKKKK");
+		expect(c.footprint.decor[7]).toBe(".....L.....");
+		expect(c.footprint.legend).toMatchObject({ A: L("roof-peak", "roof"), E: L("beam-h", "walls"), H: L("door-top", "door"), I: L("door", "door"), J: L("bench", "walls"), K: L("step", "floor"), L: L("lantern", "lanterns") });
+	});
+	it("sets one door in the middle of the lowest storey, on the floor, and turns the window above it into wall", () => {
+		expect(blocks.filter((b) => b.tile === "door")).toEqual([{ x: 110, y: 58, tile: "door", layer: "door" }]);
+		expect(blocks.find((b) => b.tile === "door-top")).toMatchObject({ x: 110, y: 57 });
+		expect(blocks.some((b) => b.tile === "window-top" || b.tile === "window")).toBe(false);
+	});
+	it("hangs decor on the nearest free wall beside the door, a banner on two wall cells", () => {
+		const two = compile(HUT, { ...V1, decor: [{ part: "l", spot: 0 }, { part: "b", spot: 0 }] }, SITE, FAKE);
+		const d = cellsOf(two.footprint, two.x, two.y, "hut").filter((b) => b.layer === "lanterns" || b.layer === "banners");
+		expect(d).toContainEqual({ x: 109, y: 58, tile: "lantern", layer: "lanterns" });
+		expect(d).toContainEqual({ x: 111, y: 57, tile: "banner", layer: "banners" });
+		expect(d).toContainEqual({ x: 111, y: 58, tile: "banner-end", layer: "banners" });
+	});
+	it("stands a side on the ground one tile from the body, and a chimney on the roof's right slope", () => {
+		expect(blocks.find((b) => b.tile === "bench")).toMatchObject({ x: 104, y: 59 });
+		const right = compile(HUT, { ...V1, sides: [{ part: "bench", at: "right" }] }, SITE, FAKE);
+		expect(cellsOf(right.footprint, right.x, right.y, "hut").find((b) => b.tile === "bench")?.x).toBe(right.x + right.w - 1);
+		const ch = compile(HUT, { ...V1, tiers: { ...V1.tiers, chimney: { part: "c", count: 1 } } }, SITE, FAKE);
+		const cb = cellsOf(ch.footprint, ch.x, ch.y, "hut");
+		expect(cb).toContainEqual({ x: 112, y: 51, tile: "battlement", layer: "roof" });
+		expect(cb).toContainEqual({ x: 112, y: 52, tile: "brick", layer: "roof" });
+	});
+	it("stacks storeys, narrows nothing for a row roof, and puts a cliff build flush to its cliff", () => {
+		const tall = compile(HUT, { ...V1, tiers: { ...V1.tiers, storey: { part: "s", count: 2 }, roof: { part: "t", count: 1 } } }, SITE, FAKE);
+		expect(tall.h).toBe(10);
+		expect(compile(HUT, V1, { ...SITE, cliff: "left" }, FAKE).x).toBe(100);
+		expect(compile(HUT, V1, { ...SITE, cliff: "right" }, FAKE).x).toBe(109);
+	});
+	it("refuses a part it does not have, one in the wrong tier, and a required tier left out", () => {
+		expect(() => compile(HUT, { ...V1, tiers: { ...V1.tiers, roof: { part: "nope", count: 1 } } }, SITE, FAKE)).toThrow('no part "nope"');
+		expect(() => compile(HUT, { ...V1, tiers: { ...V1.tiers, roof: { part: "f", count: 1 } } }, SITE, FAKE)).toThrow();
+		expect(() => compile(HUT, { ...V1, tiers: { ...V1.tiers, roof: null } }, SITE, FAKE)).toThrow("the roof tier is required");
+	});
+	it("hangs a bridge between its two anchors, sagging, every deck cell joined to the next", () => {
+		const v: Variation = { width: 1, material: "wood", tiers: { span: { part: "span", count: 1 }, anchor: { part: "post", count: 1 } }, door: null, decor: [], sides: [] };
+		const site: Site = { kind: "bridge", from: 1, to: 2, a: { x: 200, y: 60 }, b: { x: 230, y: 64 } };
+		const br = compile(BRIDGE, v, site, FAKE);
+		expect([br.x, br.y, br.w, br.h]).toEqual([200, 57, 31, 7]);
+		const bb = cellsOf(br.footprint, br.x, br.y, "bridge");
+		for (const y of [57, 58, 59]) expect(bb).toContainEqual({ x: 200, y, tile: "pillar", layer: "walls" });
+		for (const y of [61, 62, 63]) expect(bb).toContainEqual({ x: 230, y, tile: "pillar", layer: "walls" });
+		expect(bb.filter((b) => b.x === 215 && b.tile === "plank").map((b) => b.y)).toEqual([63]);
+		expect(bb).toContainEqual({ x: 201, y: 59, tile: "plank", layer: "floor" });
+		expect(() => compile(BRIDGE, v, SITE, FAKE)).toThrow("needs a bridge site");
+	});
+});
