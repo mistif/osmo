@@ -190,6 +190,12 @@ export function actionBlock(a: EnabledActions): string {
 	);
 }
 
+// With building not among the offered actions he cannot make a small working thing, and must not try to write one into a reply
+// that is read aloud: one short sentence says so, in his own register. It sits just before the action block, so it is the same
+// text on every turn while building stays off.
+export const BUILD_OFF =
+	"Building small working things for Gur is switched off for now. If he asks you to make one, say so in one short sentence, in your own voice, and do not try to write it.";
+
 // Call 2 (spec 3.5): what the action returned, quoted as information, cut and stripped so it cannot close its own tag.
 function resultBlock(r: { name: string; text: string }): string {
 	const text = r.text.replace(/[<>]/g, " ").slice(0, 1500);
@@ -208,6 +214,7 @@ export function buildInstructions(body: ChatBody, format: Format = "json", actio
 			? `What you know about Gur: ${memory.map(factSentence).join(" ")}`
 			: "You don't know anything about Gur yet, beyond this chat.",
 		sentences(STAGE_GUIDANCE[facts.stage], awayInWords(facts.awayMs), milestoneSentence(facts)),
+		actions?.names.includes("build") ? "" : BUILD_OFF,
 		actions ? actionBlock(actions) : "",
 		thisTurn(body),
 		result ? resultBlock(result) : "",

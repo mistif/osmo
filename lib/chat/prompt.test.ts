@@ -297,7 +297,7 @@ describe("buildInstructions", () => {
 		expect(ownOnly).not.toContain("Over the last day");
 		const both = buildInstructions(body({ facts: { mood: "a little low", own: "a little uneasy" } }));
 		expect(both).toContain("Over the last day you have felt a little low. You may mention your own mood in one short clause after you have answered Gur. Do not do it otherwise.");
-		expect(both.split("\n\n")).toHaveLength(8);
+		expect(both.split("\n\n")).toHaveLength(9);
 	});
 
 	it("carries the exact result of Gur's arithmetic", () => {
@@ -337,12 +337,12 @@ describe("buildInstructions", () => {
 	// The plan said under 700, but its own rules, format sentence and crisis sentence came to 876 (about 220 tokens;
 	// the spec's budget is 150 to 200). The demo fixes of 2026-10-07 (what he is made of, humour near illness, no
 	// reminders yet, apologise once, listen before advising) add about 700 more. The bound is the measured growth plus
-	// a little, to catch a block that creeps.
-	it("grows by under 1700 characters over a copy of today's text", () => {
+	// a little, to catch a block that creeps. The one sentence that says building is off adds about 160 more.
+	it("grows by under 1900 characters over a copy of today's text", () => {
 		const before = TODAY.replace("{{CHARACTER}}", () => characterGuidance());
 		const after = buildInstructions(body());
 		console.log(`instructions: ${before.length} characters before, ${after.length} after (+${after.length - before.length}); FEELING format ${buildInstructions(body(), "feeling").length}`);
-		expect(after.length - before.length).toBeLessThan(1700);
+		expect(after.length - before.length).toBeLessThan(1900);
 	});
 
 	it("has no markdown", () => {
@@ -361,6 +361,7 @@ describe("buildInstructions", () => {
 			"You weigh",
 			"What you know about Gur",
 			"You and Gur are friends",
+			"Building small working things for Gur is switched off for now.",
 			'You feel happy and at ease, because "you told me you were happy".',
 		];
 		const at = markers.map((marker) => text.indexOf(marker));
@@ -369,7 +370,7 @@ describe("buildInstructions", () => {
 			if (i > 0) expect(at[i], marker).toBeGreaterThan(at[i - 1]);
 		}
 		const parts = text.split("\n\n");
-		expect(parts).toHaveLength(8);
+		expect(parts).toHaveLength(9);
 		expect(parts.at(-1)).toMatch(/^You feel happy and at ease, because "you told me you were happy"\..*The exact result is 444\. State it\.$/);
 	});
 });
@@ -392,6 +393,44 @@ describe("buildInstructions with no actions and no result", () => {
 			expect(text, format).not.toContain("action");
 		}
 		expect(buildInstructions(body())).toBe(buildInstructions(body(), "json", null, null));
+	});
+});
+
+describe("buildInstructions when building is not offered", () => {
+	const OFF_SENTENCE = "Building small working things for Gur is switched off for now. If he asks you to make one, say so in one short sentence, in your own voice, and do not try to write it.";
+	const BUILD: EnabledActions = { ...ACTIONS, names: [...ACTIONS.names, "build"], lines: [...ACTIONS.lines, "build: make a small working thing for Gur. Tier 2."] };
+
+	it("carries the one sentence, once, with no actions at all and with actions that leave building out", () => {
+		for (const format of ["json", "feeling"] as const) {
+			for (const actions of [undefined, null, ACTIONS]) {
+				const text = buildInstructions(body(), format, actions);
+				expect(text.split(OFF_SENTENCE), `${format} ${actions === ACTIONS ? "actions" : String(actions)}`).toHaveLength(2);
+			}
+		}
+	});
+
+	it("leaves the sentence out when building is among the offered actions", () => {
+		for (const format of ["json", "feeling"] as const) {
+			const text = buildInstructions(body(), format, BUILD);
+			expect(text, format).not.toContain("switched off for now");
+			expect(text, format).toContain("build: make a small working thing for Gur. Tier 2.");
+		}
+	});
+
+	it("sits just before the action block, or before this turn's part when there are no actions", () => {
+		const none = buildInstructions(body()).split("\n\n");
+		expect(none.at(-2)).toBe(OFF_SENTENCE);
+		const some = buildInstructions(body(), "json", ACTIONS).split("\n\n");
+		expect(some.at(-3)).toBe(OFF_SENTENCE);
+		expect(some.at(-2)).toMatch(/^Actions you may set/);
+	});
+
+	it("is in his register and leaves the answer's format rule as it was", () => {
+		expect(OFF_SENTENCE).not.toContain("!");
+		expect(OFF_SENTENCE).not.toMatch(MARKDOWN);
+		expect(OFF_SENTENCE).not.toMatch(/remember/i);
+		const text = buildInstructions(body());
+		expect(text).toContain("Return your answer in the JSON shape you are given. The tone fields describe Gur, not you. Use neutral for an ordinary message.");
 	});
 });
 
