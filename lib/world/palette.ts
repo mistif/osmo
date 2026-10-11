@@ -83,6 +83,19 @@ export const PALETTE = {
 	"2": "#56546a",
 	"3": "#3a3949",
 	"4": "#7d9ad8",
+	// Added for the free-will tiles (spec 2026-10-11 section 4.5). No letter or digit was free, so these keys are other
+	// printable ASCII characters (never space, ".", ",", '"' or "\\"): straw, water, leaves, flowers, cloth, bronze, rope,
+	// greenhouse glass, new timber and dressed stone.
+	"5": "#e8d9a8", "6": "#c9a95c", "7": "#8f7236", "8": "#5c4721", // straw: highlight, light, base, shadow
+	"9": "#2d6e8e", "!": "#3f8fb3", "#": "#7cc3dc", $: "#c8eef5", // water: deep, base, light, glint
+	"%": "#1f5a2a", "&": "#2f7d36", "'": "#5aa845", "(": "#9bd36a", // leaves: deep, base, light, highlight
+	")": "#c23a3a", "*": "#f2d04b", "+": "#e88fb4", // flowers and fruit: red, yellow, pink
+	"-": "#f5f1e6", "/": "#c9b98f", ":": "#b33a2f", ";": "#7a2420", // cloth: cream, cream shadow, red, red shadow
+	"<": "#9c6a2f", "=": "#d8a64a", ">": "#5a3a17", // bronze: base, light, shadow
+	"?": "#cbb27a", "@": "#8c7444", // rope: light, base
+	"[": "#a9d8c8", "]": "#5e9e8c", "^": "#2c5a50", // greenhouse glass: light, base, dark
+	_: "#b8794a", "`": "#e3c08a", // new timber: warm light, highlight
+	"{": "#c7c2b8", "|": "#9d978c", "}": "#6f6a61", "~": "#4a463f", // dressed stone: light, base, shadow, outline
 } as const;
 
 export type Letter = keyof typeof PALETTE;

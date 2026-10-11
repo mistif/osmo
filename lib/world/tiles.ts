@@ -1,6 +1,7 @@
 // Credit: the roof shingles (roof-flat, roof-left, roof-right, roof-peak) and brick-dark adapt Tiny Town by Kenney (kenney.nl), CC0.
 // The village tiles (spec 2): 16 by 16 grids of palette letters, light from the top left (see palette.ts).
-// TILE_IDS is the cell order of the atlas and of the optional public/village/tiles.png (16 px per cell, by 16).
+// TILE_IDS is the cell order of the atlas and of the optional public/village/tiles.png: 106 cells of 16 by 16 px in one
+// row, so the sheet is 1696 by 16 (the last 35 are the free-will tiles, drawn in tiles-more.ts).
 // Brick is shaded by a small helper from hand-laid maps (one letter per brick); the rest is drawn from per-pixel
 // rules and a few hand-drawn grids. Texture comes from a fixed hash, so every run draws the same pixels.
 import type { Grid } from "./raster";

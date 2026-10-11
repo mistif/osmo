@@ -4,12 +4,33 @@ import { encodePng } from "./png";
 import { colours, gridProblems, parseColor, parseHsl, rasterize, sheetProblem } from "./raster";
 
 describe("the palette", () => {
-	it("has one ASCII letter or digit per key, six-digit hex values, and no dot", () => {
+	const NEW_KEYS = ["5", "6", "7", "8", "9", "!", "#", "$", "%", "&", "'", "(", ")", "*", "+", "-", "/", ":", ";", "<", "=", ">", "?", "@", "[", "]", "^", "_", "`", "{", "|", "}", "~"];
+	it("has one printable ASCII character per key (never space, dot, comma, quote or backslash) and six-digit hex values", () => {
 		for (const [k, v] of Object.entries(PALETTE)) {
-			expect(k).toMatch(/^[a-zA-Z0-9]$/);
+			expect(k).toMatch(/^[!-~]$/);
+			expect([".", ",", '"', "\\"]).not.toContain(k);
 			expect(v).toMatch(/^#[0-9a-f]{6}$/);
 		}
-		expect(Object.keys(PALETTE)).not.toContain(".");
+		expect(Object.keys(PALETTE)).toHaveLength(57 + 33);
+		for (const k of NEW_KEYS) expect(Object.keys(PALETTE)).toContain(k);
+	});
+	it("keeps every colour of today's 57 keys (free-will spec 4.5)", () => {
+		const OLD: Record<string, string> = {
+			a: "#23262f", b: "#3d4250", c: "#5d6475", d: "#868ea0", e: "#b9c0cd", f: "#4a2320", g: "#7c3a2c", h: "#a9533a", i: "#d27a52",
+			j: "#2e1d14", k: "#55361f", l: "#7d5530", m: "#a8794a", n: "#93a7bd", o: "#d3dee9", p: "#f7fbff", q: "#16243a", r: "#2f5683",
+			s: "#86b8e0", t: "#ffcf6e", u: "#f08a3c", v: "#fff4cc", w: "#1f4d4a", x: "#2f7a72", y: "#6fbfae", z: "#1c120c", A: "#3e2a1c",
+			B: "#6a4a30", C: "#234a2a", D: "#3f7a3c", E: "#79b85a", F: "#9aa6bf", G: "#d6dcea", H: "#1a1726", I: "#f0c7a0", J: "#c9926c",
+			K: "#2c3f66", L: "#4462a0", M: "#1b2744", N: "#f3efe8", O: "#3b3350", P: "#0d0b14", Q: "#8a5a3c", R: "#737b8d", S: "#6a6570",
+			T: "#938c90", U: "#62779c", V: "#eca079", W: "#c8965e", X: "#b6bfd4", Y: "#b3c3d6", Z: "#3aa597", "0": "#15171d", "1": "#fffaf0",
+			"2": "#56546a", "3": "#3a3949", "4": "#7d9ad8",
+		};
+		for (const [k, v] of Object.entries(OLD)) expect(PALETTE[k as keyof typeof PALETTE], k).toBe(v);
+	});
+	it("reads the new keys like any other letter", () => {
+		const cols = colours();
+		const bmp = rasterize([["$~", "`|"]], 2, 2, 1, cols);
+		expect(Array.from(bmp.data.slice(0, 4))).toEqual([...(parseColor(PALETTE.$) ?? [])]);
+		expect(gridProblems(["$~`|", "{}[]"], 4, 2)).toEqual([]);
 	});
 	it("never gives two letters the same colour", () => {
 		const values = Object.values(PALETTE);
@@ -60,7 +81,8 @@ describe("checks", () => {
 	it("names what is wrong with a grid", () => {
 		expect(gridProblems(["ab", "pp"], 2, 2)).toEqual([]);
 		expect(gridProblems(["ab"], 2, 2)).toEqual(["has 1 rows, not 2"]);
-		expect(gridProblems(["abc", "p#"], 2, 2)).toEqual(["row 0 is 3 wide, not 2", "row 1 has unknown letter #"]);
+		// "#" is a palette key since the free-will tiles; a backslash never is.
+		expect(gridProblems(["abc", "p\\"], 2, 2)).toEqual(["row 0 is 3 wide, not 2", "row 1 has unknown letter \\"]);
 	});
 	it("says why a sheet cannot replace the drawn one", () => {
 		expect(sheetProblem(608, 16, 608, 16)).toBeNull();

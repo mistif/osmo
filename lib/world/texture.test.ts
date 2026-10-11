@@ -104,3 +104,20 @@ describe("the forge breathing", () => {
 		expect(forgeBreath(Number.NaN)).toBe(1);
 	});
 });
+
+describe("the free-will walls (spec 4.5)", () => {
+	it("show their variant in about one cell in six, by the cell", () => {
+		let n = 0;
+		for (let y = 0; y < 40; y++) for (let x = 0; x < 64; x++) if (variantOf("plank-wall", x, y) === "plank-wall-2") n++;
+		expect(n / (64 * 40)).toBeGreaterThan(VARIANT_SHARE - 0.03);
+		expect(n / (64 * 40)).toBeLessThan(VARIANT_SHARE + 0.03);
+		expect(["stone-wall", "stone-wall-2"]).toContain(variantOf("stone-wall", 3, 4));
+		expect(variantOf("back-wood", 3, 4)).toBe("back-wood");
+	});
+	it("take the eaves' shadow on their top row", () => {
+		for (const wall of ["plank-wall", "stone-wall", "back-wood", "back-stone"] as const) {
+			const laid = [{ x: 5, y: 9, tile: "beam-h" as const, layer: "walls" as const }, { x: 5, y: 10, tile: wall, layer: "walls" as const }];
+			expect(shadowed(laid), wall).toHaveLength(1);
+		}
+	});
+});
