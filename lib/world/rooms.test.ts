@@ -96,3 +96,22 @@ describe("the context line", () => {
 		}
 	});
 });
+
+describe("the room buttons in the big world (free-will spec 3.2)", () => {
+	const view = { w: 1200, h: 800 };
+	const shift = { x: 445 * TILE, y: 60 * TILE };
+	const atHall = (z: number) => ({ x: 33 * TILE + shift.x, y: 18 * TILE + shift.y, from: z, to: z, at: 0, aimX: 0, aimY: 0, ox: 0, oy: 0, glideAt: Number.NEGATIVE_INFINITY });
+	it("move with the castle's offset", () => {
+		const [hall] = hitAreas(["hall"], atHall(1), view, 0, shift);
+		expect(hall.seen).toBe(true);
+		expect(hall.x).toBe(Math.round(24 * TILE - 33 * TILE + 600));
+	});
+	it("hide below the zoom they are given", () => {
+		expect(hitAreas(["hall"], atHall(0.5), view, 0, shift, 1)[0].seen).toBe(false);
+		expect(hitAreas(["hall"], atHall(1), view, 0, shift, 1)[0].seen).toBe(true);
+	});
+	it("send him to a room by the castle's offset", () => {
+		expect(spotX("library", 445 * TILE)).toBe(21.5 * TILE + 7120);
+		expect(spotX("yard", 445 * TILE)).toBe(START_X + 7120);
+	});
+});
