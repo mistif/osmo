@@ -4,6 +4,7 @@ import {
 	blinking, facingViewer, look, newActor, nextLookIn, pose, step,
 	type Actor, type ActorEvent, type ActorWorld,
 } from "./actor";
+import { balloonPath } from "./travel/travel";
 
 const W: ActorWorld = { next: 200, restX: 760, speed: 48, held: false };
 const tick = (now: number, dt = 50): ActorEvent => ({ type: "tick", now, dt });
@@ -279,5 +280,54 @@ describe("how he looks", () => {
 	});
 	it("poses every state for the dev page", () => {
 		for (const k of ["idle", "walking", "building", "turning", "facing", "resting"] as const) expect(pose(k, 10, 0).kind).toBe(k);
+	});
+});
+
+describe("in the big world (free-will spec 3.4, 4.6)", () => {
+	const W = { next: null, restX: 0, speed: 48, held: false };
+	const run = (a: Actor, w: Partial<ActorWorld>, ms: number, from = 0) => {
+		for (let t = from + 33; t <= from + ms; t += 33) a = step(a, { type: "tick", now: t, dt: 33 }, { ...W, ...w }).actor;
+		return a;
+	};
+	it("follows the floor under his feet, steps included, and knows which island he is on", () => {
+		const floor = (x: number) => (x < 100 ? 1000 : 1016);
+		const islandOf = (x: number) => (x < 100 ? 3 : 4);
+		const a = run(newActor(90, 0, 12, { y: 1000, island: 3 }), { floor, islandOf, yard: 130 }, 2000);
+		expect([a.x, a.y, a.island]).toEqual([130, 1016, 4]);
+	});
+	it("never walks off the edge into the sky", () => {
+		const floor = (x: number) => (x <= 150 ? 1000 : null);
+		const a = run(newActor(140, 0, 12, { y: 1000, island: 3 }), { floor, yard: 300 }, 3000);
+		expect(a.x).toBeLessThanOrEqual(150);
+		expect(a.y).toBe(1000);
+	});
+	it("walks to a waypoint and stands there, after the open room and before the next block", () => {
+		const a = run(newActor(100, 0, 12), { via: 200, next: 400 }, 4000);
+		expect([a.x, a.kind]).toEqual([200, "idle"]);
+		const b = run(newActor(100, 0, 12), { via: 200, visit: 50 }, 4000);
+		expect(b.x).toBe(50);
+	});
+	it("rides the balloon along its path, never faster than a quarter second a tick, and lands on the island", () => {
+		const path = balloonPath({ x: 8136, y: 1376 }, { x: 9000, y: 1120 });
+		let a = step(newActor(8136, 0, 12, { y: 1376, island: 0 }), { type: "ride", now: 0, path, island: 1 }, W).actor;
+		expect([a.kind, a.x, a.y]).toEqual(["riding", 8136, 1376]);
+		a = step(a, { type: "tick", now: 36_000_000, dt: 36_000_000 }, W).actor; // a laptop asleep ten hours
+		expect(a.ride?.t).toBe(250);
+		expect(a.kind).toBe("riding");
+		a = run(a, {}, path.ms + 1000, 36_000_000);
+		expect([a.kind, a.x, a.y, a.island, a.ride]).toEqual(["idle", 9000, 1120, 1, null]);
+	});
+	it("keeps riding through a message and a hidden tab, and takes no ride unless idle or walking", () => {
+		const path = balloonPath({ x: 0, y: 1000 }, { x: 1920, y: 1000 });
+		let a = step(newActor(0, 0, 12, { y: 1000, island: 0 }), { type: "ride", now: 0, path, island: 2 }, W).actor;
+		a = step(a, { type: "message", now: 10 }, W).actor;
+		expect([a.kind, a.talk]).toEqual(["riding", "listening"]);
+		a = step(a, { type: "hidden", now: 20 }, W).actor;
+		expect(a.kind).toBe("riding");
+		const frozen = step(a, { type: "tick", now: 5000, dt: 250 }, W).actor;
+		expect(frozen.ride?.t).toBe(a.ride?.t);
+		const facing = step(step(newActor(0, 0, 12), { type: "message", now: 0 }, W).actor, { type: "ride", now: 1, path, island: 2 }, W).actor;
+		expect(facing.kind).not.toBe("riding");
+		expect(look(a, 100, "warm").frame).toBe("idle-1");
 	});
 });
