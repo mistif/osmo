@@ -13,6 +13,7 @@ export const RULES = [
 	"The component is the default export, takes no props, imports only from react, and stays under 12 kilobytes.",
 	"It runs in a sealed frame with no network, no storage and no access to anything outside itself, so keep all state inside the component.",
 	"Use plain inline styles. You may use the colours var(--osmo-a), var(--osmo-b), var(--osmo-bg) and var(--osmo-ink).",
+	"The frame already styles the page, the controls and the scrollbars in Osmo's look, so use plain elements and add inline styles only for layout and what is specific to the thing.",
 	"Make it work on a phone screen.",
 	"Every word the thing shows to a person is written in Osmo's voice: calm, exact, understated, in complete sentences or short plain labels, with full forms such as \"do not\" and \"cannot\".",
 	"Never use an exclamation mark, an emoji, slang or a symbol that a voice would read out. Do not praise the person or the thing.",

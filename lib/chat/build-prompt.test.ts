@@ -9,7 +9,7 @@ describe("buildPrompt", () => {
 		expect(input[0].content).toContain("Brief: a tip splitter");
 	});
 	it("carries the rules the component must follow", () => {
-		for (const part of ["default export", "imports only from react", "12 kilobytes", "no network", "var(--osmo-a)", "var(--osmo-b)", "var(--osmo-bg)", "var(--osmo-ink)", "phone", "Never use an exclamation mark", "title", "// title: "]) {
+		for (const part of ["default export", "imports only from react", "12 kilobytes", "no network", "var(--osmo-a)", "var(--osmo-b)", "var(--osmo-bg)", "var(--osmo-ink)", "phone", "already styles the page, the controls and the scrollbars", "Never use an exclamation mark", "title", "// title: "]) {
 			expect(instructions, part).toContain(part);
 		}
 		expect(instructions).toBe(RULES);

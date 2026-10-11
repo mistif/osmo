@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { FRAME_STYLES } from "./frame-styles";
 import { buildFramePage, cspFor, IFRAME_ALLOW, newNonce, safeColor, SANDBOX } from "./frame";
 
 const NONCE = "0123456789abcdef0123456789abcdef";
@@ -85,5 +86,32 @@ describe("buildFramePage with the runtime inlined (dev, and any page that is not
 	it("refuses runtime text that could close the script tag", () => {
 		expect(() => inline({ runtimeText: "a </script><b>" })).toThrow();
 		expect(() => inline({ runtimeText: "a <!-- b" })).toThrow();
+	});
+});
+
+describe("the frame's base stylesheet", () => {
+	it("sits in one style block with the one-use nonce, after the variables and before the body", () => {
+		const html = page();
+		const blocks = html.match(/<style[^>]*>/g) ?? [];
+		expect(blocks).toEqual([`<style nonce="${NONCE}">`]);
+		expect(html).toContain(`:root{--osmo-a:hsl(172 38% 50%);`);
+		expect(html).toContain(FRAME_STYLES);
+		expect(html.indexOf("--osmo-a:")).toBeLessThan(html.indexOf(FRAME_STYLES));
+		expect(html.indexOf(FRAME_STYLES)).toBeLessThan(html.indexOf("<body>"));
+		expect(buildFramePage({ nonce: NONCE, runtimeText: "x", code: "y", aura: AURA })).toContain(FRAME_STYLES);
+	});
+	it("is plain ASCII, small, and refers to nothing outside the frame", () => {
+		expect([...FRAME_STYLES].every((c) => c === "\n" || (c >= " " && c <= "~"))).toBe(true);
+		expect(Buffer.byteLength(FRAME_STYLES)).toBeLessThan(3072);
+		for (const outside of ["url(", "@import", "@font-face", "http:", "https:", "//"]) expect(FRAME_STYLES.toLowerCase(), outside).not.toContain(outside);
+	});
+	it("styles the page, the controls, the scrollbars and reduced motion from the four colours", () => {
+		for (const part of ["color-scheme:dark", "var(--osmo-bg)", "var(--osmo-ink)", "scrollbar-width:thin", "::-webkit-scrollbar", ":focus-visible", "accent-color:var(--osmo-a)", "prefers-reduced-motion:reduce", "::selection", "ui-sans-serif,system-ui"]) {
+			expect(FRAME_STYLES, part).toContain(part);
+		}
+		expect(FRAME_STYLES.split("{").length).toBe(FRAME_STYLES.split("}").length);
+	});
+	it("leaves the policy alone: no nonce or other source added for styles", () => {
+		expect(cspFor(NONCE)).toContain("style-src 'unsafe-inline';");
 	});
 });
