@@ -26,11 +26,11 @@ export const PARTS: readonly Part[] = [
 		map: ["hhhhhh", "pKKvKq", "pKKwKq", "pKKKKq"],
 		legend: { h: L("beam-h", "walls"), p: L("post-plank-l", "walls"), q: L("post-plank-r", "walls"), K: L("plank-wall", "walls"), v: L("window-top", "windows"), w: L("window", "windows") } },
 	{ id: "storey-open-wood", name: "open timber frame", group: "structure", role: "storey", material: "wood", fit: "row",
-		map: ["hhhhhh", "pkkkPq", "pkkkPq", "pkkkPq"],
-		legend: { h: L("beam-h", "walls"), p: L("post-back-l", "walls"), q: L("post-back-r", "walls"), P: L("post-back", "walls"), k: L("back-wood", "backwall") } },
+		map: ["hhhhhh", "pKKKPq", "pkkkPq", "pkkkPq"],
+		legend: { h: L("beam-h", "walls"), p: L("post-back-l", "walls"), q: L("post-back-r", "walls"), P: L("post-back", "walls"), K: L("back-wood-top", "backwall"), k: L("back-wood", "backwall") } },
 	{ id: "storey-open-stone", name: "open stone arcade", group: "structure", role: "storey", material: "stone", fit: "row",
-		map: ["hhhhhh", "IbbbII", "IbbbII", "IbbbII"],
-		legend: { h: L("beam-h", "walls"), I: L("pillar", "walls"), b: L("back-stone", "backwall") } },
+		map: ["hhhhhh", "IaaaII", "IbbbII", "IbbbII"],
+		legend: { h: L("beam-h", "walls"), I: L("pillar", "walls"), a: L("arch-back", "walls"), b: L("back-stone", "backwall") } },
 	{ id: "storey-glass", name: "glass wall", group: "structure", role: "storey", material: null, fit: "row",
 		map: ["hhhhhh", "pgggPq", "pgggPq", "pgggPq"],
 		legend: { h: L("beam-h", "walls"), p: L("post-glass-l", "walls"), q: L("post-glass-r", "walls"), P: L("post-glass", "walls"), g: L("glass-wall", "walls") } },
@@ -114,5 +114,9 @@ export const PARTS: readonly Part[] = [
 	{ id: "side-sign", name: "signpost", group: "additions", role: "side", material: null, fit: "fixed", map: ["s"], legend: { s: L("sign", "walls") } },
 	// Appended in the fix round: the open loft a roof over a balcony stands on, a post at each end of the body with the
 	// sky between (laid once, like the balcony under it).
+	// The shrine's own arcade: its arches, and the carved figure standing inside against the back wall (five wide).
+	{ id: "storey-shrine", name: "shrine arcade", group: "structure", role: "storey", material: "stone", fit: "row",
+		map: ["hhhhh", "IaaaI", "IbbbI", "IbsbI"],
+		legend: { h: L("beam-h", "walls"), I: L("pillar", "walls"), a: L("arch-back", "walls"), b: L("back-stone", "backwall"), s: L("statue-back", "backwall") } },
 	{ id: "loft-posts", name: "open loft", group: "structure", role: "beam", material: null, fit: "row", map: ["P.P", "P.P"], legend: { P: L("post", "walls") } },
 ];

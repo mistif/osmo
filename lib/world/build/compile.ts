@@ -171,7 +171,7 @@ export function compile(recipe: Recipe, v: Variation, site: Site, parts: readonl
 	}
 	const wallAt = (x: number, y: number) => {
 		const c = map.get(at(x, y));
-		return c !== undefined && (c.layer === "walls" || c.layer === "backwall");
+		return c !== undefined && (c.layer === "walls" || c.layer === "backwall") && c.tile !== "statue-back"; // nothing hangs on the shrine's figure
 	};
 	const centre = doorX ?? (storeys[0] ? storeys[0].x + Math.floor(storeys[0].w / 2) : 0);
 	// Decor hangs on a storey's wall rows (not the beam row over a storey of four), inside its corner posts; on a storey

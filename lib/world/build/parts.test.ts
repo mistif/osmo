@@ -13,7 +13,7 @@ const IDS = [
 	"side-bed", "side-fence", "side-tree-fruit", "side-tree-pine", "side-bench", "side-lamp-post", "side-dock", "bed-row", "walk-lamps", "pond-basin",
 	"well-ring", "plinth-row", "orchard-row", "bridge-span", "bridge-anchor", "storey-shaft", "side-sign",
 	// the fix round's
-	"loft-posts",
+	"storey-shrine", "loft-posts",
 ];
 // The rows a part shows at width w (row parts and roofs), or its own grid.
 const shown = (p: (typeof PARTS)[number], w: number): string[] =>
@@ -58,7 +58,7 @@ describe("the parts library (spec 4.1)", () => {
 			if (p.role === "side" || p.role === "top" || p.role === "door" || p.role === "decor" || p.role === "chimney" || p.role === "anchor") expect(p.fit).toBe("fixed");
 			if (p.id.startsWith("storey-")) expect(h).toBe(4);
 			if (p.role === "decor" || p.role === "door") expect(p.material).toBeNull();
-			if (p.role === "storey" && p.id.startsWith("storey-") && p.id !== "storey-open-wood" && p.id !== "storey-open-stone") {
+			if (p.role === "storey" && p.id.startsWith("storey-") && p.id !== "storey-open-wood" && p.id !== "storey-open-stone" && p.id !== "storey-shrine") {
 				for (const width of [5, 7, 9, 11]) {
 					const rows = shown(p, width);
 					for (const r of rows.map((x) => x.slice(1, -1))) expect(r, `${p.id} at ${width}`).toBe([...r].reverse().join("")); // windows sit evenly between the caps

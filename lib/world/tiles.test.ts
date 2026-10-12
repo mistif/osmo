@@ -31,6 +31,7 @@ const FREE_WILL = [
 const FIX_ROUND = ["deck", "spire-l", "spire-r", "spire-l-hi", "spire-r-hi", "spire-peak", "pond-water", "pond-rim", "pond-dock",
 	"leaves-tl", "leaves-tr", "leaves-bl", "leaves-br",
 	"post-plank-l", "post-plank-r", "post-back-l", "post-back-r", "post-back", "post-glass-l", "post-glass-r", "post-glass",
+	"back-wood-top", "back-stone-top", "arch-back", "statue-back",
 ];
 // Tiles with no transparent pixel.
 const FILLED: TileId[] = [
@@ -153,7 +154,7 @@ describe("the tiles", () => {
 });
 
 describe("the free-will tiles (spec 4.5)", () => {
-	const OPAQUE: TileId[] = ["post-plank-l", "post-plank-r", "post-back-l", "post-back-r", "post-back", "post-glass-l", "post-glass-r", "post-glass", "deck", "plank-wall", "stone-wall", "back-wood", "back-stone", "leaves", "fruit-leaves", "hedge", "water", "water-top", "soil", "glass-wall", "thatch-flat", "plank-wall-2", "stone-wall-2"];
+	const OPAQUE: TileId[] = ["back-wood-top", "back-stone-top", "arch-back", "statue-back", "post-plank-l", "post-plank-r", "post-back-l", "post-back-r", "post-back", "post-glass-l", "post-glass-r", "post-glass", "deck", "plank-wall", "stone-wall", "back-wood", "back-stone", "leaves", "fruit-leaves", "hedge", "water", "water-top", "soil", "glass-wall", "thatch-flat", "plank-wall-2", "stone-wall-2"];
 	const SEE_THROUGH: TileId[] = ["post", "rope", "bridge-board", "flowers", "balloon-tl", "balloon-tr", "balloon-bl", "balloon-br", "basket", "bell", "awning", "sail", "statue", "arch", "rail", "thatch-l", "thatch-r", "thatch-peak", "glass-roof-l", "glass-roof-r"];
 	const LIT_NEW: TileId[] = ["plank-wall", "stone-wall", "back-wood", "back-stone", "hedge", "soil", "thatch-flat", "plank-wall-2", "stone-wall-2"];
 	it("draws every one of them, none a placeholder box any more", () => {

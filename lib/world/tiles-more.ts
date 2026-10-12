@@ -16,6 +16,7 @@ export const MORE_TILE_IDS = [
 	"deck", "spire-l", "spire-r", "spire-l-hi", "spire-r-hi", "spire-peak", "pond-water", "pond-rim", "pond-dock",
 	"leaves-tl", "leaves-tr", "leaves-bl", "leaves-br",
 	"post-plank-l", "post-plank-r", "post-back-l", "post-back-r", "post-back", "post-glass-l", "post-glass-r", "post-glass",
+	"back-wood-top", "back-stone-top", "arch-back", "statue-back",
 ] as const;
 export type MoreTileId = (typeof MORE_TILE_IDS)[number];
 
@@ -127,7 +128,8 @@ const plankWall = over(
 	],
 );
 // The same boards behind an open front, a quarter darker, with no nails.
-const backWood = make((x, y) => boards(x, y, { gap: "z", dark: "A", base: "k", light: "l", end: "l", high: "m", seed: 131 }));
+// Dark and flat (the look pass: an open front must not read as a closed wall): the room's shade, its boards barely lit.
+const backWood = make((x, y) => boards(x, y, { gap: "z", dark: "z", base: "A", light: "A", end: "k", high: "k", seed: 131 }));
 // plank-wall-2: a knot in the left board with the grain bending round it, and a split in the right board.
 const plankWall2 = keepRing(
 	plankWall,
@@ -174,7 +176,8 @@ const STONE_MAP = [
 const STONE_LIFT = { A: 0.04, B: -0.04, C: 0.06, D: -0.02, E: 0, F: 0.05 };
 const stoneWall = masonry(STONE_MAP, { joint: "~", steps: "}T|{", seed: 140, pits: 0.06, lift: STONE_LIFT, flat: true });
 // The same courses behind an arcade, a quarter darker.
-const backStone = masonry(STONE_MAP, { joint: "a", steps: "~}T", seed: 141, pits: 0.06, lift: STONE_LIFT, flat: true });
+// Dark and flat, as the back wood.
+const backStone = masonry(STONE_MAP, { joint: "a", steps: "~~}", seed: 141, pits: 0.02, lift: STONE_LIFT, flat: true });
 // stone-wall-2: a crack running down across the middle course's long block and a hairline in the top course, each
 // with its lit lower lip, and a chipped corner in the bottom course.
 const stoneWall2 = keepRing(
@@ -767,6 +770,14 @@ const postOver = (bg: Grid, at: "l" | "r" | "c"): Grid => {
 	return make((x, y) => (x >= x0 && x < x0 + 6 ? post[y][x - x0 + 5] : bg[y][x]));
 };
 
+// --- Inside an open storey: the back walls' top row in the beam's shadow (darkest under the beam, dithered off), an
+// arch of the arcade with the shaded back wall through its opening, and the shrine's figure standing against it. ---
+const shaded = (bg: Grid, deep: string) => make((x, y) => (y <= 1 ? deep : y <= 3 && checker(x, y) ? deep : bg[y][x]));
+const backWoodTop = shaded(backWood, "z");
+const backStoneTop = shaded(backStone, "a");
+const archBack = make((x, y) => (arch[y][x] === "." ? backStoneTop[y][x] : arch[y][x]));
+const statueBack = make((x, y) => (STATUE[y][x] === "." ? backStone[y][x] : STATUE[y][x]));
+
 export const MORE_TILES: Readonly<Record<MoreTileId, Grid>> = {
 	"plank-wall": plankWall,
 	"stone-wall": stoneWall,
@@ -824,4 +835,8 @@ export const MORE_TILES: Readonly<Record<MoreTileId, Grid>> = {
 	"post-glass-l": postOver(glassWall, "l"),
 	"post-glass-r": postOver(glassWall, "r"),
 	"post-glass": postOver(glassWall, "c"),
+	"back-wood-top": backWoodTop,
+	"back-stone-top": backStoneTop,
+	"arch-back": archBack,
+	"statue-back": statueBack,
 };
