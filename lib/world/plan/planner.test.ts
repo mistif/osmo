@@ -115,7 +115,7 @@ describe("the planner (spec 4.8)", () => {
 		let varied = 0;
 		const counting = {
 			...DEPS,
-			compile: (r: Recipe, v: Variation, s: Site, p: readonly Part[]) => {
+			compile: (r: Recipe, v: Variation, s: Site) => {
 				tried.push(JSON.stringify([r.id, v, s]));
 				return fakeCompile(r, v, s);
 			},

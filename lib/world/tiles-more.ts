@@ -910,7 +910,6 @@ const FIGURE = [
 // --- One wide arch over three cells (the gate's opening), segmental: its intrados a circle through the opening's two
 // bottom corners, a ring of voussoirs radiating from it with a pale keystone at the crown, the dressed stone wall over
 // it; the sky in the opening. ---
-const WIDE = 48;
 const WIDE_C = { x: 24, y: 40 };
 const WIDE_R = Math.hypot(24, 24); // through the opening's bottom corners (0, 16) and (48, 16)
 const WIDE_RING = 4.5;
