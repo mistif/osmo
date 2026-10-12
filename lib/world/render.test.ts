@@ -526,6 +526,17 @@ describe("the big world (free-will spec 3.3)", () => {
 		expect(clouds(0.125)).toBe(0);
 		expect(clouds(480 / 16384)).toBe(0);
 	});
+	it("draws his mark in his scarf's colour inside a snow outline, so at night it is no star (the look pass)", () => {
+		const { counted, log } = recording(pixelPainter(V.w, V.h, art));
+		drawWorld(counted, bigScene(0.125, V, { dark: 1, mark: "#3aa597" }));
+		const rects = log.filter((c) => c.kind === "rect");
+		const inner = rects.findIndex((c) => c.color === "#3aa597");
+		expect(inner).toBeGreaterThan(0);
+		expect(rects[inner - 1].color).toBe(PALETTE.p); // the outline, drawn first, round it
+		const dflt = recording(pixelPainter(V.w, V.h, art));
+		drawWorld(dflt.counted, bigScene(0.125, V));
+		expect(dflt.log.some((c) => c.kind === "rect" && c.color === PALETTE.Z)).toBe(true); // his scarf's own letter when none is given
+	});
 	it("draws his sprite at 1/2 and his mark at 1/4", () => {
 		const near = { camera: cam(HOME.x, HOME.y - 40, 0.5) };
 		const half = recording(pixelPainter(V.w, V.h, art));
@@ -594,9 +605,9 @@ describe("every zoom step's pixels (480 by 270, day, no life)", () => {
 		expect(hashAt(2)).toMatchInlineSnapshot(`"0c4c2065"`);
 		expect(hashAt(1)).toMatchInlineSnapshot(`"d8d75cf9"`);
 		expect(hashAt(0.5)).toMatchInlineSnapshot(`"e28abdcc"`);
-		expect(hashAt(0.25)).toMatchInlineSnapshot(`"15d99be4"`);
-		expect(hashAt(0.125)).toMatchInlineSnapshot(`"f18dd2d4"`);
-		expect(hashAt(480 / 16384)).toMatchInlineSnapshot(`"792a5707"`);
+		expect(hashAt(0.25)).toMatchInlineSnapshot(`"f6042c13"`);
+		expect(hashAt(0.125)).toMatchInlineSnapshot(`"cbf64e6b"`);
+		expect(hashAt(480 / 16384)).toMatchInlineSnapshot(`"c0a65374"`);
 	});
 	it("draws the same pixels with the ground from chunk bitmaps as stamped, at a whole zoom", () => {
 		for (const z of [1, 2, 3]) {

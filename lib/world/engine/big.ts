@@ -996,7 +996,7 @@ function buildBigWorld(
 				camera, view, now, clock: now, ground: groundNow(), laid: lists.laid, ghost: lists.ghost,
 				outline: [], // the room never shows what he is building towards (Gur, 2026-10-11, ff1b324)
 				him: { x: actor.x, y: actor.y, look: look(actor, now, face, !reduced) }, sky, dark, life,
-				anchor: { x: homePx(START_X), groundY: HOME_TOP * TILE }, dpr, balloon: balloonNow(), lights: lists.lights,
+				anchor: { x: homePx(START_X), groundY: HOME_TOP * TILE }, dpr, balloon: balloonNow(), lights: lists.lights, mark: scarf,
 			}).pending;
 			live.current.onFrame?.(clock() - t0);
 			const head = toScreen(camera, view, now, actor.x, actor.y - FRAME_H);

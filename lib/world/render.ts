@@ -138,6 +138,7 @@ export type WorldScene = {
 	dpr?: number; // the canvas's device pixel ratio (lod.ts deviceRatio): the level of detail goes by the zoom over it
 	balloon?: { x: number; y: number } | null; // the bottom centre of its basket, world px
 	lights?: readonly { x: number; y: number }[]; // world px, one per finished build: the far view's lights at night
+	mark?: string; // his mark's colour below 1/2 (his scarf's, CSS); his scarf's own letter when left out
 	stampCap?: number; // the tiles level stamps at most this many ground blocks in view (GROUND_STAMP_CAP): past it, chunk bitmaps
 };
 export const GHOST_ALPHA = 0.3;
@@ -527,9 +528,10 @@ export function drawWorld(p: Painter, s: WorldScene): { pending: number } {
 			put("sprite", frameIndex(look.frame), hx, hy, FRAME_W, FRAME_H, 1, look.flip);
 			if (look.face) put("faces", look.blink ? blinkCell(look.face) : faceCell(look.face, look.gaze), hx + FACE_AT.x, hy + FACE_AT.y, FACE_W, FACE_H, 1);
 		} else {
-			// Below 1/2 he is a small bright mark, so he can be found: snow on stone.
-			square(s.him.x, feet - MARK.lift, MARK.outer, PALETTE.a, 1);
-			square(s.him.x, feet - MARK.lift, MARK.inner, PALETTE.p, 1);
+			// Below 1/2 he is a small mark, so he can be found: his scarf's colour in a snow outline (white alone read as
+			// one more star at night: the look pass).
+			square(s.him.x, feet - MARK.lift, MARK.outer, PALETTE.p, 1);
+			square(s.him.x, feet - MARK.lift, MARK.inner, s.mark ?? PALETTE.Z, 1);
 		}
 		// The balloon's basket, in front of him, so he stands in it
 		if (balloon) tile(BALLOON_BASKET.tile, balloon.x + BALLOON_BASKET.dx, balloon.y + BALLOON_BASKET.dy, 1);
