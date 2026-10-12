@@ -104,7 +104,7 @@ export const PARTS: readonly Part[] = [
 	// west rim and the jetty's deck over the water at the east bank, on posts into the water.
 	{ id: "pond-basin", name: "stone pond", group: "around", role: "storey", material: null, fit: "row", dig: 2, map: ["c.j", "RwD", "LWK"],
 		legend: {
-			c: L("pond-coping", "walls"), j: L("pond-jetty", "walls"), R: L("pond-rim", "walls"), w: L("pond-water", "walls"), D: L("pond-dock", "walls"),
+			c: L("pond-coping", "walls"), j: L("pond-jetty", "walls"), R: L("pond-edge-l", "walls"), w: L("pond-surface", "walls"), D: L("pond-edge-r", "walls"),
 			L: L("pond-bank-l", "walls"), W: L("pond-deep", "walls"), K: L("pond-bank-r", "walls"),
 		} },
 	{ id: "well-ring", name: "well", group: "around", role: "top", material: null, fit: "fixed", map: ["StS", "SSS"],

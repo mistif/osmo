@@ -42,6 +42,7 @@ const HAND = ["pond-coping", "pond-jetty", "pond-deep", "pond-bank-l", "pond-ban
 	"light-red-l", "light-red", "light-red-r", "light-white-l", "light-white", "light-white-r", "gallery-rail",
 	"lamp-room-l", "lamp-room", "lamp-room-r", "lamp-room-l-lit", "lamp-room-lit", "lamp-room-r-lit",
 	"lamp-cap-l", "lamp-cap", "lamp-cap-r", "lamp-cap-peak",
+	"pond-surface", "pond-edge-l", "pond-edge-r",
 ];
 // Tiles with no transparent pixel.
 const FILLED: TileId[] = [
@@ -189,6 +190,10 @@ describe("the free-will tiles (spec 4.5)", () => {
 			const inside = new Set(g.slice(1, 15).map((r) => r.slice(1, 15)).join(""));
 			expect(inside.size, `${id} is still one flat fill`).toBeGreaterThan(2);
 		}
+	});
+	// The dug pond's cells in the ground (the hand checks) are opaque, so the snow and rock drawn under them never show.
+	it.each(["pond-surface", "pond-deep", "pond-edge-l", "pond-edge-r", "pond-bank-l", "pond-bank-r"] as TileId[])("%s, dug into the ground, has no transparent pixel", (id) => {
+		expect(TILES[id].join("")).not.toContain(".");
 	});
 	it.each(OPAQUE)("%s has no transparent pixel", (id) => {
 		expect(TILES[id].join("")).not.toContain(".");

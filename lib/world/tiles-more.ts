@@ -26,6 +26,7 @@ export const MORE_TILE_IDS = [
 	"light-red-l", "light-red", "light-red-r", "light-white-l", "light-white", "light-white-r", "gallery-rail",
 	"lamp-room-l", "lamp-room", "lamp-room-r", "lamp-room-l-lit", "lamp-room-lit", "lamp-room-r-lit",
 	"lamp-cap-l", "lamp-cap", "lamp-cap-r", "lamp-cap-peak",
+	"pond-surface", "pond-edge-l", "pond-edge-r",
 ] as const;
 export type MoreTileId = (typeof MORE_TILE_IDS)[number];
 
@@ -730,6 +731,40 @@ const spirePeak = make((x, y) => {
 	return verge(dl, x, y, true) ?? verge(dr, x, y, false) ?? shingle(x, y);
 });
 
+// --- The fix round's low pond, one row deep, kept as it was for the ponds saved before the hand checks (their saved
+// footprints name these cells): the water's surface half way down the cell behind a stone lip along its front (the
+// dressed stone's colours, a block every 8 px, lit along its top); its end is a stone rim a little higher than the lip;
+// the dock is the lip and the water with a jetty's boards over them at the rim's height, on a post into the water. ---
+const LIP = 11;
+const lip = (x: number, y: number): string => {
+	if (y === LIP) return (x & 7) === 7 ? "|" : "{";
+	if (y === 15 || (x & 7) === 7) return "~";
+	if ((x & 7) === 0) return "|";
+	return y === 14 ? "}" : "|";
+};
+const lowPondWater = make((x, y) => {
+	if (y < 7) return ".";
+	if (y >= LIP) return lip(x, y);
+	if (y === 7) return noise(x, 7, 210) > 0.65 ? "$" : "#";
+	if (y === 8) return noise(x, 8, 211) > 0.7 ? "#" : "!";
+	return (x + y * 3) % 7 === 0 ? "#" : y === 10 && noise(x, 10, 212) < 0.4 ? "9" : "!";
+});
+const lowPondRim = make((x, y) => {
+	if (y < 6 || x < 1 || x > 14) return ".";
+	if (y === 6) return x === 14 ? "|" : "{";
+	if (y === 15 || x === 14) return "~";
+	if (x === 1) return "{";
+	if (y === 10) return x === 8 ? "|" : "~"; // the joint between its two courses
+	return x >= 12 ? "}" : "|";
+});
+const lowPondDock = make((x, y) => {
+	if (y === 4) return (x & 7) === 7 ? "j" : x % 8 === 0 ? "`" : "_";
+	if (y === 5 || y === 6) return (x & 7) === 7 ? "j" : y === 5 ? "l" : "k";
+	if (y === 7) return "j";
+	if ((x === 3 || x === 4) && y >= 8 && y < LIP) return x === 3 ? "l" : "j"; // the post into the water
+	return lowPondWater[y][x];
+});
+
 // --- The pond, dug two rows into the island and seen in cross-section, as the island's rock is (the hand checks: one
 // row on top of the snow read as a trough). Its water over the two rows (wy 0 to 31): the far bank's snow in shade, the
 // surface two px under the snow line, the well's water deepening to the dark, a bed of silt on the rock. Its two banks
@@ -749,7 +784,7 @@ function pondAt(x: number, wy: number): string {
 // upper row and sloping to the bed in the lower; the east one, under the jetty, the same mirrored a little nearer.
 const bankDepth = (side: "w" | "e", x: number, wy: number): number =>
 	side === "w" ? 9 + (wy < N ? 0 : Math.round(((wy - N) * 7) / 15)) - x : x - 10 + (wy < N ? 0 : Math.round(((wy - N) * 11) / 15));
-const pondWater = make((x, y) => pondAt(x, y));
+const pondSurface = make((x, y) => pondAt(x, y));
 const pondDeep = make((x, y) => pondAt(x, y + N));
 // The jetty's two posts, x 2 to 3 and 7 to 8: lit on the left, dark under the surface.
 const jettyPost = (x: number, wy: number): string | null => {
@@ -767,7 +802,7 @@ export const pondBank = (ground: Grid, side: "w" | "e", lower: boolean, posts = 
 		if (wy >= 30) return "z";
 		return side === "w" ? (d === 1 ? "~" : "}") : d === 1 ? "{" : "|"; // the facing: shaded on the west bank, lit on the east
 	});
-export type PondTileId = "pond-rim" | "pond-dock" | "pond-bank-l" | "pond-bank-r";
+export type PondTileId = "pond-edge-l" | "pond-edge-r" | "pond-bank-l" | "pond-bank-r";
 // The rim's coping: two dressed stones lying on the snow line, lit along their top and left, a little snow on one.
 const pondCoping = over(make(() => "."), [
 	"",
@@ -1113,7 +1148,10 @@ export const MORE_TILES: Readonly<Record<Exclude<MoreTileId, FootTileId | PondTi
 	"spire-l-hi": spireL(true),
 	"spire-r-hi": spireR(true),
 	"spire-peak": spirePeak,
-	"pond-water": pondWater,
+	"pond-water": lowPondWater,
+	"pond-rim": lowPondRim,
+	"pond-dock": lowPondDock,
+	"pond-surface": pondSurface,
 	"pond-coping": pondCoping,
 	"pond-jetty": pondJetty,
 	"pond-deep": pondDeep,

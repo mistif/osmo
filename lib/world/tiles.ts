@@ -1344,8 +1344,8 @@ export const TILES: Readonly<Record<TileId, Grid>> = {
 	"lamp-post-paved": onPaving(lanternPost),
 	"hub-roof": hubOver(roofPeak),
 	// The pond's banks: the island's own snow over rock, and its rock under that (tiles-more.ts pondBank).
-	"pond-rim": pondBank(snowBase, "w", false),
-	"pond-dock": pondBank(snowBase, "e", false, true),
+	"pond-edge-l": pondBank(snowBase, "w", false),
+	"pond-edge-r": pondBank(snowBase, "e", false, true),
 	"pond-bank-l": pondBank(stone, "w", true),
 	"pond-bank-r": pondBank(stone, "e", true),
 };
