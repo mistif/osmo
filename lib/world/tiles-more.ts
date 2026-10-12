@@ -21,6 +21,8 @@ export const MORE_TILE_IDS = [
 	"chimney-base", "chimney-base-thatch", "paving", "lamp-post-paved",
 	"sail-lying", "sail-roof", "sail-thatch", "hub-roof", "hub-thatch",
 	"statue-top", "statue-foot", "arch-wide-l", "arch-wide-k", "arch-wide-r",
+	// Appended in the hand checks' fix round; every tile above keeps its cell.
+	"pond-coping", "pond-jetty", "pond-deep", "pond-bank-l", "pond-bank-r",
 ] as const;
 export type MoreTileId = (typeof MORE_TILE_IDS)[number];
 
@@ -718,37 +720,73 @@ const spirePeak = make((x, y) => {
 	return verge(dl, x, y, true) ?? verge(dr, x, y, false) ?? shingle(x, y);
 });
 
-// --- A low pond, one row deep: the water's surface half way down the cell behind a stone lip along its front (the
-// dressed stone's colours, a block every 8 px, lit along its top); its end is a stone rim a little higher than the lip;
-// the dock is the lip and the water with a jetty's boards over them at the rim's height, on a post into the water. ---
-const LIP = 11;
-const lip = (x: number, y: number): string => {
-	if (y === LIP) return (x & 7) === 7 ? "|" : "{";
-	if (y === 15 || (x & 7) === 7) return "~";
-	if ((x & 7) === 0) return "|";
-	return y === 14 ? "}" : "|";
+// --- The pond, dug two rows into the island and seen in cross-section, as the island's rock is (the hand checks: one
+// row on top of the snow read as a trough). Its water over the two rows (wy 0 to 31): the far bank's snow in shade, the
+// surface two px under the snow line, the well's water deepening to the dark, a bed of silt on the rock. Its two banks
+// are the island's own snow and rock (tiles.ts passes them in, pondBank), faced with dressed stone along the water: the
+// west one steep under a low coping course on the rim, the east one under the jetty, whose two posts stand in the water;
+// both slope in to the bed in the lower row. ---
+const POND_SURFACE = 2;
+function pondAt(x: number, wy: number): string {
+	if (wy === 0) return noise(x, 0, 213) > 0.75 ? "o" : "Y";
+	if (wy === 1) return "n";
+	if (wy >= 31) return "z";
+	if (wy === 30) return "A";
+	if (wy === 29) return checker(x, wy) ? "A" : "9";
+	return water(x, wy - POND_SURFACE);
+}
+// How far a pixel lies inside a bank (1 and 2 its stone facing; 0 and below the water): the west bank steep in the
+// upper row and sloping to the bed in the lower; the east one, under the jetty, the same mirrored a little nearer.
+const bankDepth = (side: "w" | "e", x: number, wy: number): number =>
+	side === "w" ? 9 + (wy < N ? 0 : Math.round(((wy - N) * 7) / 15)) - x : x - 10 + (wy < N ? 0 : Math.round(((wy - N) * 11) / 15));
+const pondWater = make((x, y) => pondAt(x, y));
+const pondDeep = make((x, y) => pondAt(x, y + N));
+// The jetty's two posts, x 2 to 3 and 7 to 8: lit on the left, dark under the surface.
+const jettyPost = (x: number, wy: number): string | null => {
+	const k = x === 2 || x === 7 ? 0 : x === 3 || x === 8 ? 1 : -1;
+	if (k < 0 || wy > 11) return null;
+	return wy < POND_SURFACE ? (k === 0 ? "l" : "j") : k === 0 ? "k" : "z";
 };
-const pondWater = make((x, y) => {
-	if (y < 7) return ".";
-	if (y >= LIP) return lip(x, y);
-	if (y === 7) return noise(x, 7, 210) > 0.65 ? "$" : "#";
-	if (y === 8) return noise(x, 8, 211) > 0.7 ? "#" : "!";
-	return (x + y * 3) % 7 === 0 ? "#" : y === 10 && noise(x, 10, 212) < 0.4 ? "9" : "!";
-});
-const pondRim = make((x, y) => {
-	if (y < 6 || x < 1 || x > 14) return ".";
-	if (y === 6) return x === 14 ? "|" : "{";
-	if (y === 15 || x === 14) return "~";
-	if (x === 1) return "{";
-	if (y === 10) return x === 8 ? "|" : "~"; // the joint between its two courses
-	return x >= 12 ? "}" : "|";
-});
-const pondDock = make((x, y) => {
-	if (y === 4) return (x & 7) === 7 ? "j" : x % 8 === 0 ? "`" : "_";
-	if (y === 5 || y === 6) return (x & 7) === 7 ? "j" : y === 5 ? "l" : "k";
-	if (y === 7) return "j";
-	if ((x === 3 || x === 4) && y >= 8 && y < LIP) return x === 3 ? "l" : "j"; // the post into the water
-	return pondWater[y][x];
+// A bank of the pond from the island's own tile for that row (snow over rock above, rock below), and the water.
+export const pondBank = (ground: Grid, side: "w" | "e", lower: boolean, posts = false): Grid =>
+	make((x, y) => {
+		const wy = y + (lower ? N : 0);
+		const d = bankDepth(side, x, wy);
+		if (d <= 0) return (posts ? jettyPost(x, wy) : null) ?? pondAt(x, wy);
+		if (d > 2 || wy < POND_SURFACE) return ground[y][x];
+		if (wy >= 30) return "z";
+		return side === "w" ? (d === 1 ? "~" : "}") : d === 1 ? "{" : "|"; // the facing: shaded on the west bank, lit on the east
+	});
+export type PondTileId = "pond-rim" | "pond-dock" | "pond-bank-l" | "pond-bank-r";
+// The rim's coping: two dressed stones lying on the snow line, lit along their top and left, a little snow on one.
+const pondCoping = over(make(() => "."), [
+	"",
+	"",
+	"",
+	"",
+	"",
+	"",
+	"",
+	"",
+	"",
+	"",
+	"",
+	"  oppoo         ",
+	" {{{{{{~{{{{{{~ ",
+	" {||||}~{||||}~ ",
+	" |}}}}}~|}}}}}~ ",
+	" ~~~~~~~~~~~~~~ ",
+].map((r) => r.replace(/ /g, ",")));
+// The jetty's deck over the water at the east bank: the boards' ends lit along the top he would walk on, a joint every
+// 8 px, a bollard at its west end, the tops of its two posts under it (they go on down into the water, pondBank).
+const pondJetty = make((x, y) => {
+	if ((x === 1 || x === 2) && y >= 7 && y <= 11) return y === 7 ? (x === 1 ? "`" : "m") : x === 1 ? "l" : "j"; // the bollard
+	if (y === 11) return (x & 7) === 7 ? "j" : x % 8 === 0 ? "`" : "_";
+	if (y === 12) return (x & 7) === 7 ? "j" : "m";
+	if (y === 13) return (x & 7) === 7 ? "j" : "l";
+	if (y === 14) return "k";
+	if (y === 15) return jettyPost(x, 0) ?? ".";
+	return ".";
 });
 
 // --- A canopy's four corners: the leaves with the corner rounded off (a leafy edge, its radius stirred a little by the
@@ -929,7 +967,7 @@ function wideArch(gx: number, y: number): string {
 }
 const wideThird = (n: number) => make((x, y) => wideArch(x + n * N, y));
 
-export const MORE_TILES: Readonly<Record<Exclude<MoreTileId, FootTileId>, Grid>> = {
+export const MORE_TILES: Readonly<Record<Exclude<MoreTileId, FootTileId | PondTileId>, Grid>> = {
 	paving,
 	"statue-top": FIGURE.slice(0, N),
 	"statue-foot": FIGURE.slice(N),
@@ -982,8 +1020,9 @@ export const MORE_TILES: Readonly<Record<Exclude<MoreTileId, FootTileId>, Grid>>
 	"spire-r-hi": spireR(true),
 	"spire-peak": spirePeak,
 	"pond-water": pondWater,
-	"pond-rim": pondRim,
-	"pond-dock": pondDock,
+	"pond-coping": pondCoping,
+	"pond-jetty": pondJetty,
+	"pond-deep": pondDeep,
 	"leaves-tl": canopyCorner(false, false),
 	"leaves-tr": canopyCorner(true, false),
 	"leaves-bl": canopyCorner(false, true),

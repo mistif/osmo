@@ -99,9 +99,14 @@ export const PARTS: readonly Part[] = [
 	// One row of low paving on the ground with its lamp posts standing on it, the lanterns on their tops.
 	{ id: "walk-lamps", name: "lamp-lit path", group: "around", role: "storey", material: null, fit: "row", map: ["l...ll", "psssPP"],
 		legend: { l: L("lantern", "windows"), p: L("lamp-post-paved", "walls"), P: L("lamp-post-paved", "walls"), s: L("paving", "floor") } },
-	// One row deep: the water behind a low stone lip, a stone rim at its west end and the dock's jetty at its east end.
-	{ id: "pond-basin", name: "stone pond", group: "around", role: "storey", material: null, fit: "row", map: ["RwwwD"],
-		legend: { R: L("pond-rim", "walls"), w: L("pond-water", "walls"), D: L("pond-dock", "walls") } },
+	// Dug two rows into the ground (the hand checks: a row on top of the snow read as a trough): the water's surface just
+	// under the snow line over the deep and its bed, a stone-faced bank at each end sloping in below, a low coping on the
+	// west rim and the jetty's deck over the water at the east bank, on posts into the water.
+	{ id: "pond-basin", name: "stone pond", group: "around", role: "storey", material: null, fit: "row", dig: 2, map: ["c.j", "RwD", "LWK"],
+		legend: {
+			c: L("pond-coping", "walls"), j: L("pond-jetty", "walls"), R: L("pond-rim", "walls"), w: L("pond-water", "walls"), D: L("pond-dock", "walls"),
+			L: L("pond-bank-l", "walls"), W: L("pond-deep", "walls"), K: L("pond-bank-r", "walls"),
+		} },
 	{ id: "well-ring", name: "well", group: "around", role: "top", material: null, fit: "fixed", map: ["StS", "SSS"],
 		legend: { S: L("stone-wall", "walls"), t: L("water-top", "walls") } },
 	{ id: "plinth-row", name: "plinth", group: "around", role: "floor", material: null, fit: "row", overhang: 0, map: ["SSS"], legend: { S: L("stone-wall", "floor") } },

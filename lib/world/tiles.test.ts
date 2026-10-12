@@ -37,6 +37,8 @@ const FIX_ROUND = ["deck", "spire-l", "spire-r", "spire-l-hi", "spire-r-hi", "sp
 	"sail-lying", "sail-roof", "sail-thatch", "hub-roof", "hub-thatch",
 	"statue-top", "statue-foot", "arch-wide-l", "arch-wide-k", "arch-wide-r",
 ];
+// Appended in the hand checks' fix round, after the 155.
+const HAND = ["pond-coping", "pond-jetty", "pond-deep", "pond-bank-l", "pond-bank-r"];
 // Tiles with no transparent pixel.
 const FILLED: TileId[] = [
 	"snow", "stone", "stone-dark", "brick", "brick-dark", "plank", "beam-h", "glass", "window", "window-top",
@@ -61,8 +63,8 @@ const mean = (chars: string[]) => {
 
 describe("the tiles", () => {
 	it("are the 38 tiles in the fixed cell order, then the look pass's, the rooms', the polish pass's and the free-will tiles, appended", () => {
-		expect([...TILE_IDS]).toEqual([...ORDER, ...ADDED, ...ROOMS, ...POLISH, ...FREE_WILL, ...FIX_ROUND]);
-		expect(Object.keys(TILES).sort()).toEqual([...ORDER, ...ADDED, ...ROOMS, ...POLISH, ...FREE_WILL, ...FIX_ROUND].sort());
+		expect([...TILE_IDS]).toEqual([...ORDER, ...ADDED, ...ROOMS, ...POLISH, ...FREE_WILL, ...FIX_ROUND, ...HAND]);
+		expect(Object.keys(TILES).sort()).toEqual([...ORDER, ...ADDED, ...ROOMS, ...POLISH, ...FREE_WILL, ...FIX_ROUND, ...HAND].sort());
 		expect(tileIndex("fence")).toBe(54);
 		expect(tileIndex("tower-cap")).toBe(55);
 		expect(tileIndex("dome-r")).toBe(60);

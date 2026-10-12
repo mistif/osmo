@@ -42,6 +42,9 @@ export type Part = {
 	// Fixed tops: laid this many rows down into the roof under them (a windmill's hub on its gable's face). A cell the roof
 	// already holds becomes the compiler's overlay of the two (the part drawn over the roof), or stays the roof's.
 	sink?: number;
+	// A row storey laid first: dug this many rows down into the ground (a pond's basin), its bottom row that many rows
+	// under the build's floor row, so those rows lie in the island's top (the rules let it take that land, and only that).
+	dig?: number;
 };
 
 export const SEED_KINDS = [
@@ -81,8 +84,9 @@ export type Footprint = { map: readonly string[]; decor: readonly string[]; lege
 export type Site =
 	| { kind: "ground"; island: number; x: number; w: number; ground: number; cliff: "left" | "right" | null }
 	| { kind: "bridge"; from: number; to: number; a: { x: number; y: number }; b: { x: number; y: number } };
-// A compiled build: its footprint, the world tile of its top-left, its size and its block count (cellsOf's length).
-export type Compiled = { recipe: string; footprint: Footprint; x: number; y: number; w: number; h: number; total: number };
+// A compiled build: its footprint, the world tile of its top-left, its size and its block count (cellsOf's length). dug:
+// the rows of its footprint that lie in the ground (from the site's top row down), when a part dug them; none when left out.
+export type Compiled = { recipe: string; footprint: Footprint; x: number; y: number; w: number; h: number; total: number; dug?: number };
 export type RuleName = "mid-air" | "door" | "decor" | "site" | "overlap" | "tall" | "bounds";
 export type Problem = { rule: RuleName; x: number; y: number };
 // What the rules see of the world: its size, land (island rock and snow at or under its top row, never scenery), and the

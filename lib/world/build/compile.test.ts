@@ -123,6 +123,23 @@ describe("the compiler (spec 4.2)", () => {
 		expect(bs.some((b) => b.tile === "roof-peak")).toBe(false);
 		expect(m.h).toBe(Math.max(...plain.map((b) => b.y)) - Math.min(...plain.map((b) => b.y)) + 2); // one row over the roof
 	});
+	it("digs a basin into the ground: its bottom rows in the island's top, its rim and jetty a row over it, its sides on the ground", () => {
+		const basin: Part = { id: "basin", name: "pond", group: "around", role: "storey", material: null, fit: "row", dig: 2, map: ["c.j", "RwD", "LWK"],
+			legend: { c: L("step", "walls"), j: L("deck", "walls"), R: L("stone-wall", "walls"), w: L("water-top", "walls"), D: L("post", "walls"), L: L("stone", "walls"), W: L("water", "walls"), K: L("stone-2", "walls") } };
+		const POND: Recipe = { ...HUT, id: "pond", tiers: [{ slot: "basin", role: "storey", parts: ["basin"] }], doors: [], decor: { parts: [], max: 0 } };
+		const v: Variation = { width: 5, material: "stone", tiers: { basin: { part: "basin", count: 1 } }, door: null, decor: [], sides: [{ part: "bench", at: "right" }] };
+		const p = compile(POND, v, SITE, [...FAKE, basin]);
+		const bs = cellsOf(p.footprint, p.x, p.y, "pond");
+		expect([p.y, p.h, p.dug]).toEqual([59, 3, 2]); // from the row over the ground (59) down to the row under its top (61)
+		expect(bs.filter((b) => b.y === 60).map((b) => b.tile)).toEqual(["stone-wall", "water-top", "water-top", "water-top", "post"]);
+		expect(bs.filter((b) => b.y === 61).map((b) => b.tile)).toEqual(["stone", "water", "water", "water", "stone-2"]);
+		expect(bs.filter((b) => b.y === 59).map((b) => b.tile).sort()).toEqual(["bench", "deck", "step"]);
+		expect(bs.find((b) => b.tile === "bench")?.y).toBe(59); // a side stands on the ground beside it, not in the hole
+		expect(compile(HUT, V1, SITE, FAKE).dug ?? 0).toBe(0);
+		// only the first tier digs: a basin over a floor would hang in the hole
+		const over: Recipe = { ...POND, tiers: [{ slot: "floor", role: "floor", parts: ["f"] }, ...POND.tiers] };
+		expect(() => compile(over, { ...v, tiers: { floor: { part: "f", count: 1 }, basin: { part: "basin", count: 1 } } }, SITE, [...FAKE, basin])).toThrow("digs");
+	});
 	it("stacks storeys, narrows nothing for a row roof, and puts a cliff build flush to its cliff", () => {
 		const tall = compile(HUT, { ...V1, tiers: { ...V1.tiers, storey: { part: "s", count: 2 }, roof: { part: "t", count: 1 } } }, SITE, FAKE);
 		expect(tall.h).toBe(10);
