@@ -120,9 +120,14 @@ describe("clearing the village", () => {
 });
 
 describe("Clear the world (free-will spec 4.9)", () => {
-	it("deletes every build before the village rows when builds are on", async () => {
+	it("deletes the village rows, then every build, when builds are on", async () => {
 		expect(await clearVillage({ builds: true })).toBe(true);
-		expect(log).toEqual(["delete builds all", "delete village", "cleared"]);
+		expect(log).toEqual(["delete village", "delete builds all", "cleared"]);
+	});
+	it("deletes no build when the village delete fails, so a failed clear loses nothing", async () => {
+		deleteError = { code: "08006", message: "connection" };
+		expect(await clearVillage({ builds: true })).toBe(false);
+		expect(log).toEqual(["delete village"]);
 	});
 	it("touches no build when builds are off, as before", async () => {
 		expect(await clearVillage()).toBe(true);
@@ -138,7 +143,7 @@ describe("Clear the world (free-will spec 4.9)", () => {
 		release();
 		await held;
 		expect(await clearing).toBe(true);
-		expect(log).toEqual(["delete builds all", "delete village", "cleared"]);
+		expect(log).toEqual(["delete village", "delete builds all", "cleared"]);
 		expect(clearingNow()).toBe(false);
 	});
 	it("still clears the world when village is read-only or gone (main's later steps), and not when builds are off", async () => {
@@ -146,7 +151,7 @@ describe("Clear the world (free-will spec 4.9)", () => {
 			log.length = 0;
 			deleteError = { code, message: "no village" };
 			expect(await clearVillage({ builds: true }), code).toBe(true);
-			expect(log).toEqual(["delete builds all", "delete village", "cleared"]);
+			expect(log).toEqual(["delete village", "delete builds all", "cleared"]);
 		}
 		deleteError = { code: "42501", message: "no village" };
 		expect(await clearVillage()).toBe(false);

@@ -123,10 +123,16 @@ export const newCastleRow = (p: BuildProgress): NewBuild => ({
 	recipe: p.recipe, params: {}, island: 0, x: p.x, y: p.y, footprint: p.footprint, total: p.total, laid: p.laid, reason: null, started_at: p.startedAt, finished_at: p.finishedAt,
 });
 // What the village table holds that builds does not (spec 6.3, progress made after the move): castle rooms to insert,
-// and castle rows to raise to the village's count.
+// and castle rows to raise to the village's count. Only while builds still holds the castle as it was copied from
+// village (a castle row with its village row's start: the migration's copy, or an earlier carry). After Clear the world
+// builds holds no such row, so a village that could not be deleted (read-only, or a delete that took no rows) never
+// brings the cleared castle back, and a room he starts again has a new start, so it is never raised to the old count.
 export function castleCarry(rows: readonly BuildRow[], village: readonly VillageRow[]): { insert: NewBuild[]; raise: { id: string; laid: number }[] } {
 	const insert: NewBuild[] = [];
 	const raise: { id: string; laid: number }[] = [];
+	const sameStart = (a: string, b: string) => Date.parse(a) === Date.parse(b) && Number.isFinite(Date.parse(a));
+	const copied = (r: BuildRow) => village.some((v) => castleRecipeId(v.room as CastleRoom) === r.recipe && sameStart(r.started_at, v.started_at));
+	if (!rows.some(copied)) return { insert, raise };
 	for (const room of CASTLE_ROOMS) {
 		const v = village.find((r) => r.room === room);
 		if (!v) continue;
@@ -141,7 +147,7 @@ export function castleCarry(rows: readonly BuildRow[], village: readonly Village
 				recipe, params: {}, island: 0, x: at.x, y: at.y, footprint, total, laid, reason: null, started_at: v.started_at,
 				finished_at: laid >= total ? (v.finished_at ?? v.started_at) : null,
 			});
-		} else if (have.laid < laid) raise.push({ id: have.id, laid });
+		} else if (have.laid < laid && sameStart(have.started_at, v.started_at)) raise.push({ id: have.id, laid });
 	}
 	return { insert, raise };
 }

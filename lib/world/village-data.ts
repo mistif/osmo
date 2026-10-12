@@ -46,8 +46,8 @@ export function trackSave<T>(run: Promise<T>): Promise<T> {
 export const clearingNow = (): boolean => clearing;
 
 // Deletes every room of Gur's village. True when the rows are gone (also when there were none). With builds on (Clear
-// the world, spec 4.9), every build is deleted first, the castle's rooms included; the islands (the world row) stay;
-// the old village rows go too while the table is there and writable.
+// the world, spec 4.9), every build is deleted too, after the village rows, the castle's rooms included; the islands
+// (the world row) stay; a village that is read-only or gone counts as cleared.
 export async function clearVillage(opts: { builds?: boolean } = {}): Promise<boolean> {
 	if (clearing) return false;
 	const builds = opts.builds ?? BUILDS;
@@ -59,14 +59,14 @@ export async function clearVillage(opts: { builds?: boolean } = {}): Promise<boo
 		});
 		const gone = (async () => {
 			await inFlight;
-			if (builds) {
-				const b = await supabase.from("builds").delete().not("id", "is", null);
-				if (b.error) return b;
-			}
+			// The village first: when its delete fails nothing is lost and a second try clears both. Builds last, so the
+			// castle rows builds holds (copied from village) are never gone while village rows that could come back stay.
 			const v = await supabase.from("village").delete().in("room", [...CASTLE_ROOMS]);
-			// No permission (main made village read-only) or no such table (main dropped it): the builds are what Clear the world clears.
-			if (builds && v.error && GONE_OR_LOCKED.includes(v.error.code)) return { error: null };
-			return v;
+			if (!builds) return v;
+			// No permission (main made village read-only) or no such table (main dropped it): the builds are what Clear the
+			// world clears. The old rows that stay are never carried back (state.ts castleCarry: builds then holds no copied row).
+			if (v.error && !GONE_OR_LOCKED.includes(v.error.code)) return v;
+			return await supabase.from("builds").delete().not("id", "is", null);
 		})();
 		gone.catch(() => undefined); // if the timer wins, a later failure of the delete is not an unhandled rejection
 		const result = await Promise.race([gone, late]);

@@ -76,9 +76,9 @@ describe("the builds table", () => {
 		db.updateError = { code: "42501" };
 		expect(await saveBuild({ id: "a", laid: 2, finished_at: null })).toBe(false);
 	});
-	it("clears the world: every build, then the old village rows", async () => {
+	it("clears the world: the old village rows, then every build", async () => {
 		expect(await clearWorld()).toBe(true);
-		expect(db.calls).toEqual(["delete builds all", "delete village rooms"]);
+		expect(db.calls).toEqual(["delete village rooms", "delete builds all"]);
 	});
 	it("knows a row and its footprint when it sees one", () => {
 		expect(isBuildRow(ROW)).toBe(true);

@@ -54,5 +54,5 @@ export async function saveBuild(p: { id: string; laid: number; finished_at: stri
 	if (error) console.error("Could not save a build", error);
 	return !error;
 }
-// Deletes every build (the castle's rooms too) and the old village rows; the islands stay. True when they are gone.
+// Deletes the old village rows, then every build (the castle's rooms too); the islands stay. True when they are gone.
 export const clearWorld = (): Promise<boolean> => clearVillage({ builds: true });

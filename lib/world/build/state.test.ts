@@ -102,4 +102,16 @@ describe("the builds as he builds them (spec 4.7, 6.2)", () => {
 		]);
 		expect(castleCarry([castleRow("library", 40, "2026-10-10T00:00:00.000Z")], [village[1]])).toEqual({ insert: [], raise: [] });
 	});
+	it("never brings a cleared castle back from a village it could not delete (read-only, or a delete that took no rows)", () => {
+		const village = [
+			{ room: "hall", laid: 180, started_at: "2026-10-09T00:00:00.000Z", finished_at: "2026-10-09T01:00:00.000Z" },
+			{ room: "library", laid: 84, started_at: "2026-10-10T00:00:00.000Z", finished_at: "2026-10-10T03:00:00.000Z" },
+		];
+		// Just after Clear the world: builds is empty, the old village rows are still there.
+		expect(castleCarry([], village)).toEqual({ insert: [], raise: [] });
+		// He has started the hall again in builds mode: its row is not the one copied from village, so nothing is raised or added.
+		expect(castleCarry([castleRow("hall", 6, "2026-10-12T09:00:00.000Z")], village)).toEqual({ insert: [], raise: [] });
+		// A free build alone is no sign of the copied castle either.
+		expect(castleCarry([free("f1", 9, "2026-10-12T09:00:00.000Z")], village)).toEqual({ insert: [], raise: [] });
+	});
 });
