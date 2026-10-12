@@ -79,8 +79,9 @@ export const PARTS: readonly Part[] = [
 	{ id: "side-bed", name: "flower bed", group: "around", role: "side", material: null, fit: "fixed", map: ["fff", "sss"],
 		legend: { f: L("flowers", "walls"), s: L("soil", "floor") } },
 	{ id: "side-fence", name: "fence", group: "around", role: "side", material: null, fit: "fixed", map: ["fff"], legend: { f: L("fence", "walls") } },
-	{ id: "side-tree-fruit", name: "fruit tree", group: "around", role: "side", material: null, fit: "fixed", map: ["FLF", "LFL", ".t.", ".b."],
-		legend: { F: L("fruit-leaves", "roof"), L: L("leaves", "roof"), t: L("trunk", "walls"), b: L("trunk-base", "walls") } },
+	// The canopy's corners are rounded (leaves-tl and so on), so it reads as a crown, not a box.
+	{ id: "side-tree-fruit", name: "fruit tree", group: "around", role: "side", material: null, fit: "fixed", map: ["1F2", "3F4", ".t.", ".b."],
+		legend: { F: L("fruit-leaves", "roof"), "1": L("leaves-tl", "roof"), "2": L("leaves-tr", "roof"), "3": L("leaves-bl", "roof"), "4": L("leaves-br", "roof"), t: L("trunk", "walls"), b: L("trunk-base", "walls") } },
 	{ id: "side-tree-pine", name: "pine tree", group: "around", role: "side", material: null, fit: "fixed", map: [".A.", ".^.", "(#)", "(#)", ".|."],
 		legend: { A: L("pine-tip", "roof"), "^": L("pine-small", "roof"), "(": L("pine-l", "roof"), "#": L("pine-c", "roof"), ")": L("pine-r", "roof"), "|": L("trunk-base", "walls") } },
 	{ id: "side-bench", name: "bench", group: "around", role: "side", material: null, fit: "fixed", map: ["b"], legend: { b: L("bench", "walls") } },
@@ -99,7 +100,8 @@ export const PARTS: readonly Part[] = [
 		legend: { S: L("stone-wall", "walls"), t: L("water-top", "walls") } },
 	{ id: "plinth-row", name: "plinth", group: "around", role: "floor", material: null, fit: "row", overhang: 0, map: ["SSS"], legend: { S: L("stone-wall", "floor") } },
 	{ id: "orchard-row", name: "row of fruit trees", group: "around", role: "storey", material: null, fit: "row",
-		map: ["..FLF.", "..LFL.", "...t..", "...b.."], legend: { F: L("fruit-leaves", "roof"), L: L("leaves", "roof"), t: L("trunk", "walls"), b: L("trunk-base", "walls") } },
+		map: ["..1F2.", "..3F4.", "...t..", "...b.."],
+		legend: { F: L("fruit-leaves", "roof"), "1": L("leaves-tl", "roof"), "2": L("leaves-tr", "roof"), "3": L("leaves-bl", "roof"), "4": L("leaves-br", "roof"), t: L("trunk", "walls"), b: L("trunk-base", "walls") } },
 	// Travel: the rope bridge.
 	{ id: "bridge-span", name: "rope bridge deck", group: "travel", role: "span", material: "wood", fit: "row", map: ["rrr", "BBB"],
 		legend: { r: L("rope", "walls"), B: L("bridge-board", "floor") } },

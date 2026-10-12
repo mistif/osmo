@@ -21,16 +21,18 @@ export function partsOf(v: Variation): string[] {
 
 export const sizeOf = (total: number): Size => (total < SIZE_FROM.medium ? "small" : total < SIZE_FROM.large ? "medium" : "large");
 
+// Letters that are each other's mirror image (a canopy's left and right corners), so a row of them reads the same both ways.
+const MIRROR: Readonly<Record<string, string>> = { "1": "2", "2": "1", "3": "4", "4": "3" };
 // A row part's rows at width w (each row: left cap, fill pattern, right cap; every pattern the same length). The fill is
-// taken from the first offset at which every row's fill reads the same both ways, so windows and lamps sit evenly; from
-// offset 0 when none does.
+// taken from the first offset at which every row's fill reads the same both ways (a letter and its MIRROR count as the
+// same), so windows and lamps sit evenly and no tree of an orchard is cut at an end; from offset 0 when none does.
 export function rowsAt(rows: readonly string[], w: number): string[] {
 	if (!Number.isInteger(w) || w < 2) throw new Error(`a row is at least 2 wide, not ${w}`);
 	const p = rows.length > 0 ? rows[0].length - 2 : 0;
 	if (p < 1 || rows.some((r) => r.length - 2 !== p)) throw new Error("each row of a row part is a left cap, a fill pattern and a right cap, all the same length");
 	const n = w - 2;
 	const fills = (s: number) => rows.map((r) => r.slice(1, -1).repeat(Math.ceil((n + s) / p) + 1).slice(s, s + n));
-	const even = (f: string) => f === [...f].reverse().join("");
+	const even = (f: string) => f === [...f].reverse().map((c) => MIRROR[c] ?? c).join("");
 	let chosen = fills(0);
 	for (let s = 0; s < p; s++) {
 		const f = fills(s);

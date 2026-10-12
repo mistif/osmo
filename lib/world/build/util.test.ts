@@ -23,6 +23,15 @@ describe("row parts at a width", () => {
 		expect(rowsAt(["hhhhh", "IBvBI", "IBwBI", "IBBBI"], 7)).toEqual(["hhhhhhh", "IBBvBBI", "IBBwBBI", "IBBBBBI"]);
 		expect(rowsAt(["IBBvBI"], 9)).toEqual(["IBvBBBvBI"]);
 	});
+	it("reads a mirrored pair of letters (1 and 2, 3 and 4: a canopy's corners) as the same both ways, so every tree is whole", () => {
+		const orchard = ["..1F2.", "..3F4.", "...t.."];
+		for (const w of [9, 11, 13, 15]) {
+			const [top, , trunk] = rowsAt(orchard, w);
+			expect(top.match(/1F2/g)?.length, `${w}: ${top}`).toBe((top.match(/F/g) ?? []).length); // no tree cut at an end
+			expect(trunk.match(/t/g)?.length).toBe(top.match(/1F2/g)?.length);
+		}
+		expect(rowsAt(orchard, 9)[0]).toBe(".1F2.1F2.");
+	});
 	it("keeps only the caps at width 2, and refuses less or a ragged part", () => {
 		expect(rowsAt(["SSS"], 2)).toEqual(["SS"]);
 		expect(() => rowsAt(["SSS"], 1)).toThrow("a row is at least 2 wide, not 1");

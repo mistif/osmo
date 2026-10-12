@@ -14,6 +14,7 @@ export const MORE_TILE_IDS = [
 	"statue", "arch", "rail", "plank-wall-2", "stone-wall-2",
 	// Appended in the fix round (the look pass's findings); the 106 above keep their cells.
 	"deck", "spire-l", "spire-r", "spire-l-hi", "spire-r-hi", "spire-peak", "pond-water", "pond-rim", "pond-dock",
+	"leaves-tl", "leaves-tr", "leaves-bl", "leaves-br",
 ] as const;
 export type MoreTileId = (typeof MORE_TILE_IDS)[number];
 
@@ -742,6 +743,22 @@ const pondDock = make((x, y) => {
 	return pondWater[y][x];
 });
 
+// --- A canopy's four corners: the leaves with the corner rounded off (a leafy edge, its radius stirred a little by the
+// hash), the edge in deep shadow where it faces down or right, so a tree reads as a round crown, not a box. ---
+const canopyCorner = (right: boolean, bottom: boolean) =>
+	make((x, y) => {
+		const R = 9;
+		const dx = right ? x + 0.5 - (N - R) : R - (x + 0.5);
+		const dy = bottom ? y + 0.5 - (N - R) : R - (y + 0.5);
+		if (dx > 0 && dy > 0) {
+			const d = Math.hypot(dx, dy);
+			const edge = R - 0.6 + noise(x, y, 220) * 1.4;
+			if (d > edge) return ".";
+			if (d > edge - 1.2 && (right || bottom)) return "%";
+		}
+		return leaves[y][x];
+	});
+
 export const MORE_TILES: Readonly<Record<MoreTileId, Grid>> = {
 	"plank-wall": plankWall,
 	"stone-wall": stoneWall,
@@ -787,4 +804,8 @@ export const MORE_TILES: Readonly<Record<MoreTileId, Grid>> = {
 	"pond-water": pondWater,
 	"pond-rim": pondRim,
 	"pond-dock": pondDock,
+	"leaves-tl": canopyCorner(false, false),
+	"leaves-tr": canopyCorner(true, false),
+	"leaves-bl": canopyCorner(false, true),
+	"leaves-br": canopyCorner(true, true),
 };
