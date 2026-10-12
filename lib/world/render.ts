@@ -357,27 +357,30 @@ export function drawWorld(p: Painter, s: WorldScene): { pending: number } {
 			if (seen(left, top, w, h)) p.shape(f, hazeTones(s.sky, s.view.h > 0 ? (oy + 20 * fz) / s.view.h : 0), left, top, w, h);
 		}
 		// 1b. the hills (polish pass): nearer and lower than the far islands, repeating across the view, then the haze
-		// band over their foot
-		const htop = ground.y + HILLS.drop * fz;
-		const hTones = hillTones(s.sky, s.view.h > 0 ? (htop + 12 * fz) / s.view.h : 0);
-		const period = HILLS.w * fz;
-		const hshift = (anchor.x - s.camera.x) * HILLS.parallax * fz;
-		if (period > 0) {
-			// One draw of the kept bitmap per period across the view (two or three on a desktop), not one rect per run.
-			const top = Math.round(htop + HILLS.top * fz);
-			const h = Math.round(htop + HILLS.bottom * fz) - top;
-			for (let ox = (((hshift % period) + period) % period) - period; ox < s.view.w; ox += period) {
-				const left = Math.round(ox);
-				const w = Math.round(ox + HILLS.w * fz) - left;
-				if (seen(left, top, w, h)) p.shape(HILLS, hTones, left, top, w, h);
+		// band over their foot. The small world only: in the big world they would draw home's horizon across a sky with
+		// islands above and below it (the look pass), so there the far islands stand alone.
+		if (!s.anchor) {
+			const htop = ground.y + HILLS.drop * fz;
+			const hTones = hillTones(s.sky, s.view.h > 0 ? (htop + 12 * fz) / s.view.h : 0);
+			const period = HILLS.w * fz;
+			const hshift = (anchor.x - s.camera.x) * HILLS.parallax * fz;
+			if (period > 0) {
+				// One draw of the kept bitmap per period across the view (two or three on a desktop), not one rect per run.
+				const top = Math.round(htop + HILLS.top * fz);
+				const h = Math.round(htop + HILLS.bottom * fz) - top;
+				for (let ox = (((hshift % period) + period) % period) - period; ox < s.view.w; ox += period) {
+					const left = Math.round(ox);
+					const w = Math.round(ox + HILLS.w * fz) - left;
+					if (seen(left, top, w, h)) p.shape(HILLS, hTones, left, top, w, h);
+				}
 			}
-		}
-		const [hh, hs, hl] = skyHslAt(s.sky, 1);
-		const hazeColor = hslCss([Math.round(hh), Math.round(hs), Math.min(100, Math.round(hl + HAZE.lift))]);
-		for (let y = HAZE.from; y < HAZE.to; y++) {
-			const k = y < HAZE.peak ? (y - HAZE.from) / (HAZE.peak - HAZE.from) : y < HAZE.hold ? 1 : (HAZE.to - y) / (HAZE.to - HAZE.hold);
-			const top = Math.round(htop + y * fz);
-			p.rect(0, top, s.view.w, Math.round(htop + (y + 1) * fz) - top, hazeColor, HAZE.alpha * k);
+			const [hh, hs, hl] = skyHslAt(s.sky, 1);
+			const hazeColor = hslCss([Math.round(hh), Math.round(hs), Math.min(100, Math.round(hl + HAZE.lift))]);
+			for (let y = HAZE.from; y < HAZE.to; y++) {
+				const k = y < HAZE.peak ? (y - HAZE.from) / (HAZE.peak - HAZE.from) : y < HAZE.hold ? 1 : (HAZE.to - y) / (HAZE.to - HAZE.hold);
+				const top = Math.round(htop + y * fz);
+				p.rect(0, top, s.view.w, Math.round(htop + (y + 1) * fz) - top, hazeColor, HAZE.alpha * k);
+			}
 		}
 	}
 	// 1c. birds crossing the sky by day (polish pass), behind the clouds; screen px, at a whole scale, from an atlas of at

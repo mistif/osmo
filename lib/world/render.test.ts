@@ -16,7 +16,7 @@ import { colours, parseColor } from "./raster";
 import {
 	ATLAS_MAX, artFor, BAKE_BUDGET, CELL, drawSky, drawWorld, GHOST_ALPHA, HAZE, OUTLINE_ALPHA, sheetBitmap, type Painter, type Sheet, type WorldScene,
 } from "./render";
-import { BIRD_CELL, CLOUD_CELL, CLOUD_GRIDS, HILLS } from "./backdrop";
+import { BIRD_CELL, CLOUD_CELL, CLOUD_GRIDS, FAR_ISLANDS, HILLS } from "./backdrop";
 import { hslCss, skyAt, starField, twinkle } from "./sky";
 import { poolsOf, shadowed, SHADOW_ALPHA, variantOf } from "./texture";
 import { TILE_IDS, TILES, tileIndex } from "./tiles";
@@ -456,6 +456,20 @@ const budgetPainter = (w: number, h: number, keep: number = CHUNK_KEEP.desk) => 
 
 describe("the big world (free-will spec 3.3)", () => {
 	const V = { w: 480, h: 270 };
+	it("draws the far islands behind the big world but not home's hills and haze, which would make a horizon across its sky", () => {
+		const shapes = (scene: WorldScene) => {
+			const seen: unknown[] = [];
+			const p = pixelPainter(V.w, V.h, art);
+			drawWorld({ ...p, shape: (...a: Parameters<Painter["shape"]>) => (seen.push(a[0]), p.shape(...a)) }, scene);
+			return seen;
+		};
+		const sky = skyAt("hsl(172 38% 50%)", "hsl(212 38% 50%)", 12);
+		// The camera on the ground line, where the hills would stand.
+		const big = shapes(bigScene(1, V, { sky, camera: cam(HOME.x, HOME.y + 20, 1) }));
+		expect(big.some((f) => (FAR_ISLANDS as readonly unknown[]).includes(f))).toBe(true);
+		expect(big).not.toContain(HILLS);
+		expect(shapes({ ...scene(40), sky })).toContain(HILLS); // the small world keeps them
+	});
 	it("walks only the chunks on screen: after the first frame a frame reads no block from the lists themselves", () => {
 		let reads = 0;
 		const watch = (list: Block[]): Block[] =>
