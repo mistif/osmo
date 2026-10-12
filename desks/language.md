@@ -3,8 +3,8 @@
 Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk.
 
 ## Now
-- **Free will is on local main, dark, gate green and ready for main's migration review and the push** (see Just landed). The dev server on port 3000 is the one I started for the hand checks; it is still running. Waiting on Gur for:
-  - his OK for the migrations and the push (asks to main below);
+- **Free will is live but dark: main pushed `2548f60` (0.2.9) and applied `free_will_world` and `free_will_builds` (the hall row, 86 of 180, is in `builds`).** The three switches are unset in Vercel. Waiting on Gur for:
+  - setting `NEXT_PUBLIC_OSMO_BIGWORLD`, then `NEXT_PUBLIC_OSMO_BUILDS`;
   - confirming the budget change (150 to 40 blocks a day, to keep "fills in about three months");
   - his go for the will probe.
 **Connectors phase 0, language's part is on local main** (see Just landed). 0.17 (the action probe) and 0.18's measured half wait for Gur's yes in chat. Artifacts A6 and B5 to B8 wait behind the world.
