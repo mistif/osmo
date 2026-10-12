@@ -18,7 +18,7 @@ export const MORE_TILE_IDS = [
 	"post-plank-l", "post-plank-r", "post-back-l", "post-back-r", "post-back", "post-glass-l", "post-glass-r", "post-glass",
 	"back-wood-top", "back-stone-top", "arch-back", "statue-back",
 	"balloon-1", "balloon-2", "balloon-3", "balloon-4", "balloon-5", "balloon-6", "balloon-7", "balloon-8", "balloon-9", "basket-full",
-	"chimney-base", "chimney-base-thatch",
+	"chimney-base", "chimney-base-thatch", "paving", "lamp-post-paved",
 ] as const;
 export type MoreTileId = (typeof MORE_TILE_IDS)[number];
 
@@ -838,9 +838,24 @@ const basketFull = make((x, y) => {
 // A chimney's foot: the brick stack down to a right slope, the roof below the slope line; tiles.ts makes it from its
 // own brick and the slope (chimneyFoot), since this file cannot import those.
 export const chimneyFoot = (brick: Grid, slope: Grid): Grid => make((x, y) => (y < x ? brick[y][x] : slope[y][x]));
-export type FootTileId = "chimney-base" | "chimney-base-thatch";
+export type FootTileId = "chimney-base" | "chimney-base-thatch" | "lamp-post-paved";
+
+// --- Low paving: flagstones laid in the snow, only their top showing (the bottom four rows of the cell), each lit along
+// its top and left and outlined on its right, so a lantern walk lies on the ground instead of standing on it like a low
+// wall; and a lamp post standing on it (tiles.ts lays its own post over this, onPaving). ---
+const FLAGS: readonly (readonly [number, number])[] = [[0, 4], [5, 10], [11, 15]];
+export const paving = make((x, y) => {
+	if (y < 12) return ".";
+	const [a, b] = FLAGS.find(([p, q]) => x >= p && x <= q) ?? FLAGS[0];
+	if (y === 15 || x === b) return y === 15 && x === b ? "a" : "c";
+	if (y === 12) return x === a ? "p" : "e";
+	if (x === a) return "e";
+	return noise(x, y, 230) > 0.75 ? "R" : "d";
+});
+export const onPaving = (top: Grid): Grid => make((x, y) => (top[y][x] === "." ? paving[y][x] : top[y][x]));
 
 export const MORE_TILES: Readonly<Record<Exclude<MoreTileId, FootTileId>, Grid>> = {
+	paving,
 	"plank-wall": plankWall,
 	"stone-wall": stoneWall,
 	"back-wood": backWood,

@@ -225,39 +225,53 @@ const FLOOR_TILES: ReadonlySet<TileId> = new Set<TileId>([
 	"snow", "snow-edge-l", "snow-edge-r", "path", "stone", "stone-dark", "stone-edge-l", "stone-edge-r", "stone-bottom", "stone-under-l",
 	"stone-under-r", "bridge-board",
 ]);
-// Each column's floor rows, top first, once per ground list.
-const FLOORS = new WeakMap<readonly Block[], ReadonlyMap<number, readonly number[]>>();
+// Each column's floor rows, top first, once per ground list (and, in the big world, per list of laid blocks).
+const FLOORS = new WeakMap<readonly Block[], WeakMap<readonly Block[], ReadonlyMap<number, readonly number[]>>>();
+const NO_BLOCKS: readonly Block[] = [];
 // The world px y of the floor under a block: the top edge of the first floor row at or below it in its column, or the
-// block's own foot over open sky. In the small world that is the snow row under every lamp, as it always was.
-function floorOf(ground: readonly Block[]): (b: Block) => number {
-	let cols = FLOORS.get(ground);
+// block's own foot over open sky. In the small world that is the snow row under every lamp, as it always was; in the big
+// world a build's own floor rows (its laid floor-layer blocks) count too, so a lamp's pool lies on the walk or floor it
+// stands over, not on the snow a row below (the look pass).
+function floorOf(ground: readonly Block[], laid: readonly Block[] = NO_BLOCKS): (b: Block) => number {
+	let byLaid = FLOORS.get(ground);
+	if (!byLaid) {
+		byLaid = new WeakMap();
+		FLOORS.set(ground, byLaid);
+	}
+	let cols = byLaid.get(laid);
 	if (!cols) {
 		const m = new Map<number, number[]>();
-		for (const g of ground) {
-			if (!FLOOR_TILES.has(g.tile)) continue;
+		const add = (g: Block) => {
 			const rows = m.get(g.x);
 			if (rows) rows.push(g.y);
 			else m.set(g.x, [g.y]);
-		}
+		};
+		for (const g of ground) if (FLOOR_TILES.has(g.tile)) add(g);
+		for (const g of laid) if (g.layer === "floor") add(g);
 		for (const rows of m.values()) rows.sort((a, b) => a - b);
 		cols = m;
-		FLOORS.set(ground, m);
+		byLaid.set(laid, m);
 	}
 	const byCol = cols;
 	return (b) => (byCol.get(b.x)?.find((y) => y >= b.y) ?? b.y + 1) * TILE;
 }
-// The pools of light a list spills on a ground, once per pair of lists.
-const POOLS = new WeakMap<readonly Block[], WeakMap<readonly Block[], readonly Pool[]>>();
-function poolsOn(list: readonly Block[], ground: readonly Block[]): readonly Pool[] {
+// The pools of light a list spills on a ground (and its laid floors), once per such set of lists.
+const POOLS = new WeakMap<readonly Block[], WeakMap<readonly Block[], WeakMap<readonly Block[], readonly Pool[]>>>();
+function poolsOn(list: readonly Block[], ground: readonly Block[], laid: readonly Block[] = NO_BLOCKS): readonly Pool[] {
 	let byGround = POOLS.get(list);
 	if (!byGround) {
 		byGround = new WeakMap();
 		POOLS.set(list, byGround);
 	}
-	const hit = byGround.get(ground);
+	let byLaid = byGround.get(ground);
+	if (!byLaid) {
+		byLaid = new WeakMap();
+		byGround.set(ground, byLaid);
+	}
+	const hit = byLaid.get(laid);
 	if (hit) return hit;
-	const made = poolsOf(list, floorOf(ground));
-	byGround.set(ground, made);
+	const made = poolsOf(list, floorOf(ground, laid));
+	byLaid.set(laid, made);
 	return made;
 }
 
@@ -494,7 +508,8 @@ export function drawWorld(p: Painter, s: WorldScene): { pending: number } {
 		}
 		// 5b. after dark, each lantern and door spills a soft ellipse of warm light on the floor under it (tiles level)
 		if (dark > 0 && lod === "tiles") {
-			for (const pools of [poolsOn(s.ground, s.ground), poolsOn(s.laid, s.ground)]) {
+			const floors = s.anchor ? s.laid : NO_BLOCKS; // the big world's builds stand their lamps on their own floors
+			for (const pools of [poolsOn(s.ground, s.ground, floors), poolsOn(s.laid, s.ground, floors)]) {
 				for (const pool of pools) {
 					const c = toScreen(s.camera, s.view, s.now, pool.x, pool.y);
 					const rx = pool.rx * z;

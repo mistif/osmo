@@ -91,8 +91,9 @@ export const PARTS: readonly Part[] = [
 		legend: { B: L("deck", "walls"), P: L("post", "walls") } },
 	{ id: "bed-row", name: "garden beds", group: "around", role: "storey", material: null, fit: "row", map: ["HfffHH", "ssssss"],
 		legend: { H: L("hedge", "walls"), f: L("flowers", "walls"), s: L("soil", "floor") } },
-	{ id: "walk-lamps", name: "lamp-lit path", group: "around", role: "storey", material: null, fit: "row", map: ["l...ll", "p...pp", "ssssss"],
-		legend: { l: L("lantern", "windows"), p: L("lantern-post", "walls"), s: L("path", "floor") } },
+	// One row of low paving on the ground with its lamp posts standing on it, the lanterns on their tops.
+	{ id: "walk-lamps", name: "lamp-lit path", group: "around", role: "storey", material: null, fit: "row", map: ["l...ll", "psssPP"],
+		legend: { l: L("lantern", "windows"), p: L("lamp-post-paved", "walls"), P: L("lamp-post-paved", "walls"), s: L("paving", "floor") } },
 	// One row deep: the water behind a low stone lip, a stone rim at its west end and the dock's jetty at its east end.
 	{ id: "pond-basin", name: "stone pond", group: "around", role: "storey", material: null, fit: "row", map: ["RwwwD"],
 		legend: { R: L("pond-rim", "walls"), w: L("pond-water", "walls"), D: L("pond-dock", "walls") } },

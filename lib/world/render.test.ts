@@ -516,6 +516,21 @@ describe("the big world (free-will spec 3.3)", () => {
 		expect(log.filter((c) => c.kind === "rect" && c.color === PALETTE.t).length).toBeGreaterThanOrEqual(2);
 		expect(log.filter((c) => c.kind === "rect" && c.color === PALETTE.p).length).toBeGreaterThanOrEqual(1);
 	});
+	it("pools a lamp's light on the build's own floor under it, not on the snow a row below (the look pass)", () => {
+		const poolsY = (scene: WorldScene) => {
+			const ys: number[] = [];
+			const p = pixelPainter(V.w, V.h, art);
+			drawWorld({ ...p, pool: (...a: Parameters<Painter["pool"]>) => (ys.push(a[1]), p.pool(...a)) }, scene);
+			return ys;
+		};
+		const lamp: Block = { x: 477, y: 83, tile: "lantern", layer: "lanterns" };
+		const floor: Block = { x: 477, y: 85, tile: "step", layer: "floor" };
+		const camera = cam(HOME.x, HOME.y - 40, 2);
+		const on = poolsY(bigScene(2, V, { camera, dark: 1, laid: [floor, lamp] }));
+		const bare = poolsY(bigScene(2, V, { camera, dark: 1, laid: [lamp] }));
+		expect(on).toHaveLength(1);
+		expect(bare[0] - on[0]).toBe(TILE * 2); // a row higher, at zoom 2
+	});
 	it("draws no clouds at the far steps, where they would tile into a strip louder than the islands (the look pass)", () => {
 		const clouds = (z: number) => {
 			const { counted, log } = recording(pixelPainter(V.w, V.h, art));

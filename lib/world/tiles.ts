@@ -6,7 +6,7 @@
 // Brick is shaded by a small helper from hand-laid maps (one letter per brick); the rest is drawn from per-pixel
 // rules and a few hand-drawn grids. Texture comes from a fixed hash, so every run draws the same pixels.
 import type { Grid } from "./raster";
-import { chimneyFoot, MORE_TILE_IDS, MORE_TILES } from "./tiles-more";
+import { chimneyFoot, MORE_TILE_IDS, MORE_TILES, onPaving } from "./tiles-more";
 
 export const TILE_IDS = [
 	"snow", "snow-edge-l", "snow-edge-r", "stone", "stone-dark", "stone-edge-l", "stone-edge-r", "stone-bottom",
@@ -1094,6 +1094,26 @@ function domeEdgeLit(x: number, y: number, side: "l" | "r"): string {
 	return domeGlassLit(x, y, side === "l" ? 0 : 1);
 }
 
+// The iron lamp post (its lantern is a separate tile): a base plate, the shaft, a collar, the arms at its top.
+const lanternPost = make((x, y) => {
+	if (y >= 12) {
+		const half = y === 12 ? 2 : y === 13 ? 3 : 4;
+		if (x < 8 - half || x > 7 + half) return ".";
+		if (y === 15 || x === 7 + half) return "a";
+		if (x === 8 - half) return y === 12 ? "R" : "c";
+		return y === 12 ? "c" : x <= 7 ? "c" : "b";
+	}
+	if (y === 4 || y === 5) {
+		if (x < 6 || x > 9) return ".";
+		return y === 4 ? (x === 9 ? "a" : x === 6 ? "d" : "R") : x === 6 ? "c" : x === 9 ? "a" : "b";
+	}
+	if (x === 7) return y === 0 ? "R" : "c";
+	if (x === 8) return "a";
+	if (x === 6 && y <= 1) return "a";
+	if (x === 9 && y <= 1) return "a";
+	return ".";
+});
+
 export const TILES: Readonly<Record<TileId, Grid>> = {
 	snow: snowBase,
 	"snow-edge-l": make((x, y) => snowEdge(x, y, "l")),
@@ -1238,24 +1258,7 @@ export const TILES: Readonly<Record<TileId, Grid>> = {
 	}),
 	lantern: LANTERN,
 	// An iron post: lit left, a collar, a flared foot.
-	"lantern-post": make((x, y) => {
-		if (y >= 12) {
-			const half = y === 12 ? 2 : y === 13 ? 3 : 4;
-			if (x < 8 - half || x > 7 + half) return ".";
-			if (y === 15 || x === 7 + half) return "a";
-			if (x === 8 - half) return y === 12 ? "R" : "c";
-			return y === 12 ? "c" : x <= 7 ? "c" : "b";
-		}
-		if (y === 4 || y === 5) {
-			if (x < 6 || x > 9) return ".";
-			return y === 4 ? (x === 9 ? "a" : x === 6 ? "d" : "R") : x === 6 ? "c" : x === 9 ? "a" : "b";
-		}
-		if (x === 7) return y === 0 ? "R" : "c";
-		if (x === 8) return "a";
-		if (x === 6 && y <= 1) return "a";
-		if (x === 9 && y <= 1) return "a";
-		return ".";
-	}),
+	"lantern-post": lanternPost,
 	banner: BANNER_TOP,
 	// The swallowtail, with a gold hem along the two points.
 	"banner-end": make((x, y) => {
@@ -1337,6 +1340,7 @@ export const TILES: Readonly<Record<TileId, Grid>> = {
 	...MORE_TILES,
 	"chimney-base": chimneyFoot(brick, make(roofRight)),
 	"chimney-base-thatch": chimneyFoot(brick, MORE_TILES["thatch-r"]),
+	"lamp-post-paved": onPaving(lanternPost),
 };
 
 const INDEX = new Map<TileId, number>(TILE_IDS.map((id, i) => [id, i]));
