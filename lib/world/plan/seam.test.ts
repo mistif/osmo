@@ -13,7 +13,7 @@ import { chooseVariation, vary } from "../build/variation";
 import { generateWorld } from "../map/generate";
 import { DOCK_DECK } from "../map/home";
 import type { Rect, WorldMap } from "../map/types";
-import { plan, willBody } from "./planner";
+import { newRow, pickByCode, plan, willBody } from "./planner";
 import { sitesFor } from "./sites";
 
 const DONE = "2026-10-01T00:00:00.000Z";
@@ -44,6 +44,28 @@ describe("the real planner on a generated world (T1, T5, T6, T8 and T9 together)
 			if (c.site.kind === "ground") expect(c.site.island, "never a free build on the castle's island").not.toBe(0);
 		}
 		expect(checkWillBody(JSON.parse(JSON.stringify(willBody(cands, moodWords(null), CASTLE, RECIPES))))).not.toBeNull();
+	});
+	it.each([2, 7, 9])("seed %i: code's picks do not repeat themselves as his builds pile up (spec 4.4)", (seed) => {
+		const inp = input(seed);
+		const rows = [...CASTLE];
+		const picked: string[] = [];
+		for (let n = 0; n < 16; n++) {
+			const cands = plan({ ...inp, n, rows }, deps(inp.map));
+			if (cands.length === 0) break;
+			const c = cands[pickByCode(cands, seed, n)];
+			const at = new Date(Date.parse(DONE) + (n + 1) * 86_400_000).toISOString();
+			rows.push({ ...newRow(c, "x"), id: `b${n}`, laid: c.compiled.total, started_at: at, finished_at: at });
+			picked.push(c.recipe.id);
+		}
+		expect(picked.length).toBe(16);
+		const run = picked.reduce((m, id, i) => {
+			let k = 1;
+			while (i - k >= 0 && picked[i - k] === id) k++;
+			return Math.max(m, k);
+		}, 0);
+		expect(run, picked.join(" ")).toBeLessThanOrEqual(2);
+		const most = Math.max(...picked.map((id) => picked.filter((x) => x === id).length));
+		expect(most, picked.join(" ")).toBeLessThanOrEqual(5);
 	});
 	it("places a rope bridge wherever two islands face each other within reach, the one east of home from the dock", () => {
 		const bridge = RECIPES.find((r) => r.id === "rope-bridge");

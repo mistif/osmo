@@ -51,11 +51,14 @@ const HOUSE = row("h1", "cottage", { footprint: { map: ["BBBBB", "BBBBB", "BBBBB
 
 describe("the planner (spec 4.8)", () => {
 	it("offers three candidates of different recipes: one he leans toward, one for his mood, one new to him", () => {
-		const rows = [row("w1", "well"), row("w2", "well"), row("w3", "well")];
+		const on = (day: number) => ({ started_at: `2026-10-0${day}T10:00:00.000Z`, finished_at: `2026-10-0${day}T11:00:00.000Z` });
+		const rows = [row("w1", "well", on(1)), row("w2", "well", on(2)), row("w3", "well", on(3)), row("c1", "cottage", on(4)), row("o1", "orchard", on(5)), row("o2", "orchard", on(6))];
 		const cands = plan({ ...INPUT, rows, mood: "bright" }, DEPS);
 		expect(cands.map((c) => c.why)).toEqual(["leaned", "mood", "fresh"]);
 		expect(new Set(cands.map((c) => c.recipe.id)).size).toBe(3);
 		expect(cands[0].recipe.id).toBe("well");
+		// three wells in a row: he leans away from the well for now (taste.ts REPEAT)
+		expect(plan({ ...INPUT, rows: rows.slice(0, 3), mood: "bright" }, DEPS)[0].recipe.id).not.toBe("well");
 		expect(["tower", "lighthouse"]).toContain(cands[1].recipe.id);
 		expect(cands[2].fresh).toBe(true);
 		for (const c of cands) expect(fakeCheck(c.compiled, c.recipe, c.site, world(CASTLE_RECTS))).toEqual([]);

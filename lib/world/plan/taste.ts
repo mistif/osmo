@@ -4,12 +4,19 @@ import type { BuildRow, Variation } from "../build/types";
 import { partsOf } from "../build/util";
 
 export const NOVELTY = 0.75;
+// A recipe among his last REPEAT_WINDOW free builds is weighed at REPEAT, so he does not repeat himself (spec 4.4).
+export const REPEAT_WINDOW = 3;
+export const REPEAT = 0.2;
+// Each use adds weight, less each time (1, 2, 3, 4 at 1, 3, 7, 15 uses), so the recipe he leans toward cannot outgrow
+// the variety bonus and every other candidate as his builds pile up.
+export const lean = (uses: number): number => Math.log2(1 + Math.max(0, uses));
 export type Taste = {
 	recipes: Readonly<Record<string, number>>;
 	parts: Readonly<Record<string, number>>;
 	materials: Readonly<Record<string, number>>;
 	recent: ReadonlySet<string>;
 	used: ReadonlySet<string>; // every part and recipe of every free build, finished or not
+	last: readonly string[]; // the recipes of his last REPEAT_WINDOW free builds by start, finished or not, oldest first
 };
 export function asVariation(x: unknown): Variation | null {
 	if (typeof x !== "object" || x === null) return null;
@@ -41,10 +48,12 @@ export function tasteOf(rows: readonly BuildRow[]): Taste {
 		const v = asVariation(r.params);
 		return [r.recipe, ...(v ? partsOf(v) : [])];
 	}));
-	return { recipes, parts, materials, recent, used };
+	const last = [...free].sort((a, b) => time(a.started_at) - time(b.started_at)).slice(-REPEAT_WINDOW).map((r) => r.recipe);
+	return { recipes, parts, materials, recent, used, last };
 }
 export function scoreOf(recipeId: string, v: Variation, t: Taste): number {
 	const ps = partsOf(v);
-	return 1 + 2 * (t.recipes[recipeId] ?? 0) + 0.5 * ps.reduce((s, p) => s + (t.parts[p] ?? 0), 0) + 0.5 * (t.materials[v.material] ?? 0) + NOVELTY * ps.filter((p) => !t.recent.has(p)).length;
+	const score = 1 + 2 * lean(t.recipes[recipeId] ?? 0) + 0.5 * ps.reduce((s, p) => s + lean(t.parts[p] ?? 0), 0) + 0.5 * lean(t.materials[v.material] ?? 0) + NOVELTY * ps.filter((p) => !t.recent.has(p)).length;
+	return t.last.includes(recipeId) ? REPEAT * score : score;
 }
 export const isFresh = (recipeId: string, v: Variation, t: Taste): boolean => !t.used.has(recipeId) || partsOf(v).some((p) => !t.used.has(p));
