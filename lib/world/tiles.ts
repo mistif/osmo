@@ -6,7 +6,7 @@
 // Brick is shaded by a small helper from hand-laid maps (one letter per brick); the rest is drawn from per-pixel
 // rules and a few hand-drawn grids. Texture comes from a fixed hash, so every run draws the same pixels.
 import type { Grid } from "./raster";
-import { MORE_TILE_IDS, MORE_TILES } from "./tiles-more";
+import { chimneyFoot, MORE_TILE_IDS, MORE_TILES } from "./tiles-more";
 
 export const TILE_IDS = [
 	"snow", "snow-edge-l", "snow-edge-r", "stone", "stone-dark", "stone-edge-l", "stone-edge-r", "stone-bottom",
@@ -1335,6 +1335,8 @@ export const TILES: Readonly<Record<TileId, Grid>> = {
 	"dome-lit": make((x, y) => domeGlassLit(x, y, 0)),
 	"dome-r-lit": make((x, y) => domeEdgeLit(x, y, "r")),
 	...MORE_TILES,
+	"chimney-base": chimneyFoot(brick, make(roofRight)),
+	"chimney-base-thatch": chimneyFoot(brick, MORE_TILES["thatch-r"]),
 };
 
 const INDEX = new Map<TileId, number>(TILE_IDS.map((id, i) => [id, i]));

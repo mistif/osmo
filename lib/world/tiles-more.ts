@@ -18,6 +18,7 @@ export const MORE_TILE_IDS = [
 	"post-plank-l", "post-plank-r", "post-back-l", "post-back-r", "post-back", "post-glass-l", "post-glass-r", "post-glass",
 	"back-wood-top", "back-stone-top", "arch-back", "statue-back",
 	"balloon-1", "balloon-2", "balloon-3", "balloon-4", "balloon-5", "balloon-6", "balloon-7", "balloon-8", "balloon-9", "basket-full",
+	"chimney-base", "chimney-base-thatch",
 ] as const;
 export type MoreTileId = (typeof MORE_TILE_IDS)[number];
 
@@ -834,7 +835,12 @@ const basketFull = make((x, y) => {
 	return block ? (first ? "_" : "l") : first ? "l" : "k";
 });
 
-export const MORE_TILES: Readonly<Record<MoreTileId, Grid>> = {
+// A chimney's foot: the brick stack down to a right slope, the roof below the slope line; tiles.ts makes it from its
+// own brick and the slope (chimneyFoot), since this file cannot import those.
+export const chimneyFoot = (brick: Grid, slope: Grid): Grid => make((x, y) => (y < x ? brick[y][x] : slope[y][x]));
+export type FootTileId = "chimney-base" | "chimney-base-thatch";
+
+export const MORE_TILES: Readonly<Record<Exclude<MoreTileId, FootTileId>, Grid>> = {
 	"plank-wall": plankWall,
 	"stone-wall": stoneWall,
 	"back-wood": backWood,

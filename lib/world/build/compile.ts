@@ -6,6 +6,8 @@ import type { Compiled, Footprint, Part, Recipe, Role, Site, Variation } from ".
 import { roofRows, rowsAt } from "./util";
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+// A right slope with a chimney standing in it.
+const CHIMNEY_FOOT: Partial<Record<TileId, TileId>> = { "roof-right": "chimney-base", "thatch-r": "chimney-base-thatch" };
 type Cell = { tile: TileId; layer: Layer };
 const at = (x: number, y: number) => `${x},${y}`;
 const xy = (k: string) => k.split(",").map(Number) as [number, number];
@@ -121,6 +123,11 @@ export function compile(recipe: Recipe, v: Variation, site: Site, parts: readonl
 			const cx = roofSpan.x + roofSpan.w - 1 - Math.floor(roofSpan.w / 4);
 			const top = roofTop.get(cx);
 			if (top === undefined) throw new Error(`${recipe.id}: no roof under the chimney`);
+			// The slope cell under it becomes the chimney's foot (the stack down to the slope, the roof below it), so it
+			// stands in the roof, not on the slope's corner with sky under it.
+			const slope = map.get(at(cx, top));
+			const foot = slope ? CHIMNEY_FOOT[slope.tile] : undefined;
+			if (slope && foot) map.set(at(cx, top), { tile: foot, layer: slope.layer });
 			lay(map, p, p.map, cx, top - 1);
 			continue;
 		}

@@ -104,6 +104,9 @@ describe("the compiler (spec 4.2)", () => {
 		const cb = cellsOf(ch.footprint, ch.x, ch.y, "hut");
 		expect(cb).toContainEqual({ x: 112, y: 51, tile: "battlement", layer: "roof" });
 		expect(cb).toContainEqual({ x: 112, y: 52, tile: "brick", layer: "roof" });
+		// it stands in the slope, not on its corner: the slope cell under it is the chimney's foot, shingles round it
+		expect(cb).toContainEqual({ x: 112, y: 53, tile: "chimney-base", layer: "roof" });
+		expect(cb.some((b) => b.x === 112 && b.y === 53 && b.tile === "roof-right")).toBe(false);
 	});
 	it("stacks storeys, narrows nothing for a row roof, and puts a cliff build flush to its cliff", () => {
 		const tall = compile(HUT, { ...V1, tiers: { ...V1.tiers, storey: { part: "s", count: 2 }, roof: { part: "t", count: 1 } } }, SITE, FAKE);
