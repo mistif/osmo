@@ -38,7 +38,7 @@ import { DOCK_BLOCKS, DOCK_DECK, HOME_ISLAND, HOME_TOP, homePx, RIDE_FEET } from
 import { columnOf, islandById } from "../map/lookup";
 import { uncovered } from "../map/scenery";
 import { GEN, HOME_DX, HOME_DY, START_ISLANDS, type Deck, type WorldMap, type WorldPt, type WorldRow } from "../map/types";
-import { createWorld, loadWorld, saveWorld } from "../map/world-data";
+import { awayOf, createWorld, loadWorld, saveWorld } from "../map/world-data";
 import { FRAME_H } from "../osmo-sprite";
 import { AMBIENT_MS, FRAME_MS, framePace, shouldDraw, SLOW_MS, type DrawKey } from "../pace";
 import { decidedToday, decisionDue, fallbackLine, moodOf, newRow, pickByCode, plan, returnDecisions, willBody, type PlanDeps } from "../plan/planner";
@@ -138,7 +138,7 @@ function buildBigWorld(
 	let map: WorldMap = persist ? generateWorld(0, GEN, 1) : generateWorld(fixed()?.seed ?? DEV_SEED, GEN, fixed()?.islands ?? START_ISLANDS);
 	let worldOk = !persist;
 	// The work budget (builds mode): spent up to budgetAt; savedAt is what the row holds as far as this page knows.
-	// awayMs: how long the world had not run when the row was read (Gur away a long time: the planner's mood).
+	// awayMs: how long since a page last ran the world, when the row was read (seen_at; Gur away a long time: the planner's mood).
 	let budgetAt = iso();
 	let savedAt = budgetAt;
 	let awayMs = 0;
@@ -640,10 +640,13 @@ function buildBigWorld(
 			map = next;
 			budgetAt = row.budget_at;
 			savedAt = row.budget_at;
-			const t = Date.parse(row.budget_at);
-			awayMs = Number.isFinite(t) ? Math.max(0, Date.now() - t) : 0;
+			awayMs = awayOf(row, Date.now());
 		}
 		drawn = null;
+	};
+	// When a page last ran the world (ruling 12): saved at each load and each hide, so a long absence is read from it.
+	const seen = () => {
+		if (persist && worldOk) void saveWorld({ seen_at: iso() }).catch((err: unknown) => console.warn("[world] Could not save when the world was seen.", err));
 	};
 	const carry = async (rows: BuildRow[], villageRows: readonly VillageRow[], mine: number): Promise<BuildRow[]> => {
 		const c = castleCarry(rows, villageRows);
@@ -670,6 +673,7 @@ function buildBigWorld(
 			if (g.dead || mine !== gen) return;
 			counts = c;
 			applyWorld(row);
+			seen();
 			if (!withBuilds) {
 				if (!v.ok) {
 					console.warn("[world] Could not read the village, so he will not build this visit.");
@@ -1104,6 +1108,8 @@ function buildBigWorld(
 				}
 			}
 			if (w?.ok && w.row) {
+				awayMs = awayOf(w.row, Date.now());
+				seen();
 				if (Date.parse(w.row.budget_at) > Date.parse(budgetAt)) {
 					budgetAt = w.row.budget_at;
 					savedAt = w.row.budget_at;
@@ -1124,6 +1130,7 @@ function buildBigWorld(
 		if (document.hidden) {
 			apply({ type: "hidden", now });
 			saveSoon("hidden");
+			seen();
 			gesture = NO_GESTURE;
 			schedule(null);
 		} else {

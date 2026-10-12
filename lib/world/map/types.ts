@@ -30,7 +30,7 @@ export type WorldMap = {
 	ground: readonly Block[]; // every island's rock, snow and scenery, layer "ground"
 };
 // The saved row (section 6.1). islands: how many are present, home included (4 to 8).
-export type WorldRow = { seed: number; gen: number; islands: number; budget_at: string; created_at: string };
+export type WorldRow = { seed: number; gen: number; islands: number; budget_at: string; created_at: string; seen_at: string };
 export type Rect = { x: number; y: number; w: number; h: number };
 
 // Travel (section 4.6), in world px.

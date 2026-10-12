@@ -2,9 +2,10 @@
 -- the world is generated from, the generator version, how many islands have risen, and how far the work budget is spent.
 -- STATUS: not applied. An Ask to main: apply with Gur's OK before the code that reads it is pushed with
 -- NEXT_PUBLIC_OSMO_BIGWORLD on. Apply it before free-will-builds.sql.
--- The database picks the seed (the world code draws no random numbers). A save never moves islands or budget_at
--- backwards, and never changes the seed, the version or when the world was made (the trigger), so two tabs or a late
--- save cannot undo either.
+-- The database picks the seed (the world code draws no random numbers). A save never moves islands, budget_at or
+-- seen_at backwards, and never changes the seed, the version or when the world was made (the trigger), so two tabs or a
+-- late save cannot undo either. seen_at is when a page last ran the world (saved at each load and each hide): "Gur away
+-- a long time" is read from it, since budget_at moves only when free blocks are spent.
 
 create table public.world (
   user_id uuid primary key default auth.uid() references auth.users (id) on delete cascade,
@@ -12,7 +13,8 @@ create table public.world (
   gen smallint not null default 1 check (gen between 1 and 100),
   islands smallint not null default 4 check (islands between 1 and 8),
   budget_at timestamptz not null default now(),
-  created_at timestamptz not null default now());
+  created_at timestamptz not null default now(),
+  seen_at timestamptz not null default now());
 create function public.world_forward() returns trigger language plpgsql set search_path = '' as $$
 begin
   new.seed = old.seed;
@@ -20,6 +22,7 @@ begin
   new.created_at = old.created_at;
   new.islands = greatest(old.islands, new.islands);
   new.budget_at = greatest(old.budget_at, new.budget_at);
+  new.seen_at = greatest(old.seen_at, new.seen_at);
   return new;
 end $$;
 create trigger world_forward before update on public.world for each row execute function public.world_forward();
