@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { cellsOf, START_X } from "../blueprints";
 import { CASTLE_BLOCKS } from "../blueprints/castle";
 import { TILE } from "../blueprints/types";
-import { layBuild, resumeBuilds } from "../build/state";
+import { LIVE_BLOCKS } from "../build/budget";
+import { freeInProgress, layBuild, resumeBuilds, startBuild } from "../build/state";
 import type { BuildRow } from "../build/types";
 import { DOCK_DECK, HOME_ISLAND, homePx, shiftBlocks } from "../map/home";
 import { balloonPath, idleSpot } from "../travel/travel";
@@ -124,6 +125,31 @@ describe("decisions (spec 4.8: one at most per due moment, two tabs at once)", (
 		expect(catchUpStep({ left: 406, decided: 3, allowed: 3 }, idle)).toEqual({ kind: "done" });
 		expect(catchUpStep({ left: 0, decided: 0, allowed: 3 }, going)).toEqual({ kind: "done" });
 		expect(catchUpStep({ left: 50, decided: 0, allowed: 3 }, resumeBuilds([freeRow("a", 2)], ["hall"], NOW))).toEqual({ kind: "done" });
+	});
+	it("leaves the last build he may start today at work: its last LIVE_BLOCKS are his to lay live (spec 4.7)", () => {
+		const BIG = { ...FP, map: Array.from({ length: 10 }, () => "BBBBBBBBBBBB") }; // 120 blocks
+		const big = (laid: number) => resumeBuilds([freeRow("a", laid, { footprint: BIG, total: 120, finished_at: null })], [], NOW);
+		expect(catchUpStep({ left: 410, decided: 3, allowed: 3 }, big(0))).toEqual({ kind: "lay", n: 120 - LIVE_BLOCKS });
+		expect(catchUpStep({ left: 410, decided: 3, allowed: 3 }, big(120 - LIVE_BLOCKS))).toEqual({ kind: "done" });
+		expect(catchUpStep({ left: 410, decided: 1, allowed: 3 }, big(0))).toEqual({ kind: "lay", n: 120 }); // another decision follows it
+		expect(catchUpStep({ left: 410, decided: 0, allowed: 0 }, resumeBuilds([freeRow("a", 2)], [], NOW))).toEqual({ kind: "done" }); // small: all live
+	});
+	it("returns after three days with small builds and still finds him at work", () => {
+		let b = resumeBuilds([freeRow("a", 6)], [], NOW);
+		let c = { left: 410, decided: 0, allowed: 3 };
+		for (let guard = 0; guard < 100; guard++) {
+			const s = catchUpStep(c, b);
+			if (s.kind === "done") break;
+			if (s.kind === "decide") {
+				b = startBuild(b, freeRow(`n${c.decided}`, 0, { x: 700 + 10 * c.decided, finished_at: null, started_at: `2026-10-11T12:0${c.decided + 1}:00.000Z` }));
+				c = { ...c, decided: c.decided + 1 };
+				continue;
+			}
+			for (let k = 0; k < s.n; k++) b = layBuild(b, NOW).builds;
+			c = { ...c, left: c.left - s.n };
+		}
+		expect(c.decided).toBe(3);
+		expect(freeInProgress(b)).not.toBeNull();
 	});
 });
 

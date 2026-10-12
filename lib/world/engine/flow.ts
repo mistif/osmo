@@ -4,6 +4,7 @@
 // gesture starts, and the gate that keeps decisions to one at a time.
 import { cellsOf, START_X } from "../blueprints";
 import { TILE, type Block } from "../blueprints/types";
+import { LIVE_BLOCKS } from "../build/budget";
 import { roomOfRecipe } from "../build/castle-sites";
 import { castleWaiting, finishedFree, freeInProgress, laidBuildBlocks } from "../build/state";
 import type { BuildProgress, BuildRow, Builds } from "../build/types";
@@ -156,10 +157,16 @@ export const decisionStarted = (inserted: "row" | "taken" | "failed", reread: Bu
 
 // One step of the catch-up on return (spec 4.7): lay part of the free build in progress, decide a new one, or stop.
 // left: lapse blocks not laid yet; decided: decisions made in this catch-up; allowed: returnDecisions(decidedToday(...)).
+// The last build he may start (no decision may follow it) keeps its last LIVE_BLOCKS for him to lay live, so he is at
+// work when Gur arrives even when the day's decisions run out before the lapse's blocks do.
 export type CatchUp = { left: number; decided: number; allowed: number };
 export function catchUpStep(c: CatchUp, b: Builds): { kind: "lay"; n: number } | { kind: "decide" } | { kind: "done" } {
 	if (c.left <= 0 || castleWaiting(b)) return { kind: "done" };
 	const p = freeInProgress(b);
-	if (p) return { kind: "lay", n: Math.min(c.left, p.total - p.laid) };
+	if (p) {
+		const rest = p.total - p.laid;
+		const n = Math.min(c.left, c.decided < c.allowed ? rest : rest - Math.min(LIVE_BLOCKS, rest));
+		return n > 0 ? { kind: "lay", n } : { kind: "done" };
+	}
 	return c.decided < c.allowed ? { kind: "decide" } : { kind: "done" };
 }
