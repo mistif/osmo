@@ -210,6 +210,21 @@ describe("the free-will tiles (spec 4.5)", () => {
 			for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) expect(TILES[other][y][x] === ".", `${other} ${x},${y}`).toBe(TILES[shingle][y][x] === ".");
 		}
 	});
+	it("draws the bridge's handrail so it survives the half-scale chunk bitmap, by day and at night (the hand checks)", () => {
+		// At 1/2 a chunk keeps every other row and column of it (even ones here, odd ones in a browser): from either, each
+		// column of the rope keeps a dark strand (against the day's sky) and a lighter one (against the night's), and the
+		// hanger down to the board keeps a dark column.
+		const g = TILES.rope;
+		for (const parity of [0, 1]) {
+			for (let x = 0; x < 16; x++) {
+				const kept = g.map((r) => r[x]).filter((ch, y) => y % 2 === parity && y < 6 && ch !== ".");
+				expect(kept.some((ch) => (lum(ch) ?? 255) < 80), `column ${x}, rows of parity ${parity}`).toBe(true);
+				expect(kept.some((ch) => (lum(ch) ?? 0) > 100), `column ${x}, rows of parity ${parity}`).toBe(true);
+			}
+			const hanger = g.slice(6).map((r) => r[parity]);
+			expect(hanger.every((ch) => (lum(ch) ?? 255) < 80), `hanger column ${parity}`).toBe(true);
+		}
+	});
 	it("puts the water's bright line on top", () => {
 		expect(mean([...TILES["water-top"][0]])).toBeGreaterThan(mean([...TILES.water[0]]));
 	});

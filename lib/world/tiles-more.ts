@@ -309,19 +309,26 @@ const thatchPeak = make((x, y) => {
 	return straw(x, y);
 });
 
-// --- A hand rope near the top of its cell (a bridge's handrail, at his waist over the board under it): three rows thick,
-// its strands twisted in a slant every 4 px, lit on top, shaded under, sagging a
-// pixel between x 4 and 11; level at both ends, so ropes join. ---
+// --- A hand rope near the top of its cell (a bridge's handrail, at his waist over the board under it), its strands
+// twisted in a slant every 4 px, sagging a pixel between x 4 and 11, level at both ends so ropes join; and a hanger down
+// its west edge to the board under it. The hand checks: three rows of light rope were lost against the sky, and at 1/2
+// (the chunk bitmap drawn at half scale keeps every other row and column) the bridge read as a plank stair. So it is four
+// rows, two light over two dark, so every other row of it keeps one light and one dark (the dark against the day's sky,
+// the light against the night's), and the hanger is two columns wide and dark. ---
 const SAG = [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0];
+// The tie under a board (bridgeBoard): a strand's colour i rows down from its top, three rows of it, as it was.
 function twisted(x: number, i: number): string {
 	const seam = (x + i) % 4 === 0;
 	if (i === 0) return seam ? "@" : "?";
 	if (i === 1) return seam ? "8" : "@";
 	return seam ? "A" : "8";
 }
+const HANDRAIL = ["@?", "@?", "8A", "Az"]; // each row's strand and seam colours: two light rows over two dark
 const rope = make((x, y) => {
 	const i = y - 1 - SAG[x];
-	return i < 0 || i > 2 ? "." : twisted(x, i);
+	if (i >= 0 && i <= 3) return HANDRAIL[i][(x + i) % 4 === 0 ? 1 : 0];
+	if (i > 3 && x <= 1) return x === 0 ? "8" : "A"; // the hanger
+	return ".";
 });
 
 // --- A rope bridge's deck from the side: the ends of two cross boards, lit along the top he walks on, with the end
