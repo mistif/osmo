@@ -1,6 +1,6 @@
 -- Osmo's free will, the big world (spec 2026-10-11-osmo-free-will-design.md section 6.1): one row per owner, the seed
 -- the world is generated from, the generator version, how many islands have risen, and how far the work budget is spent.
--- STATUS: not applied. An Ask to main: apply with Gur's OK before the code that reads it is pushed with
+-- STATUS: applied 2026-10-12 as migration free_will_world (Gur's OK; main). Was: not applied. An Ask to main: apply with Gur's OK before the code that reads it is pushed with
 -- NEXT_PUBLIC_OSMO_BIGWORLD on. Apply it before free-will-builds.sql.
 -- The database picks the seed (the world code draws no random numbers). A save never moves islands, budget_at or
 -- seen_at backwards, and never changes the seed, the version or when the world was made (the trigger), so two tabs or a

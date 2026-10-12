@@ -1,7 +1,7 @@
 -- Osmo's free will, builds (spec 2026-10-11-osmo-free-will-design.md sections 6.2 and 6.3): every build he makes, the
 -- castle's six rooms included, each with the footprint it was compiled to (saved, never recomputed), how far it is
 -- laid, and his line for it; and the castle moved over from village.
--- STATUS: not applied. An Ask to main: apply after free-will-world.sql, with Gur's OK, before the code that reads it is
+-- STATUS: applied 2026-10-12 as migration free_will_builds (Gur's OK; main); the hall row (86 of 180) came over. Was: not applied. An Ask to main: apply after free-will-world.sql, with Gur's OK, before the code that reads it is
 -- pushed with NEXT_PUBLIC_OSMO_BUILDS on.
 -- A save never moves laid backwards and never changes what was chosen, where, or when it started; finished_at is set
 -- once. One unfinished free build at a time (two tabs choosing at once: the second insert fails and that tab adopts the
