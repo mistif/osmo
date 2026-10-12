@@ -71,6 +71,15 @@ describe("the twenty seed recipes (spec 4.2)", () => {
 		const site = (id: string) => RECIPES.find((r) => r.id === id)?.site;
 		expect([site("lighthouse"), site("watchtower"), site("garden"), site("rope-bridge"), site("cottage")]).toEqual(["cliff", "cliff", "beside", "bridge", "level"]);
 	});
+	it("holds a roof over a balcony up on posts, never on the rail (the look pass)", () => {
+		for (const r of RECIPES) {
+			const at = r.tiers.findIndex((t) => t.parts.includes("beam-balcony"));
+			const roof = r.tiers.findIndex((t, k) => k > at && t.role === "roof");
+			if (at < 0 || roof < 0) continue;
+			const between = r.tiers.slice(at + 1, roof);
+			expect(between.some((t) => !t.optional && (t.parts.includes("loft-posts") || t.role === "top")), r.id).toBe(true);
+		}
+	});
 	it("can never stack higher than 24 rows (spec 4.3)", () => {
 		for (const r of RECIPES) expect(tallest(r), r.id).toBeLessThanOrEqual(24);
 	});

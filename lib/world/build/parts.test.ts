@@ -12,13 +12,15 @@ const IDS = [
 	"top-bell-loft", "top-sails", "top-well-roof", "top-statue", "arch-span", "gate-posts", "stair-flight", "decor-lantern", "decor-banner", "decor-bell",
 	"side-bed", "side-fence", "side-tree-fruit", "side-tree-pine", "side-bench", "side-lamp-post", "side-dock", "bed-row", "walk-lamps", "pond-basin",
 	"well-ring", "plinth-row", "orchard-row", "bridge-span", "bridge-anchor", "storey-shaft", "side-sign",
+	// the fix round's
+	"loft-posts",
 ];
 // The rows a part shows at width w (row parts and roofs), or its own grid.
 const shown = (p: (typeof PARTS)[number], w: number): string[] =>
 	p.fit === "row" ? rowsAt(p.map, w + 2 * (p.overhang ?? 0)) : p.fit === "fixed" ? [...p.map] : roofRows(p.map[0], w, p.fit);
 
 describe("the parts library (spec 4.1)", () => {
-	it("has the planned 47 parts, each once, in every group", () => {
+	it("has the planned 47 parts and the fix round's, each once, in every group", () => {
 		expect(PARTS.map((p) => p.id)).toEqual(IDS);
 		for (const g of ["structure", "tops", "additions", "around", "travel"]) expect(PARTS.some((p) => p.group === g), g).toBe(true);
 	});
@@ -73,6 +75,6 @@ describe("the parts library (spec 4.1)", () => {
 			const grid = rows.flatMap((row) => Array.from({ length: 16 }, (_, y) => [...row].map((ch) => (ch === "." ? ".".repeat(16) : TILES[p.legend[ch].tile as TileId][y])).join("")));
 			snapshot(`part-${p.id}`, rasterize([grid], rows[0].length * 16, rows.length * 16, 3, cols));
 		}
-		expect(PARTS).toHaveLength(47);
+		expect(PARTS).toHaveLength(IDS.length);
 	});
 });

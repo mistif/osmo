@@ -107,4 +107,7 @@ export const PARTS: readonly Part[] = [
 		map: ["IhhhhhhI", "ISSvSSSI", "ISSwSSSI", "ISSSSSSI"],
 		legend: { h: L("beam-h", "walls"), I: L("pillar", "walls"), S: L("stone-wall", "walls"), v: L("window-top", "windows"), w: L("window", "windows") } },
 	{ id: "side-sign", name: "signpost", group: "additions", role: "side", material: null, fit: "fixed", map: ["s"], legend: { s: L("sign", "walls") } },
+	// Appended in the fix round: the open loft a roof over a balcony stands on, a post at each end of the body with the
+	// sky between (laid once, like the balcony under it).
+	{ id: "loft-posts", name: "open loft", group: "structure", role: "beam", material: null, fit: "row", map: ["P.P", "P.P"], legend: { P: L("post", "walls") } },
 ];
