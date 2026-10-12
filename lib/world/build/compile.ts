@@ -174,18 +174,33 @@ export function compile(recipe: Recipe, v: Variation, site: Site, parts: readonl
 		return c !== undefined && (c.layer === "walls" || c.layer === "backwall");
 	};
 	const centre = doorX ?? (storeys[0] ? storeys[0].x + Math.floor(storeys[0].w / 2) : 0);
+	// Decor hangs on a storey's wall rows (not the beam row over a storey of four), inside its corner posts; on a storey
+	// with no wall inside its posts (gate posts), on the posts themselves.
 	const spots: { x: number; y: number }[] = [];
 	for (const s of storeys) {
-		for (let y = s.bottom; y >= s.top; y--) {
-			const row: { x: number; y: number }[] = [];
-			for (let x = s.x; x < s.x + s.w; x++) if (x !== doorX && wallAt(x, y)) row.push({ x, y });
-			row.sort((p, q) => Math.abs(p.x - centre) - Math.abs(q.x - centre) || p.x - q.x);
-			spots.push(...row);
-		}
+		const top = s.bottom - s.top + 1 === 4 ? s.top + 1 : s.top;
+		const inner = (x: number) => x > s.x && x < s.x + s.w - 1;
+		const walls = (keep: (x: number) => boolean) => {
+			const out: { x: number; y: number }[] = [];
+			for (let y = s.bottom; y >= top; y--) {
+				const row: { x: number; y: number }[] = [];
+				for (let x = s.x; x < s.x + s.w; x++) if (keep(x) && x !== doorX && wallAt(x, y)) row.push({ x, y });
+				row.sort((p, q) => Math.abs(p.x - centre) - Math.abs(q.x - centre) || p.x - q.x);
+				out.push(...row);
+			}
+			return out;
+		};
+		const mine = walls(inner);
+		spots.push(...(mine.length > 0 ? mine : walls(() => true)));
 	}
+	const hangable = new Set(spots.map((s) => at(s.x, s.y))); // every cell of a decor part must be one of these
+	// A shutter hangs only beside a window, along its whole height.
+	const besideWindow = (x: number, y: number, h: number) =>
+		[-1, 1].some((dx) => Array.from({ length: h }, (_, k) => map.get(at(x + dx, y + k))?.layer === "windows").every(Boolean));
 	for (const d of v.decor) {
 		const p = part(d.part, "decor");
-		const free = spots.filter((s) => p.map.every((_, k) => wallAt(s.x, s.y + k) && !decor.has(at(s.x, s.y + k))));
+		const shutter = Object.values(p.legend).some((e) => e.tile === "shutter");
+		const free = spots.filter((s) => p.map.every((_, k) => hangable.has(at(s.x, s.y + k)) && !decor.has(at(s.x, s.y + k))) && (!shutter || besideWindow(s.x, s.y, p.map.length)));
 		if (free.length === 0) continue;
 		const s = free[((d.spot % free.length) + free.length) % free.length];
 		lay(decor, p, p.map, s.x, s.y + p.map.length - 1);

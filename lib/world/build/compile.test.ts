@@ -17,6 +17,7 @@ const FAKE: Part[] = [
 	{ id: "d", name: "door", group: "structure", role: "door", material: null, fit: "fixed", map: ["a", "d"], legend: { a: L("door-top", "door"), d: L("door", "door") } },
 	{ id: "l", name: "lantern", group: "additions", role: "decor", material: null, fit: "fixed", map: ["l"], legend: { l: L("lantern", "lanterns") } },
 	{ id: "b", name: "banner", group: "additions", role: "decor", material: null, fit: "fixed", map: ["b", "e"], legend: { b: L("banner", "banners"), e: L("banner-end", "banners") } },
+	{ id: "sh", name: "shutters", group: "structure", role: "decor", material: null, fit: "fixed", map: ["s", "s"], legend: { s: L("shutter", "banners") } },
 	{ id: "bench", name: "bench", group: "around", role: "side", material: null, fit: "fixed", map: ["n"], legend: { n: L("bench", "walls") } },
 	{ id: "span", name: "deck", group: "travel", role: "span", material: "wood", fit: "row", map: ["rrr", "BBB"], legend: { r: L("fence", "walls"), B: L("plank", "floor") } },
 	{ id: "post", name: "post", group: "travel", role: "anchor", material: "wood", fit: "fixed", map: ["p", "p", "p"], legend: { p: L("pillar", "walls") } },
@@ -69,6 +70,31 @@ describe("the compiler (spec 4.2)", () => {
 		expect(d).toContainEqual({ x: 109, y: 58, tile: "lantern", layer: "lanterns" });
 		expect(d).toContainEqual({ x: 111, y: 57, tile: "banner", layer: "banners" });
 		expect(d).toContainEqual({ x: 111, y: 58, tile: "banner-end", layer: "banners" });
+	});
+	it("hangs decor only on a storey's three wall rows inside its corner posts, and shutters only beside a window", () => {
+		const two: Variation = { ...V1, tiers: { ...V1.tiers, storey: { part: "s", count: 2 } } };
+		let shutters = 0;
+		for (let spot = 0; spot < 30; spot++) {
+			for (const part of ["l", "b", "sh"]) {
+				const c = compile(HUT, { ...two, decor: [{ part, spot }] }, SITE, FAKE);
+				const bs = cellsOf(c.footprint, c.x, c.y, "hut");
+				const on = (tile: string) => new Set(bs.filter((b) => b.tile === tile).map((b) => `${b.x},${b.y}`));
+				const beams = on("beam-h");
+				const caps = on("pillar");
+				const windows = bs.filter((b) => b.layer === "windows");
+				for (const d of bs.filter((b) => b.layer === "lanterns" || b.layer === "banners")) {
+					expect(beams.has(`${d.x},${d.y}`), `${part} ${spot} on a beam`).toBe(false);
+					expect(caps.has(`${d.x},${d.y}`), `${part} ${spot} on a corner post`).toBe(false);
+					if (d.tile !== "shutter") continue;
+					shutters++;
+					expect(windows.some((w) => w.y === d.y && Math.abs(w.x - d.x) === 1), `shutter ${spot} beside a window`).toBe(true);
+				}
+			}
+		}
+		expect(shutters).toBeGreaterThan(0);
+		// one storey: its only window became wall over the door, so no shutter is hung at all
+		const one = compile(HUT, { ...V1, decor: [{ part: "sh", spot: 3 }] }, SITE, FAKE);
+		expect(cellsOf(one.footprint, one.x, one.y, "hut").some((b) => b.tile === "shutter")).toBe(false);
 	});
 	it("stands a side on the ground one tile from the body, and a chimney on the roof's right slope", () => {
 		expect(blocks.find((b) => b.tile === "bench")).toMatchObject({ x: 104, y: 59 });
