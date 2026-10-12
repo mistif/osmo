@@ -18,6 +18,7 @@ import { routeHash, type Route } from "@/lib/shell/route";
 import type { ActorKind } from "@/lib/world/actor";
 import { CASTLE_BLOCKS } from "@/lib/world/blueprints/castle";
 import { CASTLE_ROOMS, type CastleRoom } from "@/lib/world/blueprints/types";
+import { BUDGET_CAP } from "@/lib/world/build/budget";
 import type { MoodKind } from "@/lib/world/build/types";
 import { placeOf } from "@/lib/world/rooms";
 import { PlannerPanel } from "./planner-panel";
@@ -249,7 +250,7 @@ export default function WorldPage() {
 					{button("Castle live", castle === "live", () => setCastle("live"))}
 					{button("Castle done", castle === "done", () => setCastle("done"))}
 					{button("Grant 50", false, () => setGrant({ blocks: 50, at: Date.now() }))}
-					{button("Grant 450 (a three-day return)", false, () => setGrant({ blocks: 450, at: Date.now() }))}
+					{button(`Grant ${BUDGET_CAP} (a three-day return)`, false, () => setGrant({ blocks: BUDGET_CAP, at: Date.now() }))}
 					<span>planner mood:</span>
 					{PLANNER_MOODS.map((m) => button(m, plannerMood === m, () => setPlannerMood(plannerMood === m ? undefined : m)))}
 				</div>
@@ -270,7 +271,7 @@ export default function WorldPage() {
 					planner. A new seed or island count starts that world again. Zoom in and Zoom out step the zoom about the middle of
 					the view, Back to Osmo takes the camera to him, and the frame timer shows the average and the slowest of the last 60
 					draws (Clear timer starts it again, so each zoom step can be read by itself). Castle done begins with the whole
-					castle built. Grant puts that many blocks into his work budget at once: Grant 450 plays the time-lapse of a
+					castle built. Grant puts that many blocks into his work budget at once: Grant {BUDGET_CAP} plays the time-lapse of a
 					three-day return, and he is left at work. The planner mood buttons pin the mood the planner follows; press the
 					same one again to let the real mood decide. The recipe preview and the planner panel below work on their own:
 					they compile and plan in this page and touch nothing else.

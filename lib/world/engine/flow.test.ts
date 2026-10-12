@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { cellsOf, START_X } from "../blueprints";
 import { CASTLE_BLOCKS } from "../blueprints/castle";
 import { TILE } from "../blueprints/types";
-import { LIVE_BLOCKS } from "../build/budget";
+import { BUDGET_CAP, LIVE_BLOCKS, splitReturn } from "../build/budget";
 import { freeInProgress, layBuild, resumeBuilds, startBuild } from "../build/state";
 import type { BuildRow } from "../build/types";
 import { DOCK_DECK, HOME_ISLAND, homePx, shiftBlocks } from "../map/home";
@@ -136,7 +136,7 @@ describe("decisions (spec 4.8: one at most per due moment, two tabs at once)", (
 	});
 	it("returns after three days with small builds and still finds him at work", () => {
 		let b = resumeBuilds([freeRow("a", 6)], [], NOW);
-		let c = { left: 410, decided: 0, allowed: 3 };
+		let c = { left: splitReturn(BUDGET_CAP).lapse, decided: 0, allowed: 3 };
 		for (let guard = 0; guard < 100; guard++) {
 			const s = catchUpStep(c, b);
 			if (s.kind === "done") break;

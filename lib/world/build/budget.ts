@@ -1,7 +1,10 @@
 // The work budget (spec section 4.7): blocks accrue continuously by the wall clock, capped. Task 0 stub; T7 builds it.
-export const BLOCKS_PER_DAY = 150;
-export const MS_PER_BLOCK = 576_000; // 86,400,000 / 150
-export const BUDGET_CAP = 450; // three days
+// The world fills in about three months (spec 1, answer 5) at about one build a day: the grammar's builds average about
+// 50 to 65 blocks and a generated world holds about 3,000 to 4,300 free blocks, so 40 a day (fix round; the spec's 150
+// was sized for medium builds of about 150 blocks, which the grammar rarely makes).
+export const BLOCKS_PER_DAY = 40;
+export const MS_PER_BLOCK = 2_160_000; // 86,400,000 / 40: one every 36 minutes
+export const BUDGET_CAP = 3 * BLOCKS_PER_DAY; // three days
 export const LIVE_BLOCKS = 40; // laid live on return; the rest is the time-lapse
 
 // Whole blocks accrued since budgetAt (ISO), 0 to BUDGET_CAP; 0 for a time in the future or one that cannot be read.
