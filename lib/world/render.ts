@@ -113,6 +113,8 @@ export interface Painter {
 	// "missing": not kept at this version and not baked now; nothing drawn. The bitmaps live in a chunkCache of chunkKeep.
 	chunk(key: string, version: string, bake: (p: Painter) => void, x: number, y: number, w: number, h: number, mayBake?: boolean): "kept" | "baked" | "missing";
 	readonly chunkKeep?: number;
+	// The painter's clock, ms: drawWorld times its bakes with it (a painter without one is held to BAKE_BUDGET alone).
+	readonly clock?: () => number;
 	release?(): void;
 }
 // The glow's falloff, shared by both painters: its strength at a share of the radius out from the centre.
@@ -278,10 +280,13 @@ function poolsOn(list: readonly Block[], ground: readonly Block[], laid: readonl
 // Drawing at scale (free-will spec 3.3). The level of detail goes by the CSS zoom (the canvas zoom over the device pixel
 // ratio, lod.ts): stamped tiles from 1, chunk bitmaps at 1/2 and 1/4, one silhouette below. No atlas is built at a
 // scale above ATLAS_MAX (ruling 15): nearer zooms draw from it into the box, nearest neighbour, as the easing frames
-// do, so at canvas zoom 4 and below nothing changes. A frame bakes at most BAKE_BUDGET chunk bitmaps; drawWorld says
-// how many it left undrawn (pending), and the loop asks for another frame while any are.
+// do, so at canvas zoom 4 and below nothing changes. A frame bakes at most BAKE_BUDGET chunk bitmaps, and stops baking
+// once its bakes have taken BAKE_MS by the painter's clock (it always bakes one, so a slow bake still moves the picture
+// on); drawWorld says how many it left undrawn (pending), and the loop asks for another frame while any are. A zoom
+// out fills in over a few frames, not in one long one.
 export const ATLAS_MAX = 4;
 export const BAKE_BUDGET = 4;
+export const BAKE_MS = 4;
 export const GROUND_STAMP_CAP = 1500; // ground blocks in view the tiles level stamps at most (ruling 8)
 const CHUNK_SPAN = CHUNK * TILE; // a chunk's side, world px
 const MARK = { outer: 5, inner: 3, lift: 16 }; // his mark below 1/2: CSS px squares, centred this many world px above his feet
@@ -434,15 +439,21 @@ export function drawWorld(p: Painter, s: WorldScene): { pending: number } {
 	const limit = p.chunkKeep ?? Number.POSITIVE_INFINITY;
 	const kept = keptBy(p);
 	let bakes = 0;
+	let spent = 0; // ms the frame's bakes have taken so far, by the painter's clock
 	let pending = 0;
+	const clock = p.clock;
 	// A chunk's bitmap into its box on screen, baked when the painter has none at this version and the frame's bake
-	// budget is not spent.
+	// budget is not spent: BAKE_BUDGET bakes, or BAKE_MS of them, but always the first.
 	const drawChunk = (key: string, version: string, cx: number, cy: number, bake: (q: Painter) => void) => {
 		const a = toScreen(s.camera, s.view, s.now, cx * CHUNK_SPAN, cy * CHUNK_SPAN);
 		const b = toScreen(s.camera, s.view, s.now, (cx + 1) * CHUNK_SPAN, (cy + 1) * CHUNK_SPAN);
-		const got = p.chunk(key, version, bake, a.x, a.y, b.x - a.x, b.y - a.y, bakes < BAKE_BUDGET);
-		if (got === "baked") bakes++;
-		else if (got === "missing") pending++;
+		const may = bakes < BAKE_BUDGET && (bakes === 0 || spent < BAKE_MS);
+		const t0 = clock && may ? clock() : 0;
+		const got = p.chunk(key, version, bake, a.x, a.y, b.x - a.x, b.y - a.y, may);
+		if (got === "baked") {
+			bakes++;
+			if (clock) spent += clock() - t0;
+		} else if (got === "missing") pending++;
 		noteChunk(kept, limit, key, version, got);
 		return got;
 	};
@@ -630,7 +641,10 @@ export function drawWorld(p: Painter, s: WorldScene): { pending: number } {
 			(c) => `${litKey}|${c.g?.sig ?? "-"}|${c.l?.sig ?? "-"}/${c.sh?.sig ?? "-"}|${c.o?.sig ?? "-"}|${c.ghost && ghost ? `${ghost.x},${ghost.y}` : "-"}`,
 		);
 		const toBake = drawn.filter((c, i) => kept.get(`${c.cx},${c.cy}`) !== versions[i]).length;
-		if (drawn.length < cells.length || toBake > BAKE_BUDGET - bakes) silhouette();
+		// The bakes sure to happen this frame: the first, when the painter times them (the time may run out after it), else
+		// as many as the budget allows.
+		const sure = clock ? Math.min(1, BAKE_BUDGET - bakes) : BAKE_BUDGET - bakes;
+		if (drawn.length < cells.length || toBake > sure) silhouette();
 		drawn.forEach((c, i) => drawChunk(`${c.cx},${c.cy}`, versions[i], c.cx, c.cy, bakeOf(c)));
 		drawNear();
 	} else {

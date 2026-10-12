@@ -413,6 +413,9 @@ const recording = (p: Painter) => {
 		get chunkKeep() {
 			return p.chunkKeep;
 		},
+		get clock() {
+			return p.clock;
+		},
 		clear: () => (log.push({ kind: "clear" }), p.clear()),
 		gradient: (...a) => (log.push({ kind: "gradient" }), p.gradient(...a)),
 		rect: (x, y, w, h, color, alpha) => (log.push({ kind: "rect", color, x, y }), p.rect(x, y, w, h, color, alpha)),
@@ -507,6 +510,49 @@ describe("the big world (free-will spec 3.3)", () => {
 		expect(stats.baked).toBe(4);
 		expect(r.pending).toBeGreaterThan(0);
 		expect(log.filter((c) => c.kind === "shape")).toHaveLength(1);
+	});
+	// A budget painter with a clock that a bake advances by `ms` (a fake: the bakes cost nothing here).
+	const timed = (ms: number) => {
+		const { p, stats } = budgetPainter(1920, 1080);
+		let t = 0;
+		const painter: Painter = {
+			...p, clock: () => t,
+			chunk: (...a) => {
+				const got = p.chunk(...a);
+				if (got === "baked") t += ms;
+				return got;
+			},
+		};
+		return { painter, stats };
+	};
+	it.each([[1.5, 3], [3, 2], [10, 1], [0, 4]])("stops baking once a frame's bakes have taken 4 ms by the painter's clock: at %f ms a bake, %i of them", (ms, baked) => {
+		const { painter, stats } = timed(ms);
+		const { counted, log } = recording(painter);
+		const r = drawWorld(counted, bigScene(0.25, { w: 1920, h: 1080 }));
+		expect(stats.baked).toBe(baked);
+		expect(r.pending).toBeGreaterThan(0);
+		expect(log.filter((c) => c.kind === "shape")).toHaveLength(1); // the silhouette under the chunks still to come
+	});
+	it("fills a zoom out in over a few frames when each bake is slow, and then bakes nothing more", () => {
+		const { painter, stats } = timed(10);
+		const s = bigScene(0.25, { w: 1920, h: 1080 });
+		let frames = 1;
+		let r = drawWorld(painter, s);
+		for (; r.pending > 0 && frames < 200; frames++) {
+			const before = stats.baked;
+			r = drawWorld(painter, { ...s, now: frames });
+			expect(stats.baked - before).toBe(1);
+		}
+		expect(r.pending).toBe(0);
+		expect(frames).toBeGreaterThan(BAKE_BUDGET);
+		const done = stats.baked;
+		drawWorld(painter, { ...s, now: 999 });
+		expect(stats.baked).toBe(done);
+	});
+	it("bakes a chunk in a frame whose bakes already took longer than the budget only when it is the first", () => {
+		const { painter, stats } = timed(60);
+		drawWorld(painter, bigScene(0.5, { w: 1920, h: 1080 }));
+		expect(stats.baked).toBe(1);
 	});
 	it("draws the far steps as one silhouette, the lights of finished builds at night, and his mark, never his sprite", () => {
 		const { counted, log } = recording(pixelPainter(V.w, V.h, art));

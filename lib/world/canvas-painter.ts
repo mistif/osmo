@@ -11,8 +11,11 @@ import { TILE_IDS } from "./tiles";
 
 export type Overrides = Partial<Record<"tiles" | "sprite", CanvasImageSource>>;
 
-// keep: the most chunk bitmaps it keeps (free-will spec 3.3: CHUNK_KEEP.desk, or .phone on a phone).
-export function canvasPainter(ctx: CanvasRenderingContext2D, art: Art, overrides: Overrides = {}, keep: number = CHUNK_KEEP.desk): Painter {
+// keep: the most chunk bitmaps it keeps (free-will spec 3.3: CHUNK_KEEP.desk, or .phone on a phone). clock: what drawWorld
+// times a frame's chunk bakes with (ms; the page's own clock, a fake in the tests).
+export function canvasPainter(
+	ctx: CanvasRenderingContext2D, art: Art, overrides: Overrides = {}, keep: number = CHUNK_KEEP.desk, clock: () => number = () => performance.now(),
+): Painter {
 	const atlases = new Map<string, HTMLCanvasElement>();
 	const atlas = (sheet: Sheet, scale: number): HTMLCanvasElement => {
 		const key = `${sheet}@${scale}`;
@@ -44,7 +47,7 @@ export function canvasPainter(ctx: CanvasRenderingContext2D, art: Art, overrides
 		if (bmp.w > 0 && bmp.h > 0) c.getContext("2d")?.putImageData(new ImageData(bmp.data, bmp.w, bmp.h), 0, 0);
 		return c;
 	});
-	return over(ctx, atlas, shapes, keep);
+	return over(ctx, atlas, shapes, keep, clock);
 }
 
 // A painter over one context, drawing from the atlases and silhouettes it is given: a chunk's painter shares its
@@ -55,6 +58,7 @@ function over(
 	atlas: (sheet: Sheet, scale: number) => HTMLCanvasElement,
 	shapes: (shape: Shape, tones: readonly string[]) => HTMLCanvasElement,
 	keep: number,
+	clock?: () => number,
 ): Painter {
 	const cache = chunkCache(
 		keep,
@@ -72,6 +76,7 @@ function over(
 	);
 	return {
 		chunkKeep: keep,
+		clock,
 		get w() {
 			return ctx.canvas.width;
 		},

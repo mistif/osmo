@@ -145,3 +145,15 @@ describe("chunk bitmaps (free-will spec 3.3)", () => {
 		}
 	});
 });
+
+describe("the painter's clock (what drawWorld times a frame's bakes with)", () => {
+	const ctx = { canvas: { width: 512, height: 512 } } as unknown as CanvasRenderingContext2D;
+	it("is the one the painter is given, and the page's own clock otherwise", () => {
+		const fake = () => 7;
+		expect(canvasPainter(ctx, art, {}, 2, fake).clock).toBe(fake);
+		expect(pixelPainter(W, H, art, 2, fake).clock).toBe(fake);
+		const own = canvasPainter(ctx, art).clock;
+		expect(typeof own?.()).toBe("number");
+		expect(pixelPainter(W, H, art).clock).toBeUndefined();
+	});
+});
