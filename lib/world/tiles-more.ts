@@ -15,6 +15,7 @@ export const MORE_TILE_IDS = [
 	// Appended in the fix round (the look pass's findings); the 106 above keep their cells.
 	"deck", "spire-l", "spire-r", "spire-l-hi", "spire-r-hi", "spire-peak", "pond-water", "pond-rim", "pond-dock",
 	"leaves-tl", "leaves-tr", "leaves-bl", "leaves-br",
+	"post-plank-l", "post-plank-r", "post-back-l", "post-back-r", "post-back", "post-glass-l", "post-glass-r", "post-glass",
 ] as const;
 export type MoreTileId = (typeof MORE_TILE_IDS)[number];
 
@@ -759,6 +760,13 @@ const canopyCorner = (right: boolean, bottom: boolean) =>
 		return leaves[y][x];
 	});
 
+// --- A wall's posts with the wall behind them, so no sky shows beside a post: the timber post (as "post") at the left
+// edge, the right edge or the middle of a cell of plank wall, back wall or greenhouse glass. ---
+const postOver = (bg: Grid, at: "l" | "r" | "c"): Grid => {
+	const x0 = at === "l" ? 0 : at === "r" ? N - 6 : 5;
+	return make((x, y) => (x >= x0 && x < x0 + 6 ? post[y][x - x0 + 5] : bg[y][x]));
+};
+
 export const MORE_TILES: Readonly<Record<MoreTileId, Grid>> = {
 	"plank-wall": plankWall,
 	"stone-wall": stoneWall,
@@ -808,4 +816,12 @@ export const MORE_TILES: Readonly<Record<MoreTileId, Grid>> = {
 	"leaves-tr": canopyCorner(true, false),
 	"leaves-bl": canopyCorner(false, true),
 	"leaves-br": canopyCorner(true, true),
+	"post-plank-l": postOver(plankWall, "l"),
+	"post-plank-r": postOver(plankWall, "r"),
+	"post-back-l": postOver(backWood, "l"),
+	"post-back-r": postOver(backWood, "r"),
+	"post-back": postOver(backWood, "c"),
+	"post-glass-l": postOver(glassWall, "l"),
+	"post-glass-r": postOver(glassWall, "r"),
+	"post-glass": postOver(glassWall, "c"),
 };

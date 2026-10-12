@@ -61,7 +61,7 @@ describe("the parts library (spec 4.1)", () => {
 			if (p.role === "storey" && p.id.startsWith("storey-") && p.id !== "storey-open-wood" && p.id !== "storey-open-stone") {
 				for (const width of [5, 7, 9, 11]) {
 					const rows = shown(p, width);
-					for (const r of rows) expect(r, `${p.id} at ${width}`).toBe([...r].reverse().join("")); // windows sit evenly
+					for (const r of rows.map((x) => x.slice(1, -1))) expect(r, `${p.id} at ${width}`).toBe([...r].reverse().join("")); // windows sit evenly between the caps
 				}
 			}
 		}
