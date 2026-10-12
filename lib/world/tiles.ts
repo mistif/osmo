@@ -6,7 +6,7 @@
 // Brick is shaded by a small helper from hand-laid maps (one letter per brick); the rest is drawn from per-pixel
 // rules and a few hand-drawn grids. Texture comes from a fixed hash, so every run draws the same pixels.
 import type { Grid } from "./raster";
-import { chimneyFoot, MORE_TILE_IDS, MORE_TILES, onPaving } from "./tiles-more";
+import { chimneyFoot, hubOver, MORE_TILE_IDS, MORE_TILES, onPaving } from "./tiles-more";
 
 export const TILE_IDS = [
 	"snow", "snow-edge-l", "snow-edge-r", "stone", "stone-dark", "stone-edge-l", "stone-edge-r", "stone-bottom",
@@ -1094,6 +1094,38 @@ function domeEdgeLit(x: number, y: number, side: "l" | "r"): string {
 	return domeGlassLit(x, y, side === "l" ? 0 : 1);
 }
 
+// The apex: the two verges meeting under a ridge cap, and an iron finial with a ball and a small teal pennant.
+const roofPeak = make((x, y) => {
+	if (y < 8) {
+		if (y >= 1 && y <= 2 && x >= 9 && x <= 12) return y === 1 ? (x === 12 ? "w" : "y") : x <= 10 ? "x" : x === 11 ? "w" : ".";
+		if (y >= 3 && y <= 5 && x >= 6 && x <= 9) {
+			const bx = x - 6;
+			const by = y - 3;
+			const ball = [".ab.", "aeca", ".aa."];
+			const ch = ball[by][bx];
+			if (ch !== ".") return ch;
+		}
+		if (x === 7 || x === 8) {
+			if (y === 0) return x === 7 ? "d" : ".";
+			if (y < 3) return x === 7 ? "c" : "a";
+			if (y >= 6) return x === 7 ? "R" : "a";
+		}
+		return ".";
+	}
+	const dl = x + y - 15;
+	const dr = y - x;
+	if (dl < 0 || dr < 0) return ".";
+	if (dl === 0 || dr === 0) return "f";
+	// The ridge cap: two rows of pale tiles following each verge near the top.
+	if (y <= 10) return dl <= 1 ? "V" : dr <= 1 ? "h" : checker(x, y) ? "i" : "V";
+	if (dl === 1) return "V";
+	if (dl === 2) return checker(x, y) ? "i" : "V";
+	if (dl === 3) return "g";
+	if (dr === 1) return "h";
+	if (dr === 2) return "g";
+	if (dr === 3) return "f";
+	return shingle(x, y);
+});
 // The iron lamp post (its lantern is a separate tile): a base plate, the shaft, a collar, the arms at its top.
 const lanternPost = make((x, y) => {
 	if (y >= 12) {
@@ -1206,38 +1238,7 @@ export const TILES: Readonly<Record<TileId, Grid>> = {
 	"roof-left": make(roofLeft),
 	"roof-right": make(roofRight),
 	"roof-flat": make(shingle),
-	// The apex: the two verges meeting under a ridge cap, and an iron finial with a ball and a small teal pennant.
-	"roof-peak": make((x, y) => {
-		if (y < 8) {
-			if (y >= 1 && y <= 2 && x >= 9 && x <= 12) return y === 1 ? (x === 12 ? "w" : "y") : x <= 10 ? "x" : x === 11 ? "w" : ".";
-			if (y >= 3 && y <= 5 && x >= 6 && x <= 9) {
-				const bx = x - 6;
-				const by = y - 3;
-				const ball = [".ab.", "aeca", ".aa."];
-				const ch = ball[by][bx];
-				if (ch !== ".") return ch;
-			}
-			if (x === 7 || x === 8) {
-				if (y === 0) return x === 7 ? "d" : ".";
-				if (y < 3) return x === 7 ? "c" : "a";
-				if (y >= 6) return x === 7 ? "R" : "a";
-			}
-			return ".";
-		}
-		const dl = x + y - 15;
-		const dr = y - x;
-		if (dl < 0 || dr < 0) return ".";
-		if (dl === 0 || dr === 0) return "f";
-		// The ridge cap: two rows of pale tiles following each verge near the top.
-		if (y <= 10) return dl <= 1 ? "V" : dr <= 1 ? "h" : checker(x, y) ? "i" : "V";
-		if (dl === 1) return "V";
-		if (dl === 2) return checker(x, y) ? "i" : "V";
-		if (dl === 3) return "g";
-		if (dr === 1) return "h";
-		if (dr === 2) return "g";
-		if (dr === 3) return "f";
-		return shingle(x, y);
-	}),
+	"roof-peak": roofPeak,
 	// The top of the chimney tower: two merlons with coping stones, outlined against the sky, on a full course.
 	battlement: make((x, y) => {
 		const merlon = x <= 5 || x >= 10;
@@ -1341,6 +1342,7 @@ export const TILES: Readonly<Record<TileId, Grid>> = {
 	"chimney-base": chimneyFoot(brick, make(roofRight)),
 	"chimney-base-thatch": chimneyFoot(brick, MORE_TILES["thatch-r"]),
 	"lamp-post-paved": onPaving(lanternPost),
+	"hub-roof": hubOver(roofPeak),
 };
 
 const INDEX = new Map<TileId, number>(TILE_IDS.map((id, i) => [id, i]));

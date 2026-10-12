@@ -6,6 +6,10 @@ import type { Compiled, Footprint, Part, Recipe, Role, Site, Variation } from ".
 import { roofRows, rowsAt } from "./util";
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+// A sunk top's cell drawn over the roof cell under it (Part.sink): the windmill's sail and hub over its gable.
+const OVERLAY: Readonly<Record<string, TileId>> = {
+	"sail|roof-flat": "sail-roof", "sail|thatch-flat": "sail-thatch", "post|roof-peak": "hub-roof", "post|thatch-peak": "hub-thatch",
+};
 // A right slope with a chimney standing in it.
 const CHIMNEY_FOOT: Partial<Record<TileId, TileId>> = { "roof-right": "chimney-base", "thatch-r": "chimney-base-thatch" };
 type Cell = { tile: TileId; layer: Layer };
@@ -144,6 +148,23 @@ export function compile(recipe: Recipe, v: Variation, site: Site, parts: readonl
 			} else {
 				rows = [...p.map];
 				x = span.x + Math.floor((span.w - rows[0].length) / 2);
+			}
+			if (p.fit === "fixed" && p.sink) {
+				// Into the roof under it: each cell the roof holds becomes their overlay, or stays the roof's.
+				const sunk = bottom + p.sink;
+				rows.forEach((row, r) => [...row].forEach((ch, c) => {
+					if (ch === ".") return;
+					const e = p.legend[ch];
+					if (!e) throw new Error(`${p.id}: no legend entry for "${ch}"`);
+					const k = at(x + c, sunk - (rows.length - 1 - r));
+					const under = map.get(k);
+					const both = under ? OVERLAY[`${e.tile}|${under.tile}`] : undefined;
+					if (!under) map.set(k, { tile: e.tile, layer: e.layer });
+					else if (both) map.set(k, { tile: both, layer: under.layer });
+				}));
+				bottom = sunk - rows.length;
+				span = { x, w: rows[0].length };
+				continue;
 			}
 			lay(map, p, rows, x, bottom);
 			const top = bottom - rows.length + 1;

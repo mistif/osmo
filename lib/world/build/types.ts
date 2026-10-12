@@ -39,6 +39,9 @@ export type Part = {
 	map: readonly string[];
 	legend: Legend;
 	overhang?: number; // row parts: this many cells wider than the span on each side
+	// Fixed tops: laid this many rows down into the roof under them (a windmill's hub on its gable's face). A cell the roof
+	// already holds becomes the compiler's overlay of the two (the part drawn over the roof), or stays the roof's.
+	sink?: number;
 };
 
 export const SEED_KINDS = [

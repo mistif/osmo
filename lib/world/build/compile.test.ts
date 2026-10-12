@@ -108,6 +108,21 @@ describe("the compiler (spec 4.2)", () => {
 		expect(cb).toContainEqual({ x: 112, y: 53, tile: "chimney-base", layer: "roof" });
 		expect(cb.some((b) => b.x === 112 && b.y === 53 && b.tile === "roof-right")).toBe(false);
 	});
+	it("sinks a top into the roof under it, its hub on the peak and its arm over the roof's face, drawn over the shingles", () => {
+		const sails: Part = { id: "x", name: "sails", group: "tops", role: "top", material: null, fit: "fixed", map: ["s", "h", "s"], sink: 2, legend: { s: L("sail", "walls"), h: L("post", "walls") } };
+		const MILL: Recipe = { ...HUT, id: "mill", tiers: [...HUT.tiers.slice(0, 3), { slot: "sails", role: "top", parts: ["x"] }], decor: { parts: [], max: 0 }, sides: { parts: [], max: 0 } };
+		const v: Variation = { ...V1, tiers: { ...V1.tiers, sails: { part: "x", count: 1 } }, decor: [], sides: [] };
+		const m = compile(MILL, v, SITE, [...FAKE, sails]);
+		const bs = cellsOf(m.footprint, m.x, m.y, "mill");
+		const plain = cellsOf(compile(HUT, { ...V1, decor: [], sides: [] }, SITE, FAKE).footprint, 0, 0, "hut");
+		const peak = bs.find((b) => b.tile === "hub-roof");
+		expect(peak).toBeDefined();
+		if (!peak) return;
+		expect(bs).toContainEqual({ x: peak.x, y: peak.y + 1, tile: "sail-roof", layer: "roof" });
+		expect(bs).toContainEqual({ x: peak.x, y: peak.y - 1, tile: "sail", layer: "walls" });
+		expect(bs.some((b) => b.tile === "roof-peak")).toBe(false);
+		expect(m.h).toBe(Math.max(...plain.map((b) => b.y)) - Math.min(...plain.map((b) => b.y)) + 2); // one row over the roof
+	});
 	it("stacks storeys, narrows nothing for a row roof, and puts a cliff build flush to its cliff", () => {
 		const tall = compile(HUT, { ...V1, tiers: { ...V1.tiers, storey: { part: "s", count: 2 }, roof: { part: "t", count: 1 } } }, SITE, FAKE);
 		expect(tall.h).toBe(10);

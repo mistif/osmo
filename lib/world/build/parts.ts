@@ -60,8 +60,10 @@ export const PARTS: readonly Part[] = [
 		legend: { G: L("glass-wall", "walls"), l: L("lantern", "windows"), I: L("pillar", "walls") } },
 	{ id: "top-bell-loft", name: "bell loft", group: "tops", role: "top", material: null, fit: "fixed", map: ["PbP", "P.P"],
 		legend: { P: L("post", "walls"), b: L("bell", "windows") } },
-	{ id: "top-sails", name: "windmill sails", group: "tops", role: "top", material: null, fit: "fixed",
-		map: ["..s..", "..s..", "sshss", "..s..", "..s.."], legend: { s: L("sail", "walls"), h: L("post", "walls") } },
+	// Its hub sits on the gable's face (sunk three rows: the hub on the peak, the lower arm over the roof), its side arms
+	// lying sails (compile.ts OVERLAY draws the sail and hub over the roof).
+	{ id: "top-sails", name: "windmill sails", group: "tops", role: "top", material: null, fit: "fixed", sink: 3,
+		map: ["..s..", "..s..", "LLhLL", "..s..", "..s.."], legend: { s: L("sail", "walls"), L: L("sail-lying", "walls"), h: L("post", "walls") } },
 	{ id: "top-well-roof", name: "well roof", group: "tops", role: "top", material: null, fit: "fixed", map: [".^.", "<=>", "p.p"],
 		legend: { "^": L("thatch-peak", "roof"), "<": L("thatch-l", "roof"), "=": L("thatch-flat", "roof"), ">": L("thatch-r", "roof"), p: L("post", "walls") } },
 	{ id: "top-statue", name: "carved figure", group: "around", role: "top", material: null, fit: "fixed", map: ["s", "I"],

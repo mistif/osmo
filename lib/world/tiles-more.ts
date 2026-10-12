@@ -19,6 +19,7 @@ export const MORE_TILE_IDS = [
 	"back-wood-top", "back-stone-top", "arch-back", "statue-back",
 	"balloon-1", "balloon-2", "balloon-3", "balloon-4", "balloon-5", "balloon-6", "balloon-7", "balloon-8", "balloon-9", "basket-full",
 	"chimney-base", "chimney-base-thatch", "paving", "lamp-post-paved",
+	"sail-lying", "sail-roof", "sail-thatch", "hub-roof", "hub-thatch",
 ] as const;
 export type MoreTileId = (typeof MORE_TILE_IDS)[number];
 
@@ -838,7 +839,22 @@ const basketFull = make((x, y) => {
 // A chimney's foot: the brick stack down to a right slope, the roof below the slope line; tiles.ts makes it from its
 // own brick and the slope (chimneyFoot), since this file cannot import those.
 export const chimneyFoot = (brick: Grid, slope: Grid): Grid => make((x, y) => (y < x ? brick[y][x] : slope[y][x]));
-export type FootTileId = "chimney-base" | "chimney-base-thatch" | "lamp-post-paved";
+export type FootTileId = "chimney-base" | "chimney-base-thatch" | "lamp-post-paved" | "hub-roof";
+
+// --- A windmill's sails, the look pass: a sail lying on its side for the cross's side arms (the upright one read as a
+// shutter there), the upright sail and the hub drawn over the gable they stand in front of (the hub sits on the gable's
+// face, no longer on its vane): the hub a round wooden boss where the two whips cross. tiles.ts lays the hub over its
+// own shingle peak (hubOver). ---
+const sailLying = make((x, y) => SAIL[x][y]);
+const sailOver = (bg: (x: number, y: number) => string) => make((x, y) => (SAIL[y][x] === "." ? bg(x, y) : SAIL[y][x]));
+export const hubOver = (peak: Grid): Grid =>
+	make((x, y) => {
+		const d = Math.hypot(x - 7.5, y - 7.5);
+		if (d <= 3.6) return d > 2.7 ? (x + y > 15 ? "j" : "k") : x + y < 13 ? (x + y < 11 ? "`" : "m") : "l"; // the boss
+		if (x >= 6 && x <= 8) return "mkj"[x - 6]; // the upright whip
+		if (y >= 6 && y <= 8) return "mkj"[y - 6]; // the lying whip
+		return y < 8 ? "." : peak[y][x]; // the gable's top, its finial gone
+	});
 
 // --- Low paving: flagstones laid in the snow, only their top showing (the bottom four rows of the cell), each lit along
 // its top and left and outlined on its right, so a lantern walk lies on the ground instead of standing on it like a low
@@ -856,6 +872,10 @@ export const onPaving = (top: Grid): Grid => make((x, y) => (top[y][x] === "." ?
 
 export const MORE_TILES: Readonly<Record<Exclude<MoreTileId, FootTileId>, Grid>> = {
 	paving,
+	"sail-lying": sailLying,
+	"sail-roof": sailOver(shingle),
+	"sail-thatch": sailOver(straw),
+	"hub-thatch": hubOver(thatchPeak),
 	"plank-wall": plankWall,
 	"stone-wall": stoneWall,
 	"back-wood": backWood,
