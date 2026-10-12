@@ -43,8 +43,9 @@ export const PARTS: readonly Part[] = [
 		legend: { "<": L("roof-left", "roof"), "=": L("roof-flat", "roof"), ">": L("roof-right", "roof"), "^": L("roof-peak", "roof") } },
 	{ id: "roof-thatch-gable", name: "thatched roof", group: "tops", role: "roof", material: null, fit: "gable", map: ["<=>^"],
 		legend: { "<": L("thatch-l", "roof"), "=": L("thatch-flat", "roof"), ">": L("thatch-r", "roof"), "^": L("thatch-peak", "roof") } },
-	{ id: "roof-slate-spire", name: "pointed spire", group: "tops", role: "roof", material: null, fit: "spire", map: ["<=>^"],
-		legend: { "<": L("roof-left", "roof"), "=": L("roof-flat", "roof"), ">": L("roof-right", "roof"), "^": L("roof-peak", "roof") } },
+	// Its slopes are 2:1, each over two cells (util.ts roofRows: six letters), so it rises as one smooth spire to one tip.
+	{ id: "roof-slate-spire", name: "pointed spire", group: "tops", role: "roof", material: null, fit: "spire", map: ["<=>^{}"],
+		legend: { "<": L("spire-l", "roof"), "=": L("roof-flat", "roof"), ">": L("spire-r", "roof"), "^": L("spire-peak", "roof"), "{": L("spire-l-hi", "roof"), "}": L("spire-r-hi", "roof") } },
 	// Its fill is the clear glass-wall, not today's "glass" (the warm lit pane, which glows at night).
 	{ id: "roof-glass-gable", name: "glass roof", group: "tops", role: "roof", material: null, fit: "gable", map: ["<=>^"],
 		legend: { "<": L("glass-roof-l", "roof"), "=": L("glass-wall", "roof"), ">": L("glass-roof-r", "roof"), "^": L("roof-peak", "roof") } },

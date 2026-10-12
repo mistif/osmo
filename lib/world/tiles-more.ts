@@ -13,7 +13,7 @@ export const MORE_TILE_IDS = [
 	"glass-roof-l", "glass-roof-r", "balloon-tl", "balloon-tr", "balloon-bl", "balloon-br", "basket", "bell", "awning", "sail",
 	"statue", "arch", "rail", "plank-wall-2", "stone-wall-2",
 	// Appended in the fix round (the look pass's findings); the 106 above keep their cells.
-	"deck",
+	"deck", "spire-l", "spire-r", "spire-l-hi", "spire-r-hi", "spire-peak",
 ] as const;
 export type MoreTileId = (typeof MORE_TILE_IDS)[number];
 
@@ -662,6 +662,53 @@ const deck = make((x, y) => {
 	return grain ? "k" : "l";
 });
 
+// --- A spire's slopes, 2:1 (two rows up for one across), each over a pair of cells: the lower and the upper half of the
+// left and the right slope, with the shingle roof's verges (lit on the left, shaded on the right) and its shingles
+// (tiles.ts shingle, the Tiny Town rows recoloured, copied here since tiles.ts imports this file); and the tip, the two
+// slopes meeting under a ridge cap with an iron finial, ball and pennant over it. ---
+const KENNEY_ROOF = ["5445354453434343", "4444344443434343"];
+const ROOF_INK: Readonly<Record<string, string>> = { "3": "h", "4": "i", "5": "V" };
+function shingle(x: number, y: number): string {
+	const course = (y >> 2) & 3;
+	const sx = wrap(x + (course % 2) * 4);
+	const k = sx & 7;
+	const row = y & 3;
+	if (row === 3) return k === 0 || k === 6 ? "g" : "f";
+	if (k === 7) return "f";
+	if (row === 0) return k === 6 ? "f" : "g";
+	if (k === 6) return row === 2 ? "g" : "h";
+	if (k === 0 && row === 2) return "h";
+	return ROOF_INK[KENNEY_ROOF[row - 1][wrap(x + course * 5)]];
+}
+// d: how far a pixel lies inside the slope, 2 a pixel across (below 0 is sky). up: the upper cell of the pair.
+const steepL = (x: number, y: number, up: boolean) => 2 * x + y - (up ? 31 : 15);
+const steepR = (x: number, y: number, up: boolean) => 2 * (15 - x) + y - (up ? 31 : 15);
+const verge = (d: number, x: number, y: number, lit: boolean): string | null => {
+	if (d < 0) return ".";
+	if (d <= 1) return "f";
+	if (lit) return d <= 3 ? "V" : d <= 5 ? (checker(x, y) ? "i" : "V") : d <= 7 ? "g" : null;
+	return d <= 3 ? "h" : d <= 5 ? "g" : d <= 7 ? "f" : null;
+};
+const spireL = (up: boolean) => make((x, y) => verge(steepL(x, y, up), x, y, true) ?? shingle(x, y));
+const spireR = (up: boolean) => make((x, y) => verge(steepR(x, y, up), x, y, false) ?? shingle(x, y));
+const FINIAL = [
+	".........yyyw...",
+	".......cxxxw....",
+	"......abca......",
+	".....aeca.......",
+	"......aa........",
+	".......Ra.......",
+];
+const spirePeak = make((x, y) => {
+	if (y < FINIAL.length) return FINIAL[y][x];
+	const dl = steepL(x, y, false);
+	const dr = steepR(x, y, false);
+	if (dl < 0 || dr < 0) return x === 7 && y < 9 ? "R" : x === 8 && y < 9 ? "a" : ".";
+	if (dl <= 1 || dr <= 1) return "f";
+	if (y <= 8) return dl <= 3 ? "V" : "h"; // the ridge cap where the slopes meet
+	return verge(dl, x, y, true) ?? verge(dr, x, y, false) ?? shingle(x, y);
+});
+
 export const MORE_TILES: Readonly<Record<MoreTileId, Grid>> = {
 	"plank-wall": plankWall,
 	"stone-wall": stoneWall,
@@ -699,4 +746,9 @@ export const MORE_TILES: Readonly<Record<MoreTileId, Grid>> = {
 	"plank-wall-2": plankWall2,
 	"stone-wall-2": stoneWall2,
 	deck,
+	"spire-l": spireL(false),
+	"spire-r": spireR(false),
+	"spire-l-hi": spireL(true),
+	"spire-r-hi": spireR(true),
+	"spire-peak": spirePeak,
 };

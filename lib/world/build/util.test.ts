@@ -39,8 +39,20 @@ describe("roofs at a width", () => {
 	it("narrows a spire every second row", () => {
 		expect(roofRows("<=>^", 3, "spire")).toEqual([".^.", ".^.", "<=>", "<=>"]);
 	});
-	it("refuses a part that is not four letters", () => {
+	it("gives a spire with six letters its own slopes for the upper row of each pair, and one peak at the top", () => {
+		// lower left, fill, lower right, peak, upper left, upper right: two rows per inset, a 2:1 slope
+		expect(roofRows("<=>^{}", 5, "spire")).toEqual(["..^..", ".{=}.", ".<=>.", "{===}", "<===>"]);
+		expect(roofRows("<=>^{}", 3, "spire")).toEqual([".^.", "{=}", "<=>"]);
+		expect(roofRows("<=>^{}", 1, "spire")).toEqual(["^"]);
+	});
+	it("ends a roof whose peak letter is a dot flat, at its last row of three or more (a dome)", () => {
+		expect(roofRows("(=).", 5, "gable")).toEqual([".(=).", "(===)"]);
+		expect(roofRows("(=).", 7, "gable")).toEqual(["..(=)..", ".(===).", "(=====)"]);
+		expect(roofRows("(=).", 3, "gable")).toEqual(["(=)"]);
+	});
+	it("refuses a part that is not four letters (six for a spire)", () => {
 		expect(() => roofRows("<=>", 5, "gable")).toThrow();
+		expect(() => roofRows("<=>^{}", 5, "gable")).toThrow();
 	});
 });
 

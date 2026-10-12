@@ -36,7 +36,7 @@ describe("the parts library (spec 4.1)", () => {
 		if (p.fit === "row") expect(() => rowsAt(p.map, 9)).not.toThrow();
 		if (p.fit === "gable" || p.fit === "spire") {
 			expect(p.map).toHaveLength(1);
-			expect(p.map[0]).toHaveLength(4);
+			expect(p.map[0]).toHaveLength(p.fit === "spire" && p.map[0].length === 6 ? 6 : 4);
 		}
 	});
 	it("gives each role the shape the compiler needs", () => {

@@ -16,7 +16,8 @@ export type PartGroup = "structure" | "tops" | "additions" | "around" | "travel"
 // - row: every row is a left cap letter, a fill pattern and a right cap letter, all patterns the same length; at width W
 //   (2 or more) a row is its left cap, W - 2 letters of its pattern (util.ts rowsAt) and its right cap.
 // - gable, spire: a roof over the span. The grid is one row of four letters: left slope, fill, right slope, peak. Row k
-//   from the bottom is inset k (gable) or floor(k / 2) (spire) on each side (util.ts roofRows).
+//   from the bottom is inset k (gable) or floor(k / 2) (spire) on each side (util.ts roofRows). A spire may name six,
+//   the last two the upper row's slopes of each pair; a peak "." ends the roof flat (a dome).
 export type Fit = "fixed" | "row" | "gable" | "spire";
 // Where a part may go. Its joints follow from the role: it sits on its bottom edge centred on what is below it (its base
 // joint), the next tier sits on its top edge (top), decor hangs on its wall cells (hang), the door goes in the middle of

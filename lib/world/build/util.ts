@@ -44,16 +44,22 @@ export function rowsAt(rows: readonly string[], w: number): string[] {
 
 // A roof over a span w, top row first. Row k from the bottom is inset k (gable) or floor(k / 2) (spire) on each side; a
 // row of two or more cells is left slope, fill, right slope, and a row of one cell is the peak. letters: "<=>^" style.
+// A spire may name six letters, "<=>^{}": the last two are the slopes of the upper row of each pair (a 2:1 slope drawn
+// over two cells), and its peak is laid once, on the lower of its two one-cell rows. A peak letter "." ends the roof flat
+// at its last row of more than one cell (a dome).
 export function roofRows(letters: string, w: number, fit: "gable" | "spire"): string[] {
-	if (letters.length !== 4) throw new Error(`a roof part's map is one row of four letters, not "${letters}"`);
+	const steep = fit === "spire" && letters.length === 6;
+	if (letters.length !== 4 && !steep) throw new Error(`a roof part's map is one row of four letters (six for a spire), not "${letters}"`);
 	if (!Number.isInteger(w) || w < 1) throw new Error(`a roof is at least 1 wide, not ${w}`);
-	const [l, f, r, peak] = [...letters];
+	const [l, f, r, peak, lHi, rHi] = [...letters];
 	const rows: string[] = [];
 	for (let k = 0; ; k++) {
 		const inset = fit === "gable" ? k : Math.floor(k / 2);
 		const len = w - 2 * inset;
 		if (len < 1) break;
-		rows.push(".".repeat(inset) + (len === 1 ? peak : l + f.repeat(len - 2) + r) + ".".repeat(inset));
+		if (len === 1 && (peak === "." || (steep && k % 2 === 1))) break;
+		const [a, b] = steep && k % 2 === 1 ? [lHi, rHi] : [l, r];
+		rows.push(".".repeat(inset) + (len === 1 ? peak : a + f.repeat(len - 2) + b) + ".".repeat(inset));
 	}
 	return rows.reverse();
 }
