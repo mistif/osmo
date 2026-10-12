@@ -26,16 +26,18 @@ export function reachOf(islands: readonly { x0: number; x1: number }[]): Reach |
 	if (islands.length === 0) return null;
 	return { x0: Math.min(...islands.map((i) => i.x0)) * TILE, x1: Math.max(...islands.map((i) => i.x1)) * TILE };
 }
+export const FIT_MAX = 1; // the whole-world step is a far view: never closer than scale 1, so zooming out never zooms in
+export const FIT_GAP = 1.2; // a fixed step within a fifth of the fit adds a near no-op zoom, so it is left out
 // The whole-world step for a view cssW wide: the islands' reach and its margin fitted to the width (the whole width of
-// the world when no reach is given), but never below FAR_MIN.
+// the world when no reach is given), but never below FAR_MIN nor above FIT_MAX.
 export const fitZoom = (cssW: number, bounds: Bounds, reach?: Reach | null): number =>
-	Math.max(FAR_MIN, cssW / (reach ? paddedWidth(reach) : bounds.w));
-// The steps for a view cssW wide (CSS px per world px): the fixed steps larger than the fit, then the fit; the fixed
-// steps alone when cssW is not above 0.
+	Math.min(FIT_MAX, Math.max(FAR_MIN, cssW / (reach ? paddedWidth(reach) : bounds.w)));
+// The steps for a view cssW wide (CSS px per world px): the fixed steps more than FIT_GAP times the fit, then the fit;
+// the fixed steps alone when cssW is not above 0.
 export function zoomSteps(cssW: number, bounds: Bounds, reach?: Reach | null): number[] {
 	if (!(cssW > 0)) return [...STEPS];
 	const fit = fitZoom(cssW, bounds, reach);
-	return [...STEPS.filter((s) => s > fit), fit];
+	return [...STEPS.filter((s) => s > fit * FIT_GAP), fit];
 }
 // The index of the step nearest to z.
 export function nearestStep(steps: readonly number[], z: number): number {

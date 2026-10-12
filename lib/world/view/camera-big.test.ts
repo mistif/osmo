@@ -8,7 +8,7 @@ const cam = (x: number, y: number, z: number): Camera => ({ x, y, from: z, to: z
 describe("the zoom steps (spec 3.2)", () => {
 	it("are 4 down to 1/8, then the whole world fitted to the width", () => {
 		expect(fitZoom(1920, BIG_BOUNDS)).toBe(1920 / 16384);
-		expect(zoomSteps(1920, BIG_BOUNDS)).toEqual([4, 3, 2, 1, 0.5, 0.25, 0.125, 1920 / 16384]);
+		expect(zoomSteps(1920, BIG_BOUNDS)).toEqual([4, 3, 2, 1, 0.5, 0.25, 1920 / 16384]); // 1/8 is within a fifth of the fit
 		expect(zoomSteps(375, BIG_BOUNDS)).toEqual([4, 3, 2, 1, 0.5, 0.25, 0.125, FAR_MIN]);
 	});
 	it("leave out a fixed step that is not larger than the fit, and have no fit on a view of no width", () => {
@@ -47,6 +47,15 @@ describe("the whole-world step fits the islands, not the whole width (the hand c
 		const wide = zoomSteps(1920, BIG_BOUNDS, reach); // a 6th: the 1/8 step is nearer than the fit and left out
 		expect(wide).toEqual([4, 3, 2, 1, 0.5, 0.25, 1920 / 10_800]);
 		expect(zoomSteps(0, BIG_BOUNDS, reach)).toEqual([...STEPS]);
+	});
+	it("never makes zooming out a no-op or a zoom in (the review): no fixed step within a fifth of the fit, and the fit never closer than 1", () => {
+		const near = { x0: 0, x1: 1920 / 0.12 / (1 + 2 * 0.04) }; // a reach whose fit on 1920 is 0.12, next to the 1/8 step
+		expect(zoomSteps(1920, BIG_BOUNDS, near)).toEqual([4, 3, 2, 1, 0.5, 0.25, fitZoom(1920, BIG_BOUNDS, near)]);
+		const home = reachOf([{ x0: 448, x1: 506 }])!; // home alone, before the world row answers: its fit on 1920 would be about 1.9
+		expect(fitZoom(1920, BIG_BOUNDS, home)).toBe(1);
+		expect(zoomSteps(1920, BIG_BOUNDS, home)).toEqual([4, 3, 2, 1]);
+		const out = zoomAbout(cam(7600, 1400, 1), zoomSteps(1920, BIG_BOUNDS, home), -1, { x: 960, y: 540 }, { w: 1920, h: 1080 }, BIG_BOUNDS, 0, true, home);
+		expect(out.to).toBe(1);
 	});
 	it("falls back to the whole width when no island is given", () => {
 		expect(zoomSteps(1920, BIG_BOUNDS, null)).toEqual(zoomSteps(1920, BIG_BOUNDS));
