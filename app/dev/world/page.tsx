@@ -3,20 +3,25 @@
 // A dev-only view of the village: every state he can be in, every hour of the sky, each room locked or at 0, 50 and
 // 100 percent (the faint outlines show at 0 and 50), the castle building live, the room hit areas, walking to each
 // panel's room, each mood, the phone camera, and (polish pass) the life in the world: snow, smoke and birds by the
-// clock, all of it now, or none. Nothing is read or saved. Not served in production.
-import { type CSSProperties, useState } from "react";
+// clock, all of it now, or none; and (free-will plan, I2) the big world: Small, Big or Builds, its seed and islands, the
+// zoom and the frame timer, the castle live or done, a grant of blocks to his budget, the planner's mood, the recipe
+// preview and the planner panel. Nothing is read or saved. Not served in production.
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { Bricolage_Grotesque } from "next/font/google";
 import { notFound } from "next/navigation";
 import styles from "../../assistant.module.css";
 import dev from "./dev.module.css";
-import { WorldStage } from "@/components/osmo/world";
+import { WorldStage, type WorldControl, type WorldFixed } from "@/components/osmo/world";
 import { moodTheme } from "@/lib/agent/mood-theme";
 import { BASELINE, type Activations, type Emotion } from "@/lib/agent/state";
 import { routeHash, type Route } from "@/lib/shell/route";
 import type { ActorKind } from "@/lib/world/actor";
 import { CASTLE_BLOCKS } from "@/lib/world/blueprints/castle";
 import { CASTLE_ROOMS, type CastleRoom } from "@/lib/world/blueprints/types";
+import type { MoodKind } from "@/lib/world/build/types";
 import { placeOf } from "@/lib/world/rooms";
+import { PlannerPanel } from "./planner-panel";
+import { RecipePreview } from "./recipe-preview";
 
 const font = Bricolage_Grotesque({ subsets: ["latin"] });
 const MOODS: (Emotion | "calm")[] = ["calm", "joy", "sadness", "fear", "anger", "love", "loneliness", "hope", "boredom"];
@@ -65,6 +70,37 @@ const LIFE: { label: string; mode: LifeMode }[] = [
 	{ label: "No life", mode: "none" },
 ];
 
+// The big world's pins (free-will plan, I2). The page starts on the small world, as it always has; a pin wins over the switches.
+type WorldPin = NonNullable<WorldFixed["world"]>;
+const WORLDS: { label: string; world: WorldPin }[] = [
+	{ label: "Small", world: "small" },
+	{ label: "Big", world: "big" },
+	{ label: "Builds", world: "builds" },
+];
+const DEV_SEED = 7;
+const SEED_MAX = 2_147_483_647;
+const ISLAND_COUNTS = [4, 5, 6, 7, 8];
+const PLANNER_MOODS: MoodKind[] = ["low", "bright", "tired", "curious", "missing", "calm"];
+const FRAMES_KEPT = 60;
+const seedOf = (text: string): number => {
+	const n = Math.floor(Number(text));
+	return Number.isFinite(n) ? Math.min(SEED_MAX, Math.max(0, n)) : 0;
+};
+function frameText(times: readonly number[]): string {
+	if (times.length === 0) return "frame: no frames yet";
+	const average = times.reduce((sum, t) => sum + t, 0) / times.length;
+	return `frame ${average.toFixed(1)} ms average, ${Math.max(...times).toFixed(1)} ms slowest`;
+}
+// The timer reads the last FRAMES_KEPT draw times from a ref twice a second, so a frame never re-renders the page.
+function FrameReadout({ times }: { times: { current: number[] } }) {
+	const [text, setText] = useState(() => frameText([]));
+	useEffect(() => {
+		const timer = setInterval(() => setText(frameText(times.current)), 500);
+		return () => clearInterval(timer);
+	}, [times]);
+	return <span className={dev.readout}>{text}</span>;
+}
+
 function feeling(mood: Emotion | "calm"): Activations {
 	const a = { ...BASELINE };
 	if (mood !== "calm") a[mood] = Math.min(1, BASELINE[mood] + 0.6);
@@ -84,6 +120,20 @@ export default function WorldPage() {
 	const [speaking, setSpeaking] = useState(false);
 	const [lines, setLines] = useState(0);
 	const [life, setLife] = useState<LifeMode>("clock");
+	const [worldPin, setWorldPin] = useState<WorldPin>("small");
+	const [seed, setSeed] = useState(DEV_SEED);
+	const [islands, setIslands] = useState(ISLAND_COUNTS[0]);
+	const [castle, setCastle] = useState<"live" | "done">("live");
+	const [grant, setGrant] = useState<{ blocks: number; at: number } | undefined>(undefined);
+	const [plannerMood, setPlannerMood] = useState<MoodKind | undefined>(undefined);
+	const controlRef = useRef<WorldControl | null>(null);
+	const frames = useRef<number[]>([]);
+	const onFrame = useCallback((ms: number) => {
+		const kept = frames.current;
+		kept.push(ms);
+		if (kept.length > FRAMES_KEPT) kept.shift();
+	}, []);
+	const big = worldPin !== "small";
 	const activations = feeling(mood);
 	const theme = moodTheme(activations);
 	const stageStyle = {
@@ -110,7 +160,10 @@ export default function WorldPage() {
 			fixed={{
 				hour: hour ?? undefined, rooms: pins ? roomsFrom(pins) : undefined, pose: poseKind === "live" ? undefined : poseKind, hits,
 				life: life === "clock" ? undefined : life,
+				world: worldPin, seed: big ? seed : undefined, islands: big ? islands : undefined, castle: big ? castle : undefined, grant, mood: plannerMood,
 			}}
+			controlRef={controlRef}
+			onFrame={onFrame}
 			route={route}
 			onOpen={(to) => {
 				setRoute(to);
@@ -163,7 +216,44 @@ export default function WorldPage() {
 					{button("Phone", phone, () => setPhone((v) => !v))}
 				</div>
 				<div className={dev.toolbar}>{LIFE.map((l) => button(l.label, life === l.mode, () => setLife(l.mode)))}</div>
-				<p className={dev.note}>
+				<div className={dev.toolbar}>
+					<span className={dev.room}>World</span>
+					{WORLDS.map((w) => button(w.label, worldPin === w.world, () => setWorldPin(w.world)))}
+					<label className={dev.field}>
+						Seed
+						<input className={dev.num} type="number" min={0} max={SEED_MAX} step={1} value={seed} onChange={(e) => setSeed(seedOf(e.target.value))} />
+					</label>
+					<label className={dev.field}>
+						Islands
+						<select className={dev.pick} value={islands} onChange={(e) => setIslands(Number(e.target.value))}>
+							{ISLAND_COUNTS.map((n) => (
+								<option key={n} value={n}>
+									{n}
+								</option>
+							))}
+						</select>
+					</label>
+				</div>
+				<div className={dev.toolbar}>
+					<span className={dev.room}>Camera</span>
+					{button("Zoom in", false, () => controlRef.current?.zoom(1))}
+					{button("Zoom out", false, () => controlRef.current?.zoom(-1))}
+					{button("Back to Osmo", false, () => controlRef.current?.home())}
+					{button("Clear timer", false, () => {
+						frames.current = [];
+					})}
+					<FrameReadout times={frames} />
+				</div>
+				<div className={dev.toolbar}>
+					<span className={dev.room}>Builds</span>
+					{button("Castle live", castle === "live", () => setCastle("live"))}
+					{button("Castle done", castle === "done", () => setCastle("done"))}
+					{button("Grant 50", false, () => setGrant({ blocks: 50, at: Date.now() }))}
+					{button("Grant 450 (a three-day return)", false, () => setGrant({ blocks: 450, at: Date.now() }))}
+					<span>planner mood:</span>
+					{PLANNER_MOODS.map((m) => button(m, plannerMood === m, () => setPlannerMood(plannerMood === m ? undefined : m)))}
+				</div>
+				<p className={`${dev.note} ${dev.takes}`}>
 					Live: he builds the whole castle from nothing, room by room (nothing is saved). The room rows pin each room locked or
 					at 0, 50 or 100 percent; an open room that is not finished shows as a faint outline, a locked one not at all. A
 					finished room with a panel (library, workshop, gate, observatory) is a button: click it, or Tab to it, and he walks
@@ -174,7 +264,20 @@ export default function WorldPage() {
 					a flight of birds by day about every 80 s; All life now keeps them all going; with Message he faces you, breathes and
 					blinks every 3 to 6 s.
 				</p>
+				<p className={`${dev.note} ${dev.takes}`}>
+					The big world: Small is today&apos;s village and where this page starts; Big is the world of floating islands (the
+					castle on the home island, then four to eight islands); Builds adds the balloon dock, his work budget and the
+					planner. A new seed or island count starts that world again. Zoom in and Zoom out step the zoom about the middle of
+					the view, Back to Osmo takes the camera to him, and the frame timer shows the average and the slowest of the last 60
+					draws (Clear timer starts it again, so each zoom step can be read by itself). Castle done begins with the whole
+					castle built. Grant puts that many blocks into his work budget at once: Grant 450 plays the time-lapse of a
+					three-day return, and he is left at work. The planner mood buttons pin the mood the planner follows; press the
+					same one again to let the real mood decide. The recipe preview and the planner panel below work on their own:
+					they compile and plan in this page and touch nothing else.
+				</p>
 				{phone && <div className={dev.phone}>{world}</div>}
+				<RecipePreview />
+				<PlannerPanel />
 			</div>
 			{!phone && world}
 		</div>

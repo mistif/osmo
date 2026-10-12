@@ -11,3 +11,63 @@
 .range { width: 14rem; }
 .phone { position: relative; isolation: isolate; width: 375px; height: 700px; margin: 1rem auto; overflow: clip; border: 1px solid color-mix(in oklab, var(--bone) 30%, transparent); border-radius: 1.5rem; }
 .note { position: relative; z-index: 1; margin: 0.5rem 0; font-size: 0.85rem; color: color-mix(in oklab, var(--bone) 80%, transparent); }
+
+/* Free will (I2): the rows for the big world, the recipe preview and the planner panel. New classes only. */
+/* A note that takes the pointer, so a drag that starts on it never moves the camera. */
+.takes { pointer-events: auto; }
+.field { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; }
+.num, .pick {
+	height: 2.5rem;
+	padding: 0 0.6rem;
+	font: inherit;
+	color: var(--bone);
+	background: color-mix(in oklab, var(--base) 85%, transparent);
+	border: 1px solid color-mix(in oklab, var(--bone) 35%, transparent);
+	border-radius: 0.5rem;
+}
+.num { width: 7.5rem; }
+.num:focus-visible, .pick:focus-visible { outline: 2px solid var(--aura-a); outline-offset: 2px; }
+.readout { font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.panel {
+	position: relative;
+	z-index: 1;
+	pointer-events: auto;
+	max-width: 60rem;
+	margin: 1rem 0;
+	padding: 1rem;
+	font-size: 0.85rem;
+	background: color-mix(in oklab, var(--base) 90%, transparent);
+	border: 1px solid color-mix(in oklab, var(--bone) 25%, transparent);
+	border-radius: 0.75rem;
+}
+.panelTitle { margin: 0 0 0.75rem; font-size: 1rem; font-weight: 600; }
+.panelRow { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+.canvas {
+	display: block;
+	width: 480px;
+	max-width: 100%;
+	height: auto;
+	aspect-ratio: 3 / 2;
+	image-rendering: pixelated;
+	background: linear-gradient(#25406a, #7ea3c7 80%);
+	border-radius: 0.5rem;
+}
+.facts { margin: 0.5rem 0; }
+.problems { margin: 0.25rem 0 0.5rem; padding-left: 1.25rem; }
+.json {
+	max-height: 16rem;
+	margin: 0.5rem 0 0;
+	padding: 0.6rem;
+	overflow: auto;
+	font-size: 0.78rem;
+	white-space: pre-wrap;
+	background: color-mix(in oklab, var(--bone) 8%, transparent);
+	border-radius: 0.5rem;
+}
+.cands { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0.75rem; }
+.cand { margin: 0; padding: 0.75rem; border: 1px solid color-mix(in oklab, var(--bone) 25%, transparent); border-radius: 0.5rem; }
+.cand[data-picked] { border-color: var(--aura-a); outline: 1px solid var(--aura-a); }
+.candTitle { margin: 0 0 0.5rem; font-size: 0.95rem; font-weight: 600; }
+.pairs { display: grid; grid-template-columns: auto 1fr; gap: 0.2rem 0.75rem; margin: 0; }
+.pairs dt { opacity: 0.7; }
+.pairs dd { margin: 0; }
