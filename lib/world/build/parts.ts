@@ -66,10 +66,13 @@ export const PARTS: readonly Part[] = [
 		map: ["..s..", "..s..", "LLhLL", "..s..", "..s.."], legend: { s: L("sail", "walls"), L: L("sail-lying", "walls"), h: L("post", "walls") } },
 	{ id: "top-well-roof", name: "well roof", group: "tops", role: "top", material: null, fit: "fixed", map: [".^.", "<=>", "p.p"],
 		legend: { "^": L("thatch-peak", "roof"), "<": L("thatch-l", "roof"), "=": L("thatch-flat", "roof"), ">": L("thatch-r", "roof"), p: L("post", "walls") } },
-	{ id: "top-statue", name: "carved figure", group: "around", role: "top", material: null, fit: "fixed", map: ["s", "I"],
-		legend: { s: L("statue", "walls"), I: L("pillar", "walls") } },
+	// His height, over two cells, on the plinth under it.
+	{ id: "top-statue", name: "carved figure", group: "around", role: "top", material: null, fit: "fixed", map: ["s", "f"],
+		legend: { s: L("statue-top", "walls"), f: L("statue-foot", "walls") } },
 	// Additions: arches, gates, stairs, lanterns, banners and bells.
-	{ id: "arch-span", name: "stone arch", group: "additions", role: "roof", material: null, fit: "row", map: ["AAA"], legend: { A: L("arch", "roof") } },
+	// One arch over the gate's three-cell opening (a five-wide gate), the wall over its posts.
+	{ id: "arch-span", name: "stone arch", group: "additions", role: "roof", material: null, fit: "row", map: ["SlkrS"],
+		legend: { S: L("stone-wall", "roof"), l: L("arch-wide-l", "roof"), k: L("arch-wide-k", "roof"), r: L("arch-wide-r", "roof") } },
 	{ id: "gate-posts", name: "gate posts", group: "additions", role: "storey", material: null, fit: "row", map: ["I.I", "I.I", "I.I"], legend: { I: L("pillar", "walls") } },
 	{ id: "stair-flight", name: "stone stair", group: "additions", role: "top", material: null, fit: "fixed",
 		map: ["....S", "...SS", "..SSS", ".SSSS", "SSSSS"], legend: { S: L("step", "floor") } },

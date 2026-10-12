@@ -66,6 +66,12 @@ describe("the parts library (spec 4.1)", () => {
 			}
 		}
 	});
+	it("carves the statue his height and the gate's arch as one arch over its opening (the look pass)", () => {
+		const statue = PARTS.find((p) => p.id === "top-statue");
+		expect(statue?.map.map((r) => statue.legend[r].tile)).toEqual(["statue-top", "statue-foot"]);
+		const arch = PARTS.find((p) => p.id === "arch-span");
+		expect(arch && rowsAt(arch.map, 5)[0].split("").map((ch) => arch.legend[ch].tile)).toEqual(["stone-wall", "arch-wide-l", "arch-wide-k", "arch-wide-r", "stone-wall"]);
+	});
 	it("hangs no lantern or banner in a part's map (decor goes in the decor grid; a lamp in a map is a window)", () => {
 		for (const p of PARTS) if (p.role !== "decor") for (const e of Object.values(p.legend)) expect(["lanterns", "banners"], p.id).not.toContain(e.layer);
 	});

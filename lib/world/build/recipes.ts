@@ -44,7 +44,7 @@ export const RECIPES: readonly Recipe[] = [
 		doors: [], decor: { parts: ["decor-lantern"], max: 1 }, sides: { parts: ["side-tree-pine"], max: 1 } },
 	{ id: "stone-stair", name: "stone stair", kind: "stone-stair", size: "small", site: "level", width: [5, 5], materials: ["stone"],
 		tiers: [T("flight", "top", ["stair-flight"])], doors: [], decor: none, sides: { parts: ["side-lamp-post"], max: 1 } },
-	{ id: "arch-gate", name: "arch gate", kind: "arch-gate", size: "small", site: "level", width: [3, 5], materials: ["stone", "brick"],
+	{ id: "arch-gate", name: "arch gate", kind: "arch-gate", size: "small", site: "level", width: [5, 5], materials: ["stone", "brick"],
 		tiers: [T("posts", "storey", ["gate-posts"]), T("arch", "roof", ["arch-span"]), T("crown", "roof", ["crown-battlement"])],
 		doors: [], decor: { parts: ["decor-banner", "decor-lantern"], max: 2 }, sides: { parts: ["side-sign"], max: 1 } },
 	{ id: "statue", name: "statue", kind: "statue", size: "small", site: "level", width: [3, 5], materials: ["stone"],

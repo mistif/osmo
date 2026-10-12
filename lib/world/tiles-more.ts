@@ -20,6 +20,7 @@ export const MORE_TILE_IDS = [
 	"balloon-1", "balloon-2", "balloon-3", "balloon-4", "balloon-5", "balloon-6", "balloon-7", "balloon-8", "balloon-9", "basket-full",
 	"chimney-base", "chimney-base-thatch", "paving", "lamp-post-paved",
 	"sail-lying", "sail-roof", "sail-thatch", "hub-roof", "hub-thatch",
+	"statue-top", "statue-foot", "arch-wide-l", "arch-wide-k", "arch-wide-r",
 ] as const;
 export type MoreTileId = (typeof MORE_TILE_IDS)[number];
 
@@ -870,8 +871,72 @@ export const paving = make((x, y) => {
 });
 export const onPaving = (top: Grid): Grid => make((x, y) => (top[y][x] === "." ? paving[y][x] : top[y][x]));
 
+// --- A statue his height, over two cells: a hooded robed figure in dressed stone facing left, hands folded at the waist,
+// the robe falling in folds to a carved base, lit on its left, outlined on its right and bottom. ---
+const FIGURE = [
+	"................",
+	"................",
+	"......{||~......",
+	".....{|||}~.....",
+	".....{||}}}~....",
+	".....{|~}}}~....",
+	".....{|~~}}~....",
+	"......{|}}~.....",
+	".....{||}}}~....",
+	"....{|||}}}}~...",
+	"....{||||}}}~...",
+	"....{|{{{}}}~...",
+	"....{|{||}}}~...",
+	"....{||||}}}~...",
+	"....{|||}|}}~...",
+	"...{|||}||}}}~..",
+	"...{|||}||}}}~..",
+	"...{||}|||}}}~..",
+	"...{||}|||}}}~..",
+	"...{|||}||}}}~..",
+	"...{|||}||}}}~..",
+	"..{|||}|||}}}}~.",
+	"..{|||}|||}}}}~.",
+	"..{||}||||}}}}~.",
+	"..{||}|||}|}}}~.",
+	"..{|||||}||}}}~.",
+	"..{{{{{{{{{{{}~.",
+	"..{||||||||||}~.",
+	"..{||||||||||}~.",
+	"..{|||||||||}}~.",
+	"..}}}}}}}}}}}}~.",
+	"..~~~~~~~~~~~~~.",
+];
+// --- One wide arch over three cells (the gate's opening), segmental: its intrados a circle through the opening's two
+// bottom corners, a ring of voussoirs radiating from it with a pale keystone at the crown, the dressed stone wall over
+// it; the sky in the opening. ---
+const WIDE = 48;
+const WIDE_C = { x: 24, y: 40 };
+const WIDE_R = Math.hypot(24, 24); // through the opening's bottom corners (0, 16) and (48, 16)
+const WIDE_RING = 4.5;
+function wideArch(gx: number, y: number): string {
+	const dx = gx + 0.5 - WIDE_C.x;
+	const dy = y + 0.5 - WIDE_C.y;
+	const d = Math.hypot(dx, dy);
+	if (d <= WIDE_R) return ".";
+	if (d > WIDE_R + WIDE_RING) return stoneWall[y][gx & 15];
+	if (d > WIDE_R + WIDE_RING - 0.9) return "~";
+	const a = Math.atan2(-dy, dx); // the angle of the voussoir, up from the right
+	const k = Math.round((a - Math.PI / 4) / (Math.PI / 20)); // ten voussoirs between the springings, 5 the keystone
+	if (Math.abs((a - Math.PI / 4) / (Math.PI / 20) - k) > 0.42 && k !== 5) return "~";
+	if (k === 5) return d < WIDE_R + 1.2 ? "|" : "{";
+	if (d < WIDE_R + 1) return k > 5 ? "}" : "~";
+	return k > 5 ? (d < WIDE_R + 2.2 ? "{" : "|") : d < WIDE_R + 2.2 ? "|" : "}";
+}
+const wideThird = (n: number) => make((x, y) => wideArch(x + n * N, y));
+
 export const MORE_TILES: Readonly<Record<Exclude<MoreTileId, FootTileId>, Grid>> = {
 	paving,
+	"statue-top": FIGURE.slice(0, N),
+	"statue-foot": FIGURE.slice(N),
+	"arch-wide-l": wideThird(0),
+	"arch-wide-k": wideThird(1),
+	"arch-wide-r": wideThird(2),
 	"sail-lying": sailLying,
 	"sail-roof": sailOver(shingle),
 	"sail-thatch": sailOver(straw),

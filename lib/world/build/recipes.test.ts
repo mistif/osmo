@@ -86,6 +86,9 @@ describe("the twenty seed recipes (spec 4.2)", () => {
 		expect(roofs("shrine").length).toBeGreaterThan(0);
 		expect(roofs("lighthouse")).toContain("roof-dome");
 	});
+	it("builds the arch gate five wide, so its one arch spans the three cells between its posts", () => {
+		expect(RECIPES.find((r) => r.id === "arch-gate")?.width).toEqual([5, 5]);
+	});
 	it("can never stack higher than 24 rows (spec 4.3)", () => {
 		for (const r of RECIPES) expect(tallest(r), r.id).toBeLessThanOrEqual(24);
 	});
