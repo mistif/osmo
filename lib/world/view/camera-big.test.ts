@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { toScreen, zoomAt, type Camera } from "../camera";
-import { BIG_BOUNDS, drift, fitZoom, followBig, himOnScreen, homeTo, nearestStep, newBigCamera, offScreen, panBy, STEPS, zoomAbout, zoomSteps } from "./camera-big";
+import { BIG_BOUNDS, drift, FAR_MIN, fitZoom, followBig, himOnScreen, homeTo, nearestStep, newBigCamera, offScreen, panBy, reachOf, STEPS, zoomAbout, zoomSteps } from "./camera-big";
 
 const V = { w: 1000, h: 600 };
 const cam = (x: number, y: number, z: number): Camera => ({ x, y, from: z, to: z, at: 0, aimX: x, aimY: y, ox: 0, oy: 0, glideAt: Number.NEGATIVE_INFINITY });
@@ -9,7 +9,7 @@ describe("the zoom steps (spec 3.2)", () => {
 	it("are 4 down to 1/8, then the whole world fitted to the width", () => {
 		expect(fitZoom(1920, BIG_BOUNDS)).toBe(1920 / 16384);
 		expect(zoomSteps(1920, BIG_BOUNDS)).toEqual([4, 3, 2, 1, 0.5, 0.25, 0.125, 1920 / 16384]);
-		expect(zoomSteps(375, BIG_BOUNDS)).toEqual([4, 3, 2, 1, 0.5, 0.25, 0.125, 375 / 16384]);
+		expect(zoomSteps(375, BIG_BOUNDS)).toEqual([4, 3, 2, 1, 0.5, 0.25, 0.125, FAR_MIN]);
 	});
 	it("leave out a fixed step that is not larger than the fit, and have no fit on a view of no width", () => {
 		expect(zoomSteps(2560, BIG_BOUNDS)).toEqual([4, 3, 2, 1, 0.5, 0.25, 2560 / 16384]);
@@ -19,6 +19,49 @@ describe("the zoom steps (spec 3.2)", () => {
 		expect(nearestStep([4, 3, 2, 1, 0.5], 1.9)).toBe(2);
 		expect(nearestStep([4, 3, 2, 1, 0.5], 0.8)).toBe(3);
 		expect(nearestStep([4, 3, 2, 1, 0.5], 0.7)).toBe(4);
+	});
+});
+
+// The islands of a world, in tiles: from tile 250 to tile 875.
+const ISLANDS = [{ x0: 448, x1: 506 }, { x0: 250, x1: 400 }, { x0: 520, x1: 875 }];
+describe("the whole-world step fits the islands, not the whole width (the hand checks)", () => {
+	const reach = { x0: 4000, x1: 14000 }; // 10,000 world px, 10,800 with the margin
+	it("takes the leftmost island's start to the rightmost island's end, in world px", () => {
+		expect(reachOf(ISLANDS)).toEqual({ x0: 250 * 16, x1: 875 * 16 });
+		expect(reachOf([])).toBeNull();
+	});
+	it("fits that reach and a small margin each side to the width of the view", () => {
+		expect(fitZoom(1080, BIG_BOUNDS, reach)).toBeCloseTo(0.1, 12);
+		expect(fitZoom(1920, BIG_BOUNDS, reach)).toBeCloseTo(1920 / 10_800, 12);
+		expect(fitZoom(1920, BIG_BOUNDS, reach)).toBeGreaterThan(fitZoom(1920, BIG_BOUNDS));
+	});
+	it("is never below 1/16: on a phone the farthest step is 1/16", () => {
+		expect(FAR_MIN).toBe(1 / 16);
+		expect(fitZoom(375, BIG_BOUNDS, reach)).toBe(1 / 16); // 375 / 10,800 is a 29th
+		expect(fitZoom(375, BIG_BOUNDS)).toBe(1 / 16);
+		expect(fitZoom(0, BIG_BOUNDS, reach)).toBe(1 / 16);
+		expect(zoomSteps(375, BIG_BOUNDS, reach)).toEqual([4, 3, 2, 1, 0.5, 0.25, 0.125, 1 / 16]);
+	});
+	it("is the last step, after the fixed steps larger than it", () => {
+		expect(zoomSteps(1080, BIG_BOUNDS, reach).slice(-2)).toEqual([0.125, fitZoom(1080, BIG_BOUNDS, reach)]);
+		const wide = zoomSteps(1920, BIG_BOUNDS, reach); // a 6th: the 1/8 step is nearer than the fit and left out
+		expect(wide).toEqual([4, 3, 2, 1, 0.5, 0.25, 1920 / 10_800]);
+		expect(zoomSteps(0, BIG_BOUNDS, reach)).toEqual([...STEPS]);
+	});
+	it("falls back to the whole width when no island is given", () => {
+		expect(zoomSteps(1920, BIG_BOUNDS, null)).toEqual(zoomSteps(1920, BIG_BOUNDS));
+	});
+	it("rests with the islands in the middle of the view when it is the fit, and about the pointer when the floor stopped it", () => {
+		const steps = zoomSteps(1000, BIG_BOUNDS, reach); // V is 1000 wide: the fit is 1000 / 10,800
+		const fit = zoomAbout(cam(5000, 1400, 0.125), steps, -1, { x: 900, y: 50 }, V, BIG_BOUNDS, 0, true, reach);
+		expect(fit.to).toBe(steps[steps.length - 1]);
+		expect([fit.x, fit.y]).toEqual([9000, 1280]);
+		const phone = { w: 375, h: 700 };
+		const floor = zoomSteps(phone.w, BIG_BOUNDS, reach); // ends at 1/16: the view shows 6,000 of the 10,800
+		const far = zoomAbout(cam(5000, 1400, 0.125), floor, -1, { x: 300, y: 50 }, phone, BIG_BOUNDS, 0, true, reach);
+		expect(far.to).toBe(1 / 16);
+		expect(far.x).toBeCloseTo(5000 + (300 - 187.5) * (1 / 0.125 - 1 / (1 / 16)), 6); // the world point under the pointer stays under it
+		expect(far.x).not.toBe(9000);
 	});
 });
 

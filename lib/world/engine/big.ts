@@ -50,7 +50,7 @@ import { daylight, hourOf, phaseOf, skyAt, starField, sunAt } from "../sky";
 import { lapseSchedule, lookAt, shotsDue, type Shot } from "../travel/timelapse";
 import { boardingOf, floorAt, islandOfPx } from "../travel/travel";
 import { openRooms, SETTINGS_SEEN, type VillageCounts } from "../unlock";
-import { BIG_BOUNDS, drift, followBig, himOnScreen, homeTo, newBigCamera, offScreen, panBy, zoomAbout, zoomSteps } from "../view/camera-big";
+import { BIG_BOUNDS, drift, followBig, himOnScreen, homeTo, newBigCamera, offScreen, panBy, reachOf, zoomAbout, zoomSteps } from "../view/camera-big";
 import { interacting, NO_GESTURE, onKey, onPointer, onWheel, worldMayTake, zoomIntent, type Gesture, type Intent, type PointerIn, type Spot } from "../view/input";
 import { admit, adoptRead, dueSaves, finishedRooms, layNext, markRoomSaved, pinnedVillage, resumeVillage, type Village } from "../village";
 import { readVillageCounts } from "../village-counts";
@@ -877,7 +877,8 @@ function buildBigWorld(
 		if (intents.length === 0) return;
 		const list = intents;
 		intents = [];
-		const steps = zoomSteps(css.w, BIG_BOUNDS).map((s) => s * dpr);
+		const reach = reachOf(map.islands); // the whole-world step fits the islands, not the whole width of the world
+		const steps = zoomSteps(css.w, BIG_BOUNDS, reach).map((s) => s * dpr);
 		for (const it of list) {
 			if (it.kind === "home") goHome(now);
 			else if (it.kind === "tap") {
@@ -886,7 +887,7 @@ function buildBigWorld(
 				camera = panBy(camera, it.dx * dpr, it.dy * dpr, view, BIG_BOUNDS, now);
 				moveCamera("steer");
 			} else {
-				camera = zoomAbout(camera, steps, it.dir, { x: it.x * dpr, y: it.y * dpr }, view, BIG_BOUNDS, now, reduced);
+				camera = zoomAbout(camera, steps, it.dir, { x: it.x * dpr, y: it.y * dpr }, view, BIG_BOUNDS, now, reduced, reach);
 				moveCamera("steer");
 			}
 		}
