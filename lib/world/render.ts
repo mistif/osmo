@@ -290,7 +290,9 @@ export const BAKE_BUDGET = 4;
 export const BAKE_MS = 4;
 export const GROUND_STAMP_CAP = 1500; // ground blocks in view the tiles level stamps at most (ruling 8)
 const CHUNK_SPAN = CHUNK * TILE; // a chunk's side, world px
-const MARK = { outer: 5, inner: 3, lift: 16 }; // his mark below 1/2: CSS px squares, centred this many world px above his feet
+// His mark below 1/2: CSS px squares, centred this many world px above his feet. The hand checks: at 5 px, his mood's
+// colour near the sky's own, it was hard to find; nine across with a dark ring inside the snow one, it reads on any sky.
+const MARK = { outer: 9, ring: 7, inner: 5, lift: 16 };
 const LIGHT_PX = 2; // a finished build's light in the far view, CSS px
 
 // What each painter keeps, as the renderer has seen it: chunk key to version, least recently drawn first, at most its
@@ -555,9 +557,11 @@ export function drawWorld(p: Painter, s: WorldScene): { pending: number } {
 			put("sprite", frameIndex(look.frame), hx, hy, FRAME_W, FRAME_H, 1, look.flip);
 			if (look.face) put("faces", look.blink ? blinkCell(look.face) : faceCell(look.face, look.gaze), hx + FACE_AT.x, hy + FACE_AT.y, FACE_W, FACE_H, 1);
 		} else {
-			// Below 1/2 he is a small mark, so he can be found: his scarf's colour in a snow outline (white alone read as
-			// one more star at night: the look pass).
+			// Below 1/2 he is a small mark, so he can be found: his scarf's colour in a ring of his own dark outline, in a
+			// snow outline (white alone read as one more star at night: the look pass; the snow tells it from a day's sky, the
+			// dark from a night's and from his mood's colour, however near the sky's that is: the hand checks).
 			square(s.him.x, feet - MARK.lift, MARK.outer, PALETTE.p, 1);
+			square(s.him.x, feet - MARK.lift, MARK.ring, PALETTE.H, 1);
 			square(s.him.x, feet - MARK.lift, MARK.inner, s.mark ?? PALETTE.Z, 1);
 		}
 		// The balloon's basket, in front of him, so he stands in it

@@ -587,16 +587,38 @@ describe("the big world (free-will spec 3.3)", () => {
 		expect(clouds(0.125)).toBe(0);
 		expect(clouds(480 / 16384)).toBe(0);
 	});
-	it("draws his mark in his scarf's colour inside a snow outline, so at night it is no star (the look pass)", () => {
+	it("draws his mark in his scarf's colour inside a dark ring inside a snow outline, so at night it is no star (the look pass)", () => {
 		const { counted, log } = recording(pixelPainter(V.w, V.h, art));
 		drawWorld(counted, bigScene(0.125, V, { dark: 1, mark: "#3aa597" }));
 		const rects = log.filter((c) => c.kind === "rect");
 		const inner = rects.findIndex((c) => c.color === "#3aa597");
-		expect(inner).toBeGreaterThan(0);
-		expect(rects[inner - 1].color).toBe(PALETTE.p); // the outline, drawn first, round it
+		expect(inner).toBeGreaterThan(1);
+		expect(rects.slice(inner - 2, inner).map((c) => c.color)).toEqual([PALETTE.p, PALETTE.H]); // the outline and the ring, drawn first, round it
 		const dflt = recording(pixelPainter(V.w, V.h, art));
 		drawWorld(dflt.counted, bigScene(0.125, V));
 		expect(dflt.log.some((c) => c.kind === "rect" && c.color === PALETTE.Z)).toBe(true); // his scarf's own letter when none is given
+	});
+	it("draws his mark nine px across, by day and at night: a snow ring, a dark ring in it, his mood's colour in the middle (the hand checks)", () => {
+		// Five px of his mood's colour, near the sky's own, was hard to find at the far steps.
+		const mood = "#3aa597";
+		for (const [z, dark] of [[0.125, 0], [0.125, 1], [480 / 16384, 0]] as const) {
+			const p = pixelPainter(V.w, V.h, art);
+			const s = bigScene(z, V, { dark, mark: mood });
+			drawWorld(p, s);
+			const cx = Math.round((s.him.x - s.camera.x) * z + V.w / 2);
+			const cy = Math.round(((s.him.y ?? 0) - 16 - s.camera.y) * z + V.h / 2);
+			const at = (x: number, y: number) => Array.from(p.data.slice((y * V.w + x) * 4, (y * V.w + x) * 4 + 3)).join();
+			const name = (x: number, y: number) => {
+				const c = at(x, y);
+				return c === rgb("p").join() ? "snow" : c === rgb("H").join() ? "dark" : c === (parseColor(mood) ?? []).slice(0, 3).join() ? "mood" : "other";
+			};
+			const across = Array.from({ length: 11 }, (_, k) => name(cx - 5 + k, cy));
+			const down = Array.from({ length: 11 }, (_, k) => name(cx, cy - 5 + k));
+			const want = ["snow", "dark", "mood", "mood", "mood", "mood", "mood", "dark", "snow"];
+			expect(across.slice(1, 10), `zoom ${z}, dark ${dark}`).toEqual(want);
+			expect(down.slice(1, 10), `zoom ${z}, dark ${dark}`).toEqual(want);
+			expect([across[0], across[10], down[0], down[10]]).not.toContain("snow"); // nine across, no more
+		}
 	});
 	it("draws his sprite at 1/2 and his mark at 1/4", () => {
 		const near = { camera: cam(HOME.x, HOME.y - 40, 0.5) };
@@ -666,9 +688,9 @@ describe("every zoom step's pixels (480 by 270, day, no life)", () => {
 		expect(hashAt(2)).toMatchInlineSnapshot(`"0c4c2065"`);
 		expect(hashAt(1)).toMatchInlineSnapshot(`"d8d75cf9"`);
 		expect(hashAt(0.5)).toMatchInlineSnapshot(`"e28abdcc"`);
-		expect(hashAt(0.25)).toMatchInlineSnapshot(`"f6042c13"`);
-		expect(hashAt(0.125)).toMatchInlineSnapshot(`"cbf64e6b"`);
-		expect(hashAt(480 / 16384)).toMatchInlineSnapshot(`"c0a65374"`);
+		expect(hashAt(0.25)).toMatchInlineSnapshot(`"10fc4545"`);
+		expect(hashAt(0.125)).toMatchInlineSnapshot(`"895b310b"`);
+		expect(hashAt(480 / 16384)).toMatchInlineSnapshot(`"3310f750"`);
 	});
 	it("draws the same pixels with the ground from chunk bitmaps as stamped, at a whole zoom", () => {
 		for (const z of [1, 2, 3]) {
