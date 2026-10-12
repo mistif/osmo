@@ -38,6 +38,7 @@ describe("the home island in the big world", () => {
 		}
 		expect(DOCK_BLOCKS.filter((b) => b.y === 86 && b.tile === "bridge-board").map((b) => b.x)).toEqual([506, 507, 508, 509]);
 		expect(DOCK_BLOCKS.filter((b) => b.x === DOCK_END_X && b.y < 86)).toEqual([]);
+		expect(DOCK_BLOCKS.some((b) => b.tile === "rope")).toBe(false); // no loose rope in the air (the look pass)
 		expect([DOCK_BOARD_X, DOCK_END_X]).toEqual([508, 509]);
 		expect(DOCK_DECK).toEqual({ x0: 506, x1: 510, rows: [86, 86, 86, 86], from: 0, to: 0 });
 		for (const c of [...BALLOON_ENVELOPE, BALLOON_BASKET]) expect(TILE_IDS).toContain(c.tile);

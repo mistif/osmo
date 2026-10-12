@@ -15,10 +15,10 @@ export const homePx = (x: number): number => x + HOME_DX * TILE;
 export const homePy = (y: number): number => y + HOME_DY * TILE;
 
 // The balloon dock (phase 2): four boards off the island's east end (its last column is 505), level with its snow row so
-// he walks onto them, on a strut against the rock, with a mooring post at the island's edge and its rope out toward the
-// balloon. The far board (DOCK_END_X) is left clear above: a rope bridge east of home starts there (bridgeEnd), so the
-// dock is the first stretch of that walk, and the rules count the dock's boards as land (T6's ruleWorldOf, given
-// DOCK_DECK). Static ground, never laid or saved; added to the ground only when BUILDS is on.
+// he walks onto them, on a strut against the rock, with a mooring post at the island's edge. The far board (DOCK_END_X)
+// is left clear above: a rope bridge east of home starts there (bridgeEnd), so the dock is the first stretch of that
+// walk, and the rules count the dock's boards as land (T6's ruleWorldOf, given DOCK_DECK). Static ground, never laid or
+// saved; added to the ground only when BUILDS is on.
 export const DOCK_BOARD_X = 508; // the column he stands on to board
 export const DOCK_END_X = 509; // the far board
 export const DOCK_BLOCKS: readonly Block[] = [
@@ -28,7 +28,6 @@ export const DOCK_BLOCKS: readonly Block[] = [
 	{ x: 509, y: 86, tile: "bridge-board", layer: "ground" },
 	{ x: 506, y: 87, tile: "post", layer: "ground" },
 	{ x: 506, y: 85, tile: "post", layer: "ground" },
-	{ x: 507, y: 85, tile: "rope", layer: "ground" },
 ];
 export const DOCK_DECK: Deck = { x0: 506, x1: 510, rows: [86, 86, 86, 86], from: 0, to: 0 };
 
