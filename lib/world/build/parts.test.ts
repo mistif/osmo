@@ -34,6 +34,7 @@ describe("the parts library (spec 4.1)", () => {
 		}
 		if (p.fit === "fixed") for (const row of p.map) expect(row.length).toBe(p.map[0].length);
 		if (p.fit === "row") expect(() => rowsAt(p.map, 9)).not.toThrow();
+		if (p.id === "roof-dome") for (const w of [3, 5, 7]) expect(shown(p, w)[0], `the dome's top at ${w}`).toMatch(/^\.*<=>\.*$/);
 		if (p.fit === "gable" || p.fit === "spire") {
 			expect(p.map).toHaveLength(1);
 			expect(p.map[0]).toHaveLength(p.fit === "spire" && p.map[0].length === 6 ? 6 : 4);

@@ -49,8 +49,9 @@ export const PARTS: readonly Part[] = [
 	// Its fill is the clear glass-wall, not today's "glass" (the warm lit pane, which glows at night).
 	{ id: "roof-glass-gable", name: "glass roof", group: "tops", role: "roof", material: null, fit: "gable", map: ["<=>^"],
 		legend: { "<": L("glass-roof-l", "roof"), "=": L("glass-wall", "roof"), ">": L("glass-roof-r", "roof"), "^": L("roof-peak", "roof") } },
-	{ id: "roof-dome", name: "glass dome", group: "tops", role: "roof", material: null, fit: "gable", map: ["<=>^"],
-		legend: { "<": L("dome-l", "roof"), "=": L("dome", "roof"), ">": L("dome-r", "roof"), "^": L("dome", "roof") } },
+	// No peak: it ends flat at its last row of three, as the observatory's dome does (util.ts roofRows).
+	{ id: "roof-dome", name: "glass dome", group: "tops", role: "roof", material: null, fit: "gable", map: ["<=>."],
+		legend: { "<": L("dome-l", "roof"), "=": L("dome", "roof"), ">": L("dome-r", "roof") } },
 	{ id: "crown-battlement", name: "battlements", group: "tops", role: "roof", material: null, fit: "row", map: ["TTT"], legend: { T: L("battlement", "roof") } },
 	{ id: "roof-awning", name: "striped awning", group: "tops", role: "roof", material: null, fit: "row", map: ["AAA"], legend: { A: L("awning", "roof") } },
 	{ id: "chimney-brick", name: "chimney", group: "tops", role: "chimney", material: null, fit: "fixed", map: ["T", "C"],
