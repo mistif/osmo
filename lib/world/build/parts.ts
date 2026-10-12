@@ -130,4 +130,16 @@ export const PARTS: readonly Part[] = [
 		map: ["hhhhh", "IaaaI", "IbbbI", "IbsbI"],
 		legend: { h: L("beam-h", "walls"), I: L("pillar", "walls"), a: L("arch-back", "walls"), b: L("back-stone", "backwall"), s: L("statue-back", "backwall") } },
 	{ id: "loft-posts", name: "open loft", group: "structure", role: "beam", material: null, fit: "row", map: ["P.P", "P.P"], legend: { P: L("post", "walls") } },
+	// Appended in the hand checks' fix round: the lighthouse's own parts (it read as a second bell tower). A shaft three
+	// round in red and white bands, two rows each (its storeys stack them evenly); the gallery's rail in front of the lamp
+	// room's drum, on its deck; the glazed lamp room, lit at night (texture.ts); its cap, a ribbed dome under a vent ball.
+	{ id: "storey-lighthouse", name: "striped tower", group: "structure", role: "storey", material: null, fit: "row",
+		map: ["aAb", "aAb", "cCd", "cCd"],
+		legend: { a: L("light-red-l", "walls"), A: L("light-red", "walls"), b: L("light-red-r", "walls"), c: L("light-white-l", "walls"), C: L("light-white", "walls"), d: L("light-white-r", "walls") } },
+	{ id: "beam-gallery", name: "lamp gallery", group: "additions", role: "beam", material: null, fit: "row", overhang: 1,
+		map: ["rgr", "BBB"], legend: { r: L("rail", "walls"), g: L("gallery-rail", "walls"), B: L("deck", "walls") } },
+	{ id: "top-lamp-room", name: "glazed lamp room", group: "tops", role: "top", material: null, fit: "fixed", map: ["lLr"],
+		legend: { l: L("lamp-room-l", "windows"), L: L("lamp-room", "windows"), r: L("lamp-room-r", "windows") } },
+	{ id: "roof-lamp-cap", name: "lamp cap", group: "tops", role: "roof", material: null, fit: "gable", map: ["<=>^"],
+		legend: { "<": L("lamp-cap-l", "roof"), "=": L("lamp-cap", "roof"), ">": L("lamp-cap-r", "roof"), "^": L("lamp-cap-peak", "roof") } },
 ];

@@ -23,6 +23,9 @@ export const MORE_TILE_IDS = [
 	"statue-top", "statue-foot", "arch-wide-l", "arch-wide-k", "arch-wide-r",
 	// Appended in the hand checks' fix round; every tile above keeps its cell.
 	"pond-coping", "pond-jetty", "pond-deep", "pond-bank-l", "pond-bank-r",
+	"light-red-l", "light-red", "light-red-r", "light-white-l", "light-white", "light-white-r", "gallery-rail",
+	"lamp-room-l", "lamp-room", "lamp-room-r", "lamp-room-l-lit", "lamp-room-lit", "lamp-room-r-lit",
+	"lamp-cap-l", "lamp-cap", "lamp-cap-r", "lamp-cap-peak",
 ] as const;
 export type MoreTileId = (typeof MORE_TILE_IDS)[number];
 
@@ -789,6 +792,90 @@ const pondJetty = make((x, y) => {
 	return ".";
 });
 
+// --- The lighthouse (the hand checks: it read as a second bell tower). Its shaft is three cells round, painted in red
+// and white bands a storey's half deep (light at its upper left, the shade toward the right, outlined on its right),
+// laid in courses of dressed stone. Over it the gallery's rail stands in front of the lamp room's dark drum; the lamp
+// room is glazed in an iron frame round its lens on a brass stand, inset from the drum; it is lit at night (its -lit
+// cells); over it the cap, a ribbed red dome on an eave, and on its top a vent ball and spike. Each is three cells,
+// drawn across all 48 px (gx), so the shaft reads as round and the room as one. ---
+const LIGHT_RAMP = { red: ["i", ":", ";", "f"], white: ["p", "-", "{", "|"] } as const;
+const LIGHT_EDGE = { red: "f", white: "~" } as const;
+function lightBand(c: "red" | "white", gx: number, y: number): string {
+	if (gx === 47) return LIGHT_EDGE[c];
+	const lv =
+		gx >= 5 && gx <= 12 ? 0
+		: gx === 4 || gx === 13 ? (checker(gx, y) ? 0 : 1)
+		: gx < 30 ? 1
+		: gx === 30 ? (checker(gx, y) ? 2 : 1)
+		: gx < 40 ? 2
+		: gx === 40 ? (checker(gx, y) ? 3 : 2)
+		: 3;
+	const course = y === 7 || y === 15; // the bed joints, two courses a cell
+	const joint = (gx + (y < 8 ? 0 : 6)) % 12 === 11; // the head joints, a stone every 12 px, every other course offset
+	return LIGHT_RAMP[c][Math.min(3, lv + (course || joint ? 1 : 0))];
+}
+const band = (c: "red" | "white", k: number) => make((x, y) => lightBand(c, x + k * N, y));
+// The gallery's rail (rail) in front of the lamp room's drum, dark between the balusters.
+const galleryRail = make((x, y) => (rail[y][x] === "." ? (y < 2 ? (y === 0 ? "a" : "b") : "a") : rail[y][x]));
+// The lamp room, 42 px of it inset 3 px from each side of the drum: an iron frame and four mullions round three panes,
+// the middle one holding the lens. Lit: the panes warm with the lamp, the lens its white-hot core.
+const LENS = { cx: 23.5, cy: 7, r: 5.2 };
+function lampRoom(gx: number, y: number, lit: boolean): string {
+	if (gx < 3 || gx > 44) return ".";
+	if (y === 0) return "a";
+	if (y === 1) return gx === 44 ? "a" : "c";
+	if (y === 15) return "a";
+	if (y === 14) return gx === 44 ? "a" : "d";
+	if (gx === 3) return "d";
+	if (gx === 44) return "a";
+	if (gx === 14 || gx === 33) return gx === 14 ? "c" : "b";
+	const d = Math.hypot(gx - LENS.cx, (y - LENS.cy) * 0.85) / LENS.r;
+	if (gx >= 22 && gx <= 25 && y >= 12) return gx === 22 ? "=" : gx === 25 ? ">" : "<"; // the lens's brass stand
+	if (d <= 1) {
+		if (d > 0.78) return gx + y < LENS.cx + LENS.cy ? "=" : ">"; // the brass rim, lit on its upper left
+		if (lit) return d < 0.45 ? "v" : "t";
+		return (y & 1) === 0 ? "s" : "#"; // the prism's rings catching the day
+	}
+	if (lit) return y >= 11 ? "u" : (gx + y) % 7 === 0 ? "v" : "t";
+	const px = gx < 14 ? gx - 4 : gx < 33 ? gx - 15 : gx - 34;
+	if (px + y === 7 || px + y === 8) return "s"; // the sky's glint across each pane
+	return px + y < 7 ? "r" : "q";
+}
+const lampRoomCell = (k: number, lit: boolean) => make((x, y) => lampRoom(x + k * N, y, lit));
+// The cap: an eave three rows deep across the drum's width, a dome over the room ribbed every 8 px, lit on its upper
+// left and outlined on its right; the vent ball and its spike stand in the cell over its middle.
+function lampCap(gx: number, y: number): string {
+	if (y >= 12) return y === 12 ? (gx === 47 ? "f" : gx < 8 ? "i" : ":") : y === 15 ? "f" : gx === 47 ? "f" : ";";
+	const half = 21;
+	const t = (gx + 0.5 - 24) / half;
+	if (Math.abs(t) >= 1) return ".";
+	const top = 12 - Math.round(11 * Math.sqrt(1 - t * t));
+	if (y < top) return ".";
+	if (y === top) return t < 0 ? "i" : t < 0.5 ? ":" : "f";
+	if (t > 0.86) return "f";
+	if (gx % 8 === 3) return ";"; // a rib
+	return t < -0.35 && y < 9 ? "i" : t > 0.45 ? ";" : ":";
+}
+const lampCapCell = (k: number) => make((x, y) => lampCap(x + k * N, y));
+const VENT = [
+	"................",
+	".......c........",
+	".......cb.......",
+	".......cb.......",
+	".......ca.......",
+	"......cba.......",
+	".....i::;f......",
+	"....i:i::;f.....",
+	"....:i:::;f.....",
+	"....::::;;f.....",
+	".....;;;;f......",
+	"......fff.......",
+	".......ca.......",
+	"......:::;......",
+	".....i:::;f.....",
+	".....::::;f.....",
+];
+
 // --- A canopy's four corners: the leaves with the corner rounded off (a leafy edge, its radius stirred a little by the
 // hash), the edge in deep shadow where it faces down or right, so a tree reads as a round crown, not a box. ---
 const canopyCorner = (right: boolean, bottom: boolean) =>
@@ -1023,6 +1110,23 @@ export const MORE_TILES: Readonly<Record<Exclude<MoreTileId, FootTileId | PondTi
 	"pond-coping": pondCoping,
 	"pond-jetty": pondJetty,
 	"pond-deep": pondDeep,
+	"light-red-l": band("red", 0),
+	"light-red": band("red", 1),
+	"light-red-r": band("red", 2),
+	"light-white-l": band("white", 0),
+	"light-white": band("white", 1),
+	"light-white-r": band("white", 2),
+	"gallery-rail": galleryRail,
+	"lamp-room-l": lampRoomCell(0, false),
+	"lamp-room": lampRoomCell(1, false),
+	"lamp-room-r": lampRoomCell(2, false),
+	"lamp-room-l-lit": lampRoomCell(0, true),
+	"lamp-room-lit": lampRoomCell(1, true),
+	"lamp-room-r-lit": lampRoomCell(2, true),
+	"lamp-cap-l": lampCapCell(0),
+	"lamp-cap": lampCapCell(1),
+	"lamp-cap-r": lampCapCell(2),
+	"lamp-cap-peak": VENT,
 	"leaves-tl": canopyCorner(false, false),
 	"leaves-tr": canopyCorner(true, false),
 	"leaves-bl": canopyCorner(false, true),

@@ -38,7 +38,11 @@ const FIX_ROUND = ["deck", "spire-l", "spire-r", "spire-l-hi", "spire-r-hi", "sp
 	"statue-top", "statue-foot", "arch-wide-l", "arch-wide-k", "arch-wide-r",
 ];
 // Appended in the hand checks' fix round, after the 155.
-const HAND = ["pond-coping", "pond-jetty", "pond-deep", "pond-bank-l", "pond-bank-r"];
+const HAND = ["pond-coping", "pond-jetty", "pond-deep", "pond-bank-l", "pond-bank-r",
+	"light-red-l", "light-red", "light-red-r", "light-white-l", "light-white", "light-white-r", "gallery-rail",
+	"lamp-room-l", "lamp-room", "lamp-room-r", "lamp-room-l-lit", "lamp-room-lit", "lamp-room-r-lit",
+	"lamp-cap-l", "lamp-cap", "lamp-cap-r", "lamp-cap-peak",
+];
 // Tiles with no transparent pixel.
 const FILLED: TileId[] = [
 	"snow", "stone", "stone-dark", "brick", "brick-dark", "plank", "beam-h", "glass", "window", "window-top",
@@ -145,6 +149,22 @@ describe("the tiles", () => {
 			expect(same, night).toBeGreaterThan(day === "dome" ? 40 : 96); // the frame, the cames, the rim are unchanged
 			expect(n.join(""), night).toMatch(/[tuv]/); // lamp light behind the glass
 			expect(n.join("").replace(/[^tuv]/g, "").length, night).toBeGreaterThan(day === "shelf-window" ? 20 : 30);
+		}
+	});
+	it("lights the lighthouse's lamp room at night in the same frame as by day (the hand checks)", () => {
+		for (const [day, night] of [["lamp-room-l", "lamp-room-l-lit"], ["lamp-room", "lamp-room-lit"], ["lamp-room-r", "lamp-room-r-lit"]] as const) {
+			const d = TILES[day];
+			const n = TILES[night];
+			let same = 0;
+			for (let y = 0; y < 16; y++) {
+				for (let x = 0; x < 16; x++) {
+					if (d[y][x] === n[y][x]) same++;
+					expect(n[y][x] === ".", `${night} ${x},${y}`).toBe(d[y][x] === ".");
+				}
+			}
+			expect(same, night).toBeGreaterThan(40); // the iron frame, the mullions and the brass are unchanged
+			expect(d.join(""), day).not.toMatch(/[tuv]/); // no lamp light by day
+			expect(n.join("").replace(/[^tuv]/g, "").length, night).toBeGreaterThan(80); // the panes full of it at night
 		}
 	});
 	it("keeps the worked example exactly", () => {

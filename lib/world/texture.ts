@@ -29,7 +29,8 @@ export function variantOf(id: TileId, x: number, y: number): TileId {
 	return h < VARIANT_SHARE ? v[0] : h < 2 * VARIANT_SHARE ? v[1] : id;
 }
 
-// --- After dark (from LIT_FROM): the windows, the library's bookcase windows and the observatory's dome are lit. ---
+// --- After dark (from LIT_FROM): the windows, the library's bookcase windows, the observatory's dome and the
+// lighthouse's lamp room are lit. ---
 export const LIT_FROM = 0.5;
 const LIT: Partial<Record<TileId, TileId>> = {
 	window: "window-lit",
@@ -38,6 +39,9 @@ const LIT: Partial<Record<TileId, TileId>> = {
 	"dome-l": "dome-l-lit",
 	dome: "dome-lit",
 	"dome-r": "dome-r-lit",
+	"lamp-room-l": "lamp-room-l-lit", // the lighthouse's lamp room (the hand checks)
+	"lamp-room": "lamp-room-lit",
+	"lamp-room-r": "lamp-room-r-lit",
 };
 export const litOf = (id: TileId, dark: number): TileId => (dark >= LIT_FROM ? (LIT[id] ?? id) : id);
 

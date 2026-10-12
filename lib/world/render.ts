@@ -155,6 +155,7 @@ const LIGHTS: Partial<Record<TileId, { x: number; y: number; r: number; strength
 	forge: { x: 8, y: 11, r: 44, strength: 0.5 },
 	"shelf-window-lit": { x: 8, y: 8, r: 28, strength: 0.26 },
 	"dome-lit": { x: 8, y: 8, r: 34, strength: 0.1 }, // fifteen panes, their glows overlapping: each faint
+	"lamp-room-lit": { x: 8, y: 7, r: 56, strength: 0.5 }, // the lighthouse's lens, the brightest light on an island
 };
 // The life's colours (polish pass): smoke a pale grey, dust a pale mortar (the stone's own light is lost against the
 // wall it falls past), both graded toward night with the art; snow the snow's highlight, never graded (it catches
