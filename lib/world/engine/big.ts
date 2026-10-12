@@ -60,8 +60,9 @@ import { createSeenStore } from "../../shell/rail";
 import { supabase } from "../../supabase";
 import { TALK } from "../../shell/route";
 import {
-	beginDecision, cameraAfter, catchUpStep, decisionStarted, decksOf, drawLists, endDecision, followZoom, goalsOf, lapseRuns, mayDecide, OPEN_GATE, rowsOf,
-	shiftedVillage, showHome, startOf, WILL_LINE_MS, yardOf, type CameraEvent, type CameraMode, type CatchUp, type Gate, type PathEl,
+	askedWill, beforeDecision, beginDecision, cameraAfter, catchUpStep, decisionStarted, decksOf, drawLists, endDecision, followZoom, goalsOf, lapseRuns, mayAskWill,
+	mayDecide, NO_WILL_CALLS, OPEN_GATE, rowsOf, shiftedVillage, showHome, startOf, WILL_LINE_MS, yardOf, type CameraEvent, type CameraMode, type CatchUp, type Gate,
+	type PathEl, type WillCalls,
 } from "./flow";
 import type { Engine, Hooks, WorldProps } from "./types";
 
@@ -183,6 +184,7 @@ function buildBigWorld(
 	let lineTimer: ReturnType<typeof setTimeout> | null = null;
 	let devN = 0;
 	let willOff = false; // the will answered "off" this visit: code picks from then on
+	let willCalls: WillCalls = NO_WILL_CALLS; // the model's picks this page asked for today (at most four)
 	let grantAt: number | null = null; // the dev page's last grant
 
 	let overrides: Overrides = {};
@@ -477,6 +479,28 @@ function buildBigWorld(
 		const mine = gen;
 		try {
 			if (!builds) return false;
+			// The table first: with this page's progress saved, a free build in progress there (another tab chose first, or an
+			// insert of ours landed after this page stopped listening) is adopted with no new pick, and four decisions made
+			// today elsewhere mean none now.
+			if (persist) {
+				await saveBuilds("hidden");
+				if (g.dead || gen !== mine || !builds) return false;
+				const fresh = await loadBuilds();
+				if (g.dead || gen !== mine || !builds) return false;
+				const next = fresh.ok ? beforeDecision(fresh.rows, Date.now()) : "go";
+				if (next !== "go") {
+					builds = resumeBuilds(fresh.rows, openNow(), iso());
+					settle();
+					if (next === "spent") return false;
+					const said = freeInProgress(builds)?.reason ?? null;
+					started = true;
+					if (said) {
+						lastLine = said;
+						if (!catchingUp) showLine(said);
+					}
+					return true;
+				}
+			}
 			const rows = rowsOf(builds);
 			const n = rows.filter((r) => roomOfRecipe(r.recipe) === null).length;
 			const cands = plan(
@@ -489,10 +513,11 @@ function buildBigWorld(
 			// The will (spec 5): with three candidates, in the room, and the will not known to be off this visit, the model
 			// picks one and says why. Its line failed the server's checks: code's line for its pick. Off: code picks for the
 			// rest of the visit. Any other fallback (no session, the allowance spent, an error): code's pick and line.
-			if (cands.length === 3 && persist && !willOff) {
+			if (cands.length === 3 && persist && !willOff && mayAskWill(willCalls, Date.now())) {
 				const token = await accessToken();
 				if (g.dead || gen !== mine || !builds) return false;
 				if (token) {
+					willCalls = askedWill(willCalls, Date.now()); // booked whether or not the pick starts a build
 					const a = await askWill((...args: Parameters<typeof fetch>) => fetch(...args), token, willBody(cands, moodWords(live.current.agent.mood), rows, RECIPES));
 					if (g.dead || gen !== mine || !builds) return false;
 					if (a.source === "model") {

@@ -10,8 +10,8 @@ import { balloonPath, idleSpot } from "../travel/travel";
 import { worldMayTake } from "../view/input";
 import { pinnedVillage } from "../village";
 import {
-	beginDecision, cameraAfter, catchUpStep, decisionStarted, decksOf, drawLists, endDecision, followZoom, goalsOf, IDLE_SLOT_MS, lapseRuns, lightsOf, mayDecide, modeOf,
-	NO_ROOM_MS, OPEN_GATE, rowsOf, shiftedVillage, showHome, startOf, WILL_LINE_MS, yardOf,
+	askedWill, beforeDecision, beginDecision, cameraAfter, catchUpStep, decisionStarted, decksOf, drawLists, endDecision, followZoom, goalsOf, IDLE_SLOT_MS, lapseRuns,
+	lightsOf, mayAskWill, mayDecide, modeOf, NO_ROOM_MS, NO_WILL_CALLS, OPEN_GATE, rowsOf, shiftedVillage, showHome, startOf, WILL_LINE_MS, yardOf,
 } from "./flow";
 
 const NOW = "2026-10-11T12:00:00.000Z";
@@ -115,6 +115,25 @@ describe("decisions (spec 4.8: one at most per due moment, two tabs at once)", (
 		expect(decisionStarted("taken", resumeBuilds([freeRow("theirs", 6)], [], NOW))).toBe(false);
 		expect(decisionStarted("taken", null)).toBe(false);
 		expect(decisionStarted("failed", resumeBuilds([freeRow("theirs", 0)], [], NOW))).toBe(false);
+	});
+	it("reads the table before a decision: adopts a build another tab (or a lost insert of its own) started, stops at the day's four", () => {
+		const t = Date.parse(NOW);
+		expect(beforeDecision([freeRow("mine", 6)], t)).toBe("go");
+		expect(beforeDecision([freeRow("mine", 6), freeRow("theirs", 0, { x: 700 })], t)).toBe("adopt");
+		const four = ["a", "b", "c", "d"].map((id, i) => freeRow(id, 6, { x: 600 + 10 * i }));
+		expect(beforeDecision(four, t)).toBe("spent");
+		expect(beforeDecision(four, t + 86_400_000)).toBe("go"); // tomorrow
+	});
+	it("asks the model at most four times a local day, whether or not a pick started a build", () => {
+		const t = Date.parse(NOW);
+		let c = NO_WILL_CALLS;
+		for (let k = 0; k < 4; k++) {
+			expect(mayAskWill(c, t)).toBe(true);
+			c = askedWill(c, t + k);
+		}
+		expect(mayAskWill(c, t + 600_000)).toBe(false);
+		expect(mayAskWill(c, t + 86_400_000)).toBe(true);
+		expect(askedWill(c, t + 86_400_000)).toMatchObject({ n: 1 });
 	});
 	it("catches up: lays the build in progress, decides when none is, stops at the blocks, the day's decisions or the castle", () => {
 		const going = resumeBuilds([freeRow("a", 2)], [], NOW);

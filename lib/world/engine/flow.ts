@@ -6,11 +6,12 @@ import { cellsOf, START_X } from "../blueprints";
 import { TILE, type Block } from "../blueprints/types";
 import { LIVE_BLOCKS } from "../build/budget";
 import { roomOfRecipe } from "../build/castle-sites";
-import { castleWaiting, finishedFree, freeInProgress, laidBuildBlocks } from "../build/state";
+import { castleWaiting, finishedFree, freeInProgress, laidBuildBlocks, resumeBuilds } from "../build/state";
 import type { BuildProgress, BuildRow, Builds } from "../build/types";
 import { baseZoom, ZOOM_IN } from "../camera";
 import { DOCK_DECK, homePx, shiftBlocks } from "../map/home";
 import { islandAt } from "../map/lookup";
+import { decidedToday, MAX_A_DAY } from "../plan/planner";
 import { HOME_DX, HOME_DY, type Deck, type Leg, type WorldMap } from "../map/types";
 import { deckOf, idleSpot, nextLeg, standFor } from "../travel/travel";
 import type { LapseRun } from "../travel/timelapse";
@@ -154,6 +155,24 @@ export const endDecision = (g: Gate, started: boolean, now: number): Gate => ({ 
 // Whether an insert started a build: a row of ours, or (taken: another tab chose first) the build the re-read shows in progress.
 export const decisionStarted = (inserted: "row" | "taken" | "failed", reread: Builds | null): boolean =>
 	inserted === "row" || (inserted === "taken" && reread !== null && freeInProgress(reread) !== null);
+
+// What the table says before a decision (read after this page's own progress is saved): a free build in progress there
+// (another tab chose first, or an insert of this page landed after it stopped listening) is adopted, with no new pick;
+// four decisions today already: none now; else go.
+export function beforeDecision(rows: readonly BuildRow[], now: number): "adopt" | "spent" | "go" {
+	if (freeInProgress(resumeBuilds(rows, [], new Date(now).toISOString())) !== null) return "adopt";
+	return decidedToday(rows, now) >= MAX_A_DAY ? "spent" : "go";
+}
+// The model's picks this page asked for in its local day (at most four picks a day, spec 5.2): a pick that started no
+// build still cost a call, so after MAX_A_DAY asks the page lets code pick until the next day.
+export type WillCalls = { day: number; n: number };
+export const NO_WILL_CALLS: WillCalls = { day: 0, n: 0 };
+const localDay = (t: number) => {
+	const d = new Date(t);
+	return d.getFullYear() * 10_000 + d.getMonth() * 100 + d.getDate();
+};
+export const mayAskWill = (c: WillCalls, now: number): boolean => c.day !== localDay(now) || c.n < MAX_A_DAY;
+export const askedWill = (c: WillCalls, now: number): WillCalls => (c.day === localDay(now) ? { day: c.day, n: c.n + 1 } : { day: localDay(now), n: 1 });
 
 // One step of the catch-up on return (spec 4.7): lay part of the free build in progress, decide a new one, or stop.
 // left: lapse blocks not laid yet; decided: decisions made in this catch-up; allowed: returnDecisions(decidedToday(...)).
