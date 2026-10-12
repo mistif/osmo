@@ -3,7 +3,7 @@
 Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk.
 
 ## Now
-- **Free will is on local main, dark** (see Just landed). Hand checks on `/dev/world` are running: an Opus agent in the browser pane, on the one dev server (port 3000), which I started. Waiting on Gur for:
+- **Free will is on local main, dark, gate green and ready for main's migration review and the push** (see Just landed). The dev server on port 3000 is the one I started for the hand checks; it is still running. Waiting on Gur for:
   - his OK for the migrations and the push (asks to main below);
   - confirming the budget change (150 to 40 blocks a day, to keep "fills in about three months");
   - his go for the will probe.
@@ -11,6 +11,22 @@ Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk
 **The fallback v2 spec is written and waiting for Gur's review:** `docs/superpowers/specs/2026-10-02-osmo-fallback-v2-design.md` (`201887d`; guests reach tier 2, Gur's answer, `d9317ae`). Gur chose gpt-4.1-mini as tier 2, a short honest line with no model, and the dictionary for no-model only. Cloud's eight points are folded in (the crisis check keeps its typo tolerance with a small generated list; one budget split 90/10 between the tiers; timing 6 s plus the rest of 12 s; retry only on errors another model can fix; the quota day-stop). **→ main:** it removes vocabulary learning, so `user_words` goes unread (your migration, later). `chatlog.test.ts` replies will change when small talk goes.
 
 ## Just landed
+- **Free-will hand-check fixes, `514488a` (merge), local main, not pushed.** The hand checks on `/dev/world` passed:
+  - **Frame cost:** home's close view is 1.6 to 2.7 ms, so no regression; every step averages under 8 ms.
+  - **Also fine:** zoom and pan, the time-lapse, all 26 recipes, and the planner, which gives three different candidates in every mood.
+
+  What they found is now fixed:
+  - **Bake spike:** the first zoom-out to 1/2 hit 28.7 ms once while baking chunks. Each frame now stops baking after about 4 ms.
+  - **Zoom anchor:** the keys and zoom buttons zoom about him while he is on screen.
+  - **Whole-world step:** it fits the islands' reach, never below 1/16 and never closer than 1, and no fixed step sits within a fifth of it.
+  - **Dev preview:** the recipe preview keeps him on land.
+  - **Optional art files:** each is asked for once per page load, so a missing one gives one 404.
+  - **Pond:** dug into the ground, with a jetty.
+  - **Lighthouse:** reads as one now (striped shaft, gallery, glowing lamp room).
+  - **Rope bridge:** the handrail reads at 1/2.
+  - **His far mark:** 9 px, with rings.
+
+  Checks: 3,551 tests, tsc and lint green. Not checked in the browser: touch gestures, reduced motion and a ratio-3 phone; the pane has a ratio of 2.
 - **Free will, the big world and the build grammar: on local main as `32c955b` (merge of `fw/merge`) plus `a7c6c80` (two lint warnings), not pushed, dark** (`NEXT_PUBLIC_OSMO_BIGWORLD`, `NEXT_PUBLIC_OSMO_BUILDS` and `OSMO_WILL` all off, so the room is unchanged).
   - **How it was built:** Task 0 (contracts), then ten tracks in parallel worktrees, each merged by an overlap watcher. Every track stayed in its own files, with no repair rounds. Then I0 to I3, an Opus whole-branch review (9 findings, all fixed), and 22 look fixes.
   - **Checks:** 188 files and 3,474 tests pass; tsc, lint and `next build --webpack` are green.
