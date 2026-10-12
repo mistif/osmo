@@ -80,6 +80,12 @@ describe("the twenty seed recipes (spec 4.2)", () => {
 			expect(between.some((t) => !t.optional && (t.parts.includes("loft-posts") || t.role === "top")), r.id).toBe(true);
 		}
 	});
+	it("keeps the glowing dome for the lighthouse and the belvedere, never the shrine (it was the loudest thing at night)", () => {
+		const roofs = (id: string) => RECIPES.find((r) => r.id === id)?.tiers.filter((t) => t.role === "roof").flatMap((t) => t.parts) ?? [];
+		expect(roofs("shrine")).not.toContain("roof-dome");
+		expect(roofs("shrine").length).toBeGreaterThan(0);
+		expect(roofs("lighthouse")).toContain("roof-dome");
+	});
 	it("can never stack higher than 24 rows (spec 4.3)", () => {
 		for (const r of RECIPES) expect(tallest(r), r.id).toBeLessThanOrEqual(24);
 	});

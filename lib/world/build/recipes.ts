@@ -35,7 +35,7 @@ export const RECIPES: readonly Recipe[] = [
 		tiers: [T("floor", "floor", ["floor-boards"]), T("storey", "storey", ["storey-open-wood"]), T("roof", "roof", ["roof-awning"])],
 		doors: [], decor: { parts: ["decor-lantern"], max: 1 }, sides: { parts: ["side-bench", "side-sign"], max: 1 } },
 	{ id: "shrine", name: "shrine", kind: "shrine", size: "small", site: "level", width: [5, 5], materials: ["stone"],
-		tiers: [T("floor", "floor", ["floor-step"]), T("storey", "storey", ["storey-shrine"]), T("roof", "roof", ["roof-tile-gable", "roof-dome"])],
+		tiers: [T("floor", "floor", ["floor-step"]), T("storey", "storey", ["storey-shrine"]), T("roof", "roof", ["roof-tile-gable", "roof-thatch-gable"])],
 		doors: [], decor: { parts: ["decor-bell", "decor-lantern"], max: 1 }, sides: { parts: ["side-lamp-post"], max: 1 } },
 	{ id: "pond", name: "pond with a dock", kind: "pond", size: "small", site: "level", width: [5, 9], materials: ["stone"],
 		tiers: [T("basin", "storey", ["pond-basin"])], doors: [], decor: none, sides: { parts: ["side-bench", "side-bed"], max: 1 } },
