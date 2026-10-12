@@ -9,6 +9,7 @@
 import { WORKSHOP } from "./blueprints/workshop";
 import { TILE, type Block } from "./blueprints/types";
 import { toScreen, type Camera, type View } from "./camera";
+import { HOME_DX, HOME_DY } from "./map/types";
 
 export const SNOW_MAX = 40;
 export const SMOKE_MAX = 6;
@@ -97,12 +98,17 @@ const chimneyRow = WORKSHOP.map.findIndex((r) => r.includes("T"));
 // The chimney's cap (tile coordinates): the battlement over the workshop's chimney brick.
 export const CHIMNEY = { x: WORKSHOP.x + WORKSHOP.map[chimneyRow].indexOf("T"), y: WORKSHOP.y + chimneyRow };
 export const SMOKE_FROM = { x: (CHIMNEY.x + 0.5) * TILE, y: CHIMNEY.y * TILE + 3 }; // world px
-export const chimneyLaid = (laid: readonly Block[]): boolean => laid.some((b) => b.x === CHIMNEY.x && b.y === CHIMNEY.y);
+// The chimney and its smoke where the castle stands in the big world (moved by the home offset).
+export const HOME_CHIMNEY = { x: CHIMNEY.x + HOME_DX, y: CHIMNEY.y + HOME_DY };
+export const HOME_SMOKE_FROM = { x: SMOKE_FROM.x + HOME_DX * TILE, y: SMOKE_FROM.y + HOME_DY * TILE };
+// Whether the chimney's cap is among the blocks laid; `at` is where the cap is (HOME_CHIMNEY in the big world).
+export const chimneyLaid = (laid: readonly Block[], at: { x: number; y: number } = CHIMNEY): boolean => laid.some((b) => b.x === at.x && b.y === at.y);
 export const SMOKE_EVERY_MS = 1400;
 export const SMOKE_SPELL_MS = 9_000;
 export const SMOKE_CYCLE_MS = 30_000;
 export const SMOKE_LIFE_MS = 5_600;
-export function smokeAt(wallMs: number, always = false): Puff[] {
+// `from` is where the plume starts, world px (HOME_SMOKE_FROM in the big world).
+export function smokeAt(wallMs: number, always = false, from: { x: number; y: number } = SMOKE_FROM): Puff[] {
 	const out: Puff[] = [];
 	const first = Math.ceil((wallMs - SMOKE_LIFE_MS) / SMOKE_EVERY_MS);
 	const last = Math.floor(wallMs / SMOKE_EVERY_MS);
@@ -113,8 +119,8 @@ export function smokeAt(wallMs: number, always = false): Puff[] {
 		const life = SMOKE_LIFE_MS / 1000;
 		if (age < 0 || age >= life) continue;
 		out.push({
-			x: SMOKE_FROM.x + age * 5 + Math.sin(age * 1.7 + k) * 1.5,
-			y: SMOKE_FROM.y - age * 9,
+			x: from.x + age * 5 + Math.sin(age * 1.7 + k) * 1.5,
+			y: from.y - age * 9,
 			r: 2 + age * 1.1,
 			alpha: 0.55 * (1 - age / life) * Math.min(1, age / 0.3),
 		});
@@ -132,9 +138,12 @@ const PLUME = (() => {
 	const r = Math.ceil((2 + life * 1.1) * 1.3); // the largest puff as drawn (render.ts PUFF.grow)
 	return { x0: SMOKE_FROM.x - 1.5 - r, x1: SMOKE_FROM.x + life * 5 + 1.5 + r, y0: SMOKE_FROM.y - life * 9 - r, y1: SMOKE_FROM.y + r };
 })();
-export function smokeSeen(camera: Camera, view: View, now: number): boolean {
-	const a = toScreen(camera, view, now, PLUME.x0 - SMOKE_MARGIN, PLUME.y0 - SMOKE_MARGIN);
-	const b = toScreen(camera, view, now, PLUME.x1 + SMOKE_MARGIN, PLUME.y1 + SMOKE_MARGIN);
+// `from` is where the plume starts (SMOKE_FROM unless the castle stands elsewhere): the box moves with it.
+export function smokeSeen(camera: Camera, view: View, now: number, from: { x: number; y: number } = SMOKE_FROM): boolean {
+	const dx = from.x - SMOKE_FROM.x;
+	const dy = from.y - SMOKE_FROM.y;
+	const a = toScreen(camera, view, now, PLUME.x0 + dx - SMOKE_MARGIN, PLUME.y0 + dy - SMOKE_MARGIN);
+	const b = toScreen(camera, view, now, PLUME.x1 + dx + SMOKE_MARGIN, PLUME.y1 + dy + SMOKE_MARGIN);
 	return b.x > 0 && b.y > 0 && a.x < view.w && a.y < view.h;
 }
 
@@ -179,6 +188,7 @@ export type LifeInput = {
 	landing: Landing | null;
 	motion: boolean;
 	force?: "all" | "none";
+	smokeFrom?: { x: number; y: number }; // where the plume starts, world px: the big world passes HOME_SMOKE_FROM; SMOKE_FROM when left out
 };
 export function lifeAt(o: LifeInput): Life {
 	if (!o.motion) return NO_LIFE;
@@ -187,7 +197,7 @@ export function lifeAt(o: LifeInput): Life {
 	return {
 		snow: none || !(o.night || all) ? [] : snowAt(o.wallMs, o.view, o.scale, all ? 1 : snowShare(o.wallMs)),
 		birds: none || !(o.day || all) ? [] : birdsAt(o.wallMs, o.view, o.scale, all),
-		smoke: none || !o.chimney ? [] : smokeAt(o.wallMs, all),
+		smoke: none || !o.chimney ? [] : smokeAt(o.wallMs, all, o.smokeFrom ?? SMOKE_FROM),
 		dust: dustAt(o.landing, o.now),
 		pop: popOf(o.landing, o.now),
 	};

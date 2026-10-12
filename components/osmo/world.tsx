@@ -2,16 +2,18 @@
 
 // Osmo's village (spec docs/superpowers/specs/2026-10-09-osmo-village-design.md, phase 1): the sky, the sun that is
 // his heart, the island, the hall he builds, and him with his line above his head. app/assistant.tsx loads it after
-// first paint, and only when NEXT_PUBLIC_OSMO_SHELL2 and NEXT_PUBLIC_OSMO_WORLD are both on.
-import { type RefObject, useEffect, useRef, useState } from "react";
+// first paint, and only when NEXT_PUBLIC_OSMO_SHELL2 and NEXT_PUBLIC_OSMO_WORLD are both on. With
+// NEXT_PUBLIC_OSMO_BIGWORLD on (or the dev page's pin) the big world runs instead (free-will spec,
+// docs/superpowers/specs/2026-10-11-osmo-free-will-design.md): its engine is lib/world/engine/big.ts, loaded only then,
+// and this file adds its input layer, the Back to Osmo button and his line for a build he chose.
+import { useEffect, useRef, useState } from "react";
 import { Figure } from "@/components/osmo/figure";
-import type { AgentState } from "@/lib/agent/state";
 import { facingViewer, look, newActor, nextLookIn, pose, step, type Actor, type ActorEvent, type ActorKind, type ActorWorld } from "@/lib/world/actor";
 import { blocksOf, REST_X, standX, START_X } from "@/lib/world/blueprints";
 import { ISLAND } from "@/lib/world/blueprints/island";
 import { CASTLE_ROOMS, GROUND_Y, TILE, type Block, type CastleRoom } from "@/lib/world/blueprints/types";
 import { createSeenStore } from "@/lib/shell/rail";
-import { TALK, type Route } from "@/lib/shell/route";
+import { TALK } from "@/lib/shell/route";
 import { safeLocalStorage } from "@/components/osmo/use-rail-dots";
 import { baseZoom, easing, follow, newCamera, settling, toScreen, zoomAt, zoomTo, ZOOM_IN, type Camera, type View } from "@/lib/world/camera";
 import { canvasPainter, loadSheets, type Overrides } from "@/lib/world/canvas-painter";
@@ -31,37 +33,22 @@ import {
 } from "@/lib/world/village";
 import { readVillageCounts } from "@/lib/world/village-counts";
 import { CLEARED_KEY, loadVillage, saveRoom, VILLAGE_CLEARED } from "@/lib/world/village-data";
+import { modeOf, type Mode } from "@/lib/world/engine/flow";
+import type { Engine, Hooks, WorldControl, WorldProps } from "@/lib/world/engine/types";
+import { BIGWORLD, BUILDS } from "@/lib/world/flags";
 import s from "./world.module.css";
 
-// attend: Gur is typing or focused the composer. takeNews: the oldest room started or finished since the last call (for
-// TurnFacts.village). context: the line for the open panel's room (lib/world/rooms.ts roomContext), null in Talk or
-// before the visit's counts are read. The last two are the language lane's to call.
-export type WorldControl = { attend(): void; takeNews(): VillageNews | null; context(): string | null };
-// The dev page's pins: the hour, each room's laid blocks (a room left out is locked), his pose, the hit areas drawn,
-// and the life in the world (polish pass: "all" keeps snow, smoke and birds going whatever the hour, "none" stops them).
-export type WorldFixed = { hour?: number; rooms?: Partial<Record<CastleRoom, number>>; pose?: ActorKind; hits?: boolean; life?: "all" | "none" };
-export type WorldProps = {
-	agent: Pick<AgentState, "activations" | "mood">;
-	colorA: string;
-	colorB: string;
-	signals: RoomSignals;
-	said: string | null;
-	heard: string | null;
-	controlRef?: RefObject<WorldControl | null>;
-	persist?: boolean;
-	fixed?: WorldFixed;
-	route?: Route; // the open panel (shell v2); he walks to its room
-	onOpen?(to: Route): void; // a finished room was clicked
-};
-type Engine = { send(e: ActorEvent): void; refresh(): void; takeNews(): VillageNews | null; context(): string | null; dispose(): void };
-// How the loop tells React which rooms have a hit area now.
-type Hooks = { finished(rooms: CastleRoom[]): void };
+// The props, the dev page's pins and the control live in lib/world/engine/types.ts, shared with the big world's engine;
+// app/assistant.tsx and the dev page import them from here as before.
+export type { WorldControl, WorldFixed, WorldProps } from "@/lib/world/engine/types";
+// The small world's engine has no camera to steer: zoom and home are the big world's.
+type SmallEngine = Omit<Engine, "zoom" | "home">;
 
 // The loop, outside React: it reads the latest props through `live` and writes the canvases and a few CSS variables.
 // Nothing in it may throw into React (a throw inside useEffect would unmount the room): a failure stops the world and
 // logs one warning. `g` is shared with the wrapper so that a throw while starting can undo what was already set up.
 type Guard = { dead: boolean; undo: (() => void)[] };
-function startWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: HTMLCanvasElement, live: { current: WorldProps }, hooks: Hooks): Engine | null {
+function startWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: HTMLCanvasElement, live: { current: WorldProps }, hooks: Hooks): SmallEngine | null {
 	const g: Guard = { dead: false, undo: [] };
 	try {
 		return buildWorld(root, skyCanvas, canvas, live, hooks, g);
@@ -73,7 +60,7 @@ function startWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 	}
 }
 
-function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: HTMLCanvasElement, live: { current: WorldProps }, hooks: Hooks, g: Guard): Engine | null {
+function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: HTMLCanvasElement, live: { current: WorldProps }, hooks: Hooks, g: Guard): SmallEngine | null {
 	const ctx = canvas.getContext("2d");
 	const skyCtx = skyCanvas.getContext("2d");
 	if (!ctx || !skyCtx) return null;
@@ -472,30 +459,61 @@ function buildWorld(root: HTMLDivElement, skyCanvas: HTMLCanvasElement, canvas: 
 	};
 }
 
+// The engine the stage runs: the small world's or the big world's (zoom and home are the big world's only).
+type Running = SmallEngine & Partial<Pick<Engine, "zoom" | "home">>;
+
 export function WorldStage(props: WorldProps) {
 	const rootRef = useRef<HTMLDivElement>(null);
 	const skyRef = useRef<HTMLCanvasElement>(null);
 	const canvasRef = useRef<HTMLCanvasElement>(null);
+	const inputRef = useRef<HTMLDivElement>(null);
 	const live = useRef(props);
-	const engine = useRef<Engine | null>(null);
+	const engine = useRef<Running | null>(null);
 	const prevSignals = useRef<RoomSignals | null>(null);
 	// The finished rooms that have a hit area, as the loop last reported them.
 	const [hits, setHits] = useState<CastleRoom[]>([]);
+	// The big world: his line for a build he chose (about six seconds), and whether he is off screen with the camera away.
+	const [will, setWill] = useState<string | null>(null);
+	const [away, setAway] = useState(false);
 	useEffect(() => {
 		live.current = props;
 	});
+	const { fixed, colorA, colorB } = props;
+	// Which world runs: today's village unless a switch or the dev page's pin says otherwise. A new world, seed, island
+	// count or castle pin starts the engine again.
+	const mode: Mode = modeOf({ bigworld: BIGWORLD, builds: BUILDS }, fixed?.world);
+	const start = `${mode}|${fixed?.seed ?? ""}|${fixed?.islands ?? ""}|${fixed?.castle ?? ""}`;
 	useEffect(() => {
 		const root = rootRef.current;
 		const sky = skyRef.current;
 		const canvas = canvasRef.current;
 		if (!root || !sky || !canvas) return;
-		const e = startWorld(root, sky, canvas, live, { finished: setHits });
-		engine.current = e;
+		const hooks: Hooks = { finished: setHits, line: setWill, away: setAway };
+		if (mode === "small") {
+			const e = startWorld(root, sky, canvas, live, hooks);
+			engine.current = e;
+			return () => {
+				e?.dispose();
+				engine.current = null;
+			};
+		}
+		// The big world's engine is loaded only when it runs, so with every switch off nothing of it is fetched.
+		let gone = false;
+		let e: Engine | null = null;
+		void import("@/lib/world/engine/big")
+			.then((m) => {
+				const input = inputRef.current;
+				if (gone || !input) return;
+				e = m.startBigWorld(root, sky, canvas, input, live, hooks, mode);
+				engine.current = e;
+			})
+			.catch((err: unknown) => console.warn("[world] The big world could not load.", err));
 		return () => {
+			gone = true;
 			e?.dispose();
 			engine.current = null;
 		};
-	}, []);
+	}, [mode, start]);
 	const { controlRef } = props;
 	useEffect(() => {
 		if (!controlRef) return;
@@ -503,7 +521,9 @@ export function WorldStage(props: WorldProps) {
 			attend: () => engine.current?.send({ type: "message", now: performance.now() }),
 			takeNews: () => engine.current?.takeNews() ?? null,
 			context: () => engine.current?.context() ?? null,
-		};
+			zoom: (dir: 1 | -1) => engine.current?.zoom?.(dir),
+			home: () => engine.current?.home?.(),
+		} satisfies WorldControl;
 		return () => {
 			controlRef.current = null;
 		};
@@ -514,7 +534,6 @@ export function WorldStage(props: WorldProps) {
 		for (const e of roomEvents(prevSignals.current, next, performance.now())) engine.current?.send(e);
 		prevSignals.current = next;
 	}, [lines, inTalk, speaking, thinking]);
-	const { fixed, colorA, colorB } = props;
 	const pins = JSON.stringify(fixed?.rooms ?? null);
 	const at = placeOf(props.route ?? TALK);
 	const panelOpen = (props.route?.panel ?? null) !== null;
@@ -522,11 +541,13 @@ export function WorldStage(props: WorldProps) {
 	// conversation growing (which of the buttons are covered): draw now.
 	useEffect(() => {
 		engine.current?.refresh();
-	}, [fixed?.hour, pins, fixed?.pose, fixed?.hits, fixed?.life, colorA, colorB, at, hits, panelOpen, lines]);
+	}, [fixed?.hour, pins, fixed?.pose, fixed?.hits, fixed?.life, fixed?.mood, fixed?.grant?.at, fixed?.grant?.blocks, colorA, colorB, at, hits, panelOpen, lines]);
 	const { onOpen } = props;
+	const big = mode !== "small";
 
 	return (
 		<div ref={rootRef} className={s.world}>
+			{big && <div ref={inputRef} className={s.input} tabIndex={0} role="region" aria-label="Osmo's world" />}
 			<canvas ref={skyRef} className={s.layer} aria-hidden="true" />
 			<div className={s.sun} aria-hidden="true">
 				<Figure />
@@ -548,11 +569,21 @@ export function WorldStage(props: WorldProps) {
 					/>
 				))}
 			</div>
+			{big && (
+				<button type="button" className={s.home} hidden={!away} onClick={() => engine.current?.home?.()}>
+					Back to Osmo
+				</button>
+			)}
 			<div className={s.bubble}>
 				{props.heard !== null && <p className={s.heard}>{props.heard}</p>}
 				<p className={s.said} aria-live="polite">
 					{props.said ?? ""}
 				</p>
+				{big && (
+					<p className={s.will} aria-live="polite">
+						{props.said === null ? (will ?? "") : ""}
+					</p>
+				)}
 			</div>
 		</div>
 	);

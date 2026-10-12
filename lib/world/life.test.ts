@@ -4,10 +4,11 @@ import { START_X } from "./blueprints";
 import { TILE, type Block } from "./blueprints/types";
 import { newCamera } from "./camera";
 import {
-	BIRD_CYCLE_MS, BIRD_FLIGHT_MS, BIRDS_MAX, birdsAt, CHIMNEY, chimneyLaid, DUST_MAX, DUST_MS, dustAt, lifeAt, lifeWants, MAX_PARTICLES,
-	NO_LIFE, particleCount, POP_MS, popOf, SMOKE_CYCLE_MS, SMOKE_FROM, SMOKE_LIFE_MS, SMOKE_MAX, SMOKE_SPELL_MS, smokeAt, smokeSeen, SNOW_CYCLE_MS,
-	SNOW_MAX, SNOW_ON_MS, snowAt, snowShare, type LifeInput,
+	BIRD_CYCLE_MS, BIRD_FLIGHT_MS, BIRDS_MAX, birdsAt, CHIMNEY, chimneyLaid, DUST_MAX, DUST_MS, dustAt, HOME_CHIMNEY, HOME_SMOKE_FROM, lifeAt,
+	lifeWants, MAX_PARTICLES, NO_LIFE, particleCount, POP_MS, popOf, SMOKE_CYCLE_MS, SMOKE_FROM, SMOKE_LIFE_MS, SMOKE_MAX, SMOKE_SPELL_MS,
+	smokeAt, smokeSeen, SNOW_CYCLE_MS, SNOW_MAX, SNOW_ON_MS, snowAt, snowShare, type LifeInput,
 } from "./life";
+import { shiftBlocks } from "./map/home";
 
 const VIEW = { w: 1200, h: 800 };
 const block: Block = { x: 30, y: 20, tile: "brick", layer: "walls" };
@@ -182,5 +183,29 @@ describe("what the loop is asked for", () => {
 		expect(lifeWants(lifeAt({ ...base, wallMs: 20_000 }))).toBe("ambient");
 		expect(lifeWants(lifeAt({ ...base, wallMs: 50_000, night: false, chimney: false }))).toBeNull();
 		expect(lifeWants(NO_LIFE)).toBeNull();
+	});
+});
+
+describe("the chimney in the big world (free-will spec 3.1)", () => {
+	it("moves with the castle by the home offset", () => {
+		expect(HOME_CHIMNEY).toEqual({ x: CHIMNEY.x + 445, y: CHIMNEY.y + 60 });
+		expect(HOME_SMOKE_FROM).toEqual({ x: SMOKE_FROM.x + 445 * 16, y: SMOKE_FROM.y + 60 * 16 });
+		const laid = shiftBlocks(CASTLE_BLOCKS.workshop, 445, 60);
+		expect(chimneyLaid(laid)).toBe(false);
+		expect(chimneyLaid(laid, HOME_CHIMNEY)).toBe(true);
+		const here = smokeAt(5_000, true);
+		const there = smokeAt(5_000, true, HOME_SMOKE_FROM);
+		expect(there).toEqual(here.map((p) => ({ ...p, x: p.x + 445 * 16, y: p.y + 60 * 16 })));
+	});
+	it("sees the plume where the castle is", () => {
+		const view = { w: 800, h: 600 };
+		const at = (x: number, y: number) => ({ x, y, from: 1, to: 1, at: 0, aimX: x, aimY: y, ox: 0, oy: 0, glideAt: Number.NEGATIVE_INFINITY });
+		expect(smokeSeen(at(HOME_SMOKE_FROM.x, HOME_SMOKE_FROM.y), view, 0, HOME_SMOKE_FROM)).toBe(true);
+		expect(smokeSeen(at(HOME_SMOKE_FROM.x, HOME_SMOKE_FROM.y), view, 0)).toBe(false);
+	});
+	it("starts the plume of a frame's life where it is told", () => {
+		const o = { wallMs: 5_000, now: 0, view: { w: 800, h: 600 }, scale: 1, day: true, night: false, chimney: true, landing: null, motion: true, force: "all" as const };
+		expect(lifeAt({ ...o, smokeFrom: HOME_SMOKE_FROM }).smoke).toEqual(smokeAt(5_000, true, HOME_SMOKE_FROM));
+		expect(lifeAt(o).smoke).toEqual(smokeAt(5_000, true));
 	});
 });

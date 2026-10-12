@@ -1,21 +1,27 @@
-import { LAYER_ORDER, TILE, type Block, type Blueprint, type Layer } from "./types";
+import { LAYER_ORDER, TILE, type Block, type Blueprint, type Layer, type Legend } from "./types";
 
-// Every block of a blueprint in laying order: by layer, then bottom row first, then left to right.
-export function blocksOf(bp: Blueprint): Block[] {
+// A footprint's three parts, which a blueprint has too: the structure, what hangs on it, and the letters' tiles.
+export type Cells = { map: readonly string[]; decor: readonly string[]; legend: Legend };
+// Every block of a footprint with its top-left at tile (x0, y0), in laying order: by layer, then bottom row first, then
+// left to right. name labels the error for a letter missing from the legend.
+export function cellsOf(fp: Cells, x0: number, y0: number, name: string): Block[] {
 	const cells: Block[] = [];
-	for (const grid of [bp.map, bp.decor]) {
+	for (const grid of [fp.map, fp.decor]) {
 		grid.forEach((row, y) => {
 			[...row].forEach((ch, x) => {
 				if (ch === ".") return;
-				const entry = bp.legend[ch];
-				if (!entry) throw new Error(`${bp.room}: no legend entry for "${ch}" at ${x},${y}`);
-				cells.push({ x: bp.x + x, y: bp.y + y, tile: entry.tile, layer: entry.layer });
+				const entry = fp.legend[ch];
+				if (!entry) throw new Error(`${name}: no legend entry for "${ch}" at ${x},${y}`);
+				cells.push({ x: x0 + x, y: y0 + y, tile: entry.tile, layer: entry.layer });
 			});
 		});
 	}
 	const rank = (l: Layer) => LAYER_ORDER.indexOf(l);
 	return cells.sort((a, b) => rank(a.layer) - rank(b.layer) || b.y - a.y || a.x - b.x);
 }
+
+// Every block of a blueprint in laying order.
+export const blocksOf = (bp: Blueprint): Block[] => cellsOf(bp, bp.x, bp.y, bp.room);
 
 export const ISLAND_LEFT = 3; // tile columns of the island's two ends
 export const ISLAND_RIGHT = 60;

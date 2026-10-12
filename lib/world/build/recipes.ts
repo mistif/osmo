@@ -1,0 +1,63 @@
+// The twenty seed recipes (spec docs/superpowers/specs/2026-10-11-osmo-free-will-design.md section 4.2), as data, in
+// SEED_KINDS order. Each is a short rule set over the parts in parts.ts: the site it needs, its body widths (only odd
+// widths are chosen), its materials, its tiers bottom to top, its door, and how much decor and how many sides it may
+// take (a roof over a balcony stands on a loft of posts, never on the rail). The compiler (compile.ts) and the variation (variation.ts) turn one into a build; "The grammar, in one place" in
+// docs/superpowers/plans/2026-10-11-osmo-free-will.md says how. The castle's six rooms are fixed recipes in castle.ts.
+import type { Recipe, Role, Tier } from "./types";
+
+const T = (slot: string, role: Role, parts: string[], more: Partial<Tier> = {}): Tier => ({ slot, role, parts, ...more });
+const none = { parts: [], max: 0 };
+export const RECIPES: readonly Recipe[] = [
+	{ id: "cottage", name: "cottage", kind: "cottage", size: "medium", site: "level", width: [7, 11], materials: ["wood", "stone", "brick"],
+		tiers: [T("floor", "floor", ["floor-step", "floor-boards"]), T("storey", "storey", ["storey-wood", "storey-stone", "storey-brick"], { count: [1, 2] }), T("roof", "roof", ["roof-thatch-gable", "roof-tile-gable"]), T("chimney", "chimney", ["chimney-brick"], { optional: true })],
+		doors: ["door-oak"], decor: { parts: ["decor-lantern", "decor-shutter", "decor-banner"], max: 2 }, sides: { parts: ["side-bed", "side-fence", "side-bench", "side-tree-fruit"], max: 2 } },
+	{ id: "tower", name: "tower", kind: "tower", size: "medium", site: "level", width: [5, 7], materials: ["stone", "brick"],
+		tiers: [T("floor", "floor", ["floor-step"]), T("storey", "storey", ["storey-stone", "storey-brick", "storey-shaft"], { count: [2, 3] }), T("roof", "roof", ["crown-battlement", "roof-slate-spire"])],
+		doors: ["door-oak"], decor: { parts: ["decor-banner", "decor-lantern"], max: 2 }, sides: { parts: ["side-lamp-post"], max: 1 } },
+	{ id: "lantern-walk", name: "lantern walk", kind: "lantern-walk", size: "small", site: "level", width: [9, 17], materials: ["wood", "stone", "brick"],
+		tiers: [T("walk", "storey", ["walk-lamps"])], doors: [], decor: none, sides: { parts: ["side-bench"], max: 1 } },
+	{ id: "garden", name: "garden", kind: "garden", size: "small", site: "beside", width: [5, 11], materials: ["wood", "stone", "brick"],
+		tiers: [T("beds", "storey", ["bed-row"])], doors: [], decor: none, sides: { parts: ["side-bench", "side-tree-fruit", "side-lamp-post"], max: 2 } },
+	{ id: "well", name: "well", kind: "well", size: "small", site: "level", width: [3, 3], materials: ["stone", "brick"],
+		tiers: [T("ring", "top", ["well-ring"]), T("roof", "top", ["top-well-roof"])], doors: [], decor: none, sides: { parts: ["side-bench"], max: 1 } },
+	{ id: "rope-bridge", name: "rope bridge", kind: "rope-bridge", size: "medium", site: "bridge", width: [1, 1], materials: ["wood"],
+		tiers: [T("span", "span", ["bridge-span"]), T("anchor", "anchor", ["bridge-anchor"])], doors: [], decor: none, sides: none },
+	{ id: "windmill", name: "windmill", kind: "windmill", size: "medium", site: "level", width: [5, 5], materials: ["stone", "wood"],
+		tiers: [T("floor", "floor", ["floor-step", "floor-boards"]), T("storey", "storey", ["storey-stone", "storey-wood"], { count: [2, 3] }), T("roof", "roof", ["roof-thatch-gable", "roof-tile-gable"]), T("sails", "top", ["top-sails"])],
+		doors: ["door-oak"], decor: none, sides: { parts: ["side-fence"], max: 1 } },
+	{ id: "bell-tower", name: "bell tower", kind: "bell-tower", size: "medium", site: "level", width: [5, 5], materials: ["stone", "brick"],
+		tiers: [T("floor", "floor", ["floor-step"]), T("storey", "storey", ["storey-stone", "storey-brick", "storey-shaft"], { count: [2, 3] }), T("loft", "top", ["top-bell-loft"]), T("roof", "roof", ["roof-slate-spire", "roof-tile-gable"])],
+		doors: ["door-oak"], decor: { parts: ["decor-banner"], max: 1 }, sides: none },
+	{ id: "greenhouse", name: "greenhouse", kind: "greenhouse", size: "medium", site: "level", width: [7, 11], materials: ["wood", "stone", "brick"],
+		tiers: [T("floor", "floor", ["floor-step"]), T("storey", "storey", ["storey-glass"]), T("roof", "roof", ["roof-glass-gable"])],
+		doors: ["door-oak"], decor: none, sides: { parts: ["side-bed"], max: 2 } },
+	{ id: "market-stall", name: "market stall", kind: "market-stall", size: "small", site: "level", width: [5, 7], materials: ["wood"],
+		tiers: [T("floor", "floor", ["floor-boards"]), T("storey", "storey", ["storey-open-wood"]), T("roof", "roof", ["roof-awning"])],
+		doors: [], decor: { parts: ["decor-lantern"], max: 1 }, sides: { parts: ["side-bench", "side-sign"], max: 1 } },
+	{ id: "shrine", name: "shrine", kind: "shrine", size: "small", site: "level", width: [5, 5], materials: ["stone"],
+		tiers: [T("floor", "floor", ["floor-step"]), T("storey", "storey", ["storey-shrine"]), T("roof", "roof", ["roof-tile-gable", "roof-thatch-gable"])],
+		doors: [], decor: { parts: ["decor-bell", "decor-lantern"], max: 1 }, sides: { parts: ["side-lamp-post"], max: 1 } },
+	{ id: "pond", name: "pond with a dock", kind: "pond", size: "small", site: "level", width: [5, 9], materials: ["stone"],
+		tiers: [T("basin", "storey", ["pond-basin"])], doors: [], decor: none, sides: { parts: ["side-bench", "side-bed"], max: 1 } },
+	{ id: "watchtower", name: "watchtower", kind: "watchtower", size: "medium", site: "cliff", width: [3, 5], materials: ["wood"],
+		tiers: [T("floor", "floor", ["floor-boards"]), T("storey", "storey", ["storey-open-wood"], { count: [2, 3] }), T("beam", "beam", ["beam-balcony"]), T("loft", "beam", ["loft-posts"]), T("roof", "roof", ["roof-thatch-gable"])],
+		doors: [], decor: { parts: ["decor-lantern"], max: 1 }, sides: { parts: ["side-tree-pine"], max: 1 } },
+	{ id: "stone-stair", name: "stone stair", kind: "stone-stair", size: "small", site: "level", width: [5, 5], materials: ["stone"],
+		tiers: [T("flight", "top", ["stair-flight"])], doors: [], decor: none, sides: { parts: ["side-lamp-post"], max: 1 } },
+	{ id: "arch-gate", name: "arch gate", kind: "arch-gate", size: "small", site: "level", width: [5, 5], materials: ["stone", "brick"],
+		tiers: [T("posts", "storey", ["gate-posts"]), T("arch", "roof", ["arch-span"]), T("crown", "roof", ["crown-battlement"])],
+		doors: [], decor: { parts: ["decor-banner", "decor-lantern"], max: 2 }, sides: { parts: ["side-sign"], max: 1 } },
+	{ id: "statue", name: "statue", kind: "statue", size: "small", site: "level", width: [3, 5], materials: ["stone"],
+		tiers: [T("plinth", "floor", ["plinth-row"]), T("figure", "top", ["top-statue"])], doors: [], decor: none, sides: { parts: ["side-bench", "side-bed"], max: 2 } },
+	{ id: "lighthouse", name: "small lighthouse", kind: "lighthouse", size: "medium", site: "cliff", width: [5, 5], materials: ["stone", "brick"],
+		tiers: [T("floor", "floor", ["floor-step"]), T("storey", "storey", ["storey-stone", "storey-brick", "storey-shaft"], { count: [2, 3] }), T("beam", "beam", ["beam-balcony"], { optional: true }), T("lamp", "top", ["top-lamp"]), T("roof", "roof", ["roof-dome"])],
+		doors: ["door-oak"], decor: none, sides: none },
+	{ id: "workshop-shed", name: "workshop shed", kind: "workshop-shed", size: "medium", site: "level", width: [7, 11], materials: ["wood", "brick"],
+		tiers: [T("floor", "floor", ["floor-boards", "floor-step"]), T("storey", "storey", ["storey-wood", "storey-brick"]), T("roof", "roof", ["roof-tile-gable", "roof-thatch-gable"]), T("chimney", "chimney", ["chimney-brick"], { optional: true })],
+		doors: ["door-oak"], decor: { parts: ["decor-lantern", "decor-shutter"], max: 2 }, sides: { parts: ["side-fence", "side-sign"], max: 1 } },
+	{ id: "belvedere", name: "belvedere", kind: "belvedere", size: "small", site: "level", width: [5, 7], materials: ["stone"],
+		tiers: [T("floor", "floor", ["floor-step"]), T("storey", "storey", ["storey-open-stone"]), T("beam", "beam", ["beam-balcony"]), T("loft", "beam", ["loft-posts"]), T("roof", "roof", ["roof-dome", "roof-tile-gable"])],
+		doors: [], decor: { parts: ["decor-lantern"], max: 1 }, sides: { parts: ["side-bench"], max: 1 } },
+	{ id: "orchard", name: "orchard", kind: "orchard", size: "medium", site: "level", width: [9, 15], materials: ["wood", "stone", "brick"],
+		tiers: [T("trees", "storey", ["orchard-row"])], doors: [], decor: none, sides: { parts: ["side-fence"], max: 2 } },
+];

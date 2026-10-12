@@ -1,26 +1,59 @@
 // A Painter over a plain RGBA buffer, with a canvas's source-over blending. The tests draw with it (node has no
 // canvas, and no package for one is added) and hash the pixels.
+import type { Shape } from "./backdrop";
+import { chunkCache, type ChunkStats } from "./chunks";
+import { CHUNK_KEEP, CHUNK_PX } from "./lod";
 import { parseColor, type Bitmap } from "./raster";
 import { CELL, GLOW_STOPS, shapeCache, sheetBitmap, type Art, type Painter } from "./render";
 
-export type PixelPainter = Painter & { readonly data: Uint8ClampedArray<ArrayBuffer> };
+// chunks: the chunk bitmaps' cache's counts (the same chunkCache the canvas painter keeps its bitmaps in).
+export type PixelPainter = Painter & { readonly data: Uint8ClampedArray<ArrayBuffer>; readonly chunks: ChunkStats };
 
-export function pixelPainter(w: number, h: number, art: Art): PixelPainter {
+// keep: the most chunk bitmaps it keeps (CHUNK_KEEP.desk, or .phone).
+export function pixelPainter(w: number, h: number, art: Art, keep: number = CHUNK_KEEP.desk): PixelPainter {
+	return make(w, h, art, new Map(), shapeCache((bmp) => bmp), keep);
+}
+
+// A painter over its own buffer, sharing the atlases (sheets) and the kept silhouettes (shapes) it is given: a chunk's
+// painter draws from its parent's.
+function make(w: number, h: number, art: Art, sheets: Map<string, Bitmap>, shapes: (shape: Shape, tones: readonly string[]) => Bitmap, keep: number): PixelPainter {
 	const data = new Uint8ClampedArray(w * h * 4);
-	const sheets = new Map<string, Bitmap>();
 	const blend = (o: number, r: number, g: number, b: number, a: number) => {
 		if (a <= 0) return;
-		const keep = 1 - a;
-		data[o] = Math.round(r * a + data[o] * keep);
-		data[o + 1] = Math.round(g * a + data[o + 1] * keep);
-		data[o + 2] = Math.round(b * a + data[o + 2] * keep);
-		data[o + 3] = Math.round(255 * a + data[o + 3] * keep);
+		const under = 1 - a;
+		data[o] = Math.round(r * a + data[o] * under);
+		data[o + 1] = Math.round(g * a + data[o + 1] * under);
+		data[o + 2] = Math.round(b * a + data[o + 2] * under);
+		data[o + 3] = Math.round(255 * a + data[o + 3] * under);
 	};
-	const shapes = shapeCache((bmp) => bmp);
+	// A bitmap into the box (x, y, bw, bh), nearest neighbour, source-over with its own alpha, as the canvas painter's
+	// drawImage with smoothing off; only the rows and columns on the buffer are visited. This buffer's colours are
+	// premultiplied (blend is premultiplied source-over), so a chunk's (premul) is divided by its alpha first: a faint
+	// ghost baked in a chunk comes out as faint as it is stamped. Opaque and empty pixels are the same either way.
+	const blit = (bmp: Bitmap, x: number, y: number, bw: number, bh: number, premul = false) => {
+		if (bw <= 0 || bh <= 0 || bmp.w === 0 || bmp.h === 0) return;
+		const dx0 = Math.max(0, -x);
+		const dx1 = Math.min(bw, w - x);
+		for (let dy = Math.max(0, -y); dy < Math.min(bh, h - y); dy++) {
+			const ty = y + dy;
+			const sy = Math.floor((dy * bmp.h) / bh);
+			for (let dx = dx0; dx < dx1; dx++) {
+				const s = (sy * bmp.w + Math.floor((dx * bmp.w) / bw)) * 4;
+				const a = bmp.data[s + 3] / 255;
+				const k = premul && a > 0 ? 1 / a : 1;
+				blend((ty * w + x + dx) * 4, bmp.data[s] * k, bmp.data[s + 1] * k, bmp.data[s + 2] * k, a);
+			}
+		}
+	};
+	// The chunk bitmaps (free-will spec 3.3): each a painter of CHUNK_PX square over the same atlases; evicted ones are
+	// left to the collector.
+	const cache = chunkCache(keep, () => make(CHUNK_PX, CHUNK_PX, art, sheets, shapes, 1), () => {});
 	return {
 		w,
 		h,
 		data,
+		chunks: cache.stats,
+		chunkKeep: keep,
 		clear: () => {
 			data.fill(0);
 		},
@@ -78,20 +111,18 @@ export function pixelPainter(w: number, h: number, art: Art): PixelPainter {
 		},
 		// The kept bitmap into the box, nearest neighbour, as the canvas painter's drawImage with smoothing off.
 		shape(shape, tones, x, y, bw, bh) {
-			const bmp = shapes(shape, tones);
-			if (bw <= 0 || bh <= 0 || bmp.w === 0 || bmp.h === 0) return;
-			for (let dy = 0; dy < bh; dy++) {
-				const ty = y + dy;
-				if (ty < 0 || ty >= h) continue;
-				const sy = Math.floor((dy * bmp.h) / bh);
-				for (let dx = 0; dx < bw; dx++) {
-					const tx = x + dx;
-					if (tx < 0 || tx >= w) continue;
-					const s = (sy * bmp.w + Math.floor((dx * bmp.w) / bw)) * 4;
-					blend((ty * w + tx) * 4, bmp.data[s], bmp.data[s + 1], bmp.data[s + 2], bmp.data[s + 3] / 255);
-				}
-			}
+			blit(shapes(shape, tones), x, y, bw, bh);
 		},
+		chunk(key, version, bake, x, y, bw, bh, mayBake = true) {
+			const got = cache.get(key, version, mayBake, (q) => {
+				q.clear();
+				bake(q);
+			});
+			if (!got) return "missing";
+			blit({ w: CHUNK_PX, h: CHUNK_PX, data: got.t.data }, x, y, Math.round(bw), Math.round(bh), true);
+			return got.state;
+		},
+		release: () => cache.release(),
 		// Like the canvas's "lighter": premultiplied colours add, and so do the alphas.
 		glow(cx, cy, r, color, alpha) {
 			const c = parseColor(color);

@@ -1,6 +1,9 @@
 // The Painter over a real canvas, and the optional PNG sheets (spec 2 and 3). Atlases are built lazily, one per
 // sheet and scale, from the drawn art, or from a PNG that is present and exactly the right size.
+import type { Shape } from "./backdrop";
 import { TILE } from "./blueprints/types";
+import { chunkCache } from "./chunks";
+import { CHUNK_KEEP, CHUNK_PX } from "./lod";
 import { FRAME_H, FRAME_NAMES, FRAME_W } from "./osmo-sprite";
 import { parseColor, sheetProblem } from "./raster";
 import { CELL, GLOW_STOPS, shapeCache, sheetBitmap, type Art, type Painter, type Sheet } from "./render";
@@ -8,7 +11,8 @@ import { TILE_IDS } from "./tiles";
 
 export type Overrides = Partial<Record<"tiles" | "sprite", CanvasImageSource>>;
 
-export function canvasPainter(ctx: CanvasRenderingContext2D, art: Art, overrides: Overrides = {}): Painter {
+// keep: the most chunk bitmaps it keeps (free-will spec 3.3: CHUNK_KEEP.desk, or .phone on a phone).
+export function canvasPainter(ctx: CanvasRenderingContext2D, art: Art, overrides: Overrides = {}, keep: number = CHUNK_KEEP.desk): Painter {
 	const atlases = new Map<string, HTMLCanvasElement>();
 	const atlas = (sheet: Sheet, scale: number): HTMLCanvasElement => {
 		const key = `${sheet}@${scale}`;
@@ -40,7 +44,34 @@ export function canvasPainter(ctx: CanvasRenderingContext2D, art: Art, overrides
 		if (bmp.w > 0 && bmp.h > 0) c.getContext("2d")?.putImageData(new ImageData(bmp.data, bmp.w, bmp.h), 0, 0);
 		return c;
 	});
+	return over(ctx, atlas, shapes, keep);
+}
+
+// A painter over one context, drawing from the atlases and silhouettes it is given: a chunk's painter shares its
+// parent's. Its chunk bitmaps are offscreen canvases of CHUNK_PX square, each emptied (sized to nothing, so the browser
+// lets its memory go) when it is evicted or released.
+function over(
+	ctx: CanvasRenderingContext2D,
+	atlas: (sheet: Sheet, scale: number) => HTMLCanvasElement,
+	shapes: (shape: Shape, tones: readonly string[]) => HTMLCanvasElement,
+	keep: number,
+): Painter {
+	const cache = chunkCache(
+		keep,
+		() => {
+			const c = document.createElement("canvas");
+			c.width = CHUNK_PX;
+			c.height = CHUNK_PX;
+			const g = c.getContext("2d");
+			return { c, p: g ? over(g, atlas, shapes, 1) : null };
+		},
+		({ c }) => {
+			c.width = 0;
+			c.height = 0;
+		},
+	);
 	return {
+		chunkKeep: keep,
 		get w() {
 			return ctx.canvas.width;
 		},
@@ -90,6 +121,23 @@ export function canvasPainter(ctx: CanvasRenderingContext2D, art: Art, overrides
 			ctx.globalAlpha = 1;
 			ctx.drawImage(src, x, y, w, h);
 		},
+		chunk(key, version, bake, x, y, w, h, mayBake = true) {
+			const got = cache.get(key, version, mayBake, ({ p }) => {
+				if (!p) return;
+				p.clear();
+				bake(p);
+			});
+			if (!got) return "missing";
+			const bw = Math.round(w);
+			const bh = Math.round(h);
+			if (bw > 0 && bh > 0) {
+				ctx.imageSmoothingEnabled = false;
+				ctx.globalAlpha = 1;
+				ctx.drawImage(got.t.c, x, y, bw, bh);
+			}
+			return got.state;
+		},
+		release: () => cache.release(),
 		glow(x, y, r, color, alpha) {
 			const c = parseColor(color);
 			if (!c || r <= 0) return;

@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { canvasPainter } from "./canvas-painter";
+import { CHUNK_PX } from "./lod";
 import { hashPixels, pixelPainter } from "./pixel-painter";
 import { colours } from "./raster";
-import { artFor, sheetBitmap } from "./render";
+import { artFor, sheetBitmap, type Painter } from "./render";
 import { tileIndex } from "./tiles";
 
 // The polish pass's two additions to the Painter (render.ts): stamp into a box of any size (the camera eases between
@@ -80,5 +82,66 @@ describe("the digit letters", () => {
 		const c = colours();
 		expect(c["0"]).toBeDefined();
 		expect(c["4"]).toBeDefined();
+	});
+});
+
+describe("chunk bitmaps (free-will spec 3.3)", () => {
+	const brickBake = (p: Painter) => p.stamp("tiles", brick, 0, 0, 1, 1, false);
+	it("bakes a chunk once per version and draws it scaled into its box, nearest neighbour", () => {
+		const p = pixelPainter(W, H, art, 4);
+		let bakes = 0;
+		const bake = (q: Painter) => {
+			bakes++;
+			brickBake(q);
+		};
+		expect(p.chunk("0,0", "a", bake, 0, 0, 32, 32)).toBe("baked");
+		expect(p.chunk("0,0", "a", bake, 0, 0, 32, 32)).toBe("kept");
+		expect(bakes).toBe(1);
+		expect(p.chunk("0,0", "b", bake, 0, 0, 32, 32, false)).toBe("missing"); // stale, and the frame's budget is spent
+		expect(p.chunk("0,0", "b", bake, 0, 0, 32, 32)).toBe("baked");
+		expect(bakes).toBe(2);
+		expect(p.chunks).toMatchObject({ made: 1, baked: 2, released: 0 });
+		expect(p.chunkKeep).toBe(4);
+		const direct = pixelPainter(W, H, art);
+		direct.stamp("tiles", brick, 0, 0, 1, 1, false, 1, 1); // a 16 px tile in a 512 px chunk shown 32 px wide: one pixel
+		expect(px(p.data, 0, 0)).toEqual(px(direct.data, 0, 0));
+	});
+	it("draws a faint block in a chunk as faint as it is stamped (the ghost at 1/2 and 1/4)", () => {
+		const p = pixelPainter(W, H, art);
+		p.chunk("0,0", "a", (q) => q.stamp("tiles", brick, 0, 0, 1, 0.3, false), 0, 0, CHUNK_PX, CHUNK_PX);
+		const direct = pixelPainter(W, H, art);
+		direct.stamp("tiles", brick, 0, 0, 1, 0.3, false);
+		for (const [x, y] of [[0, 0], [5, 7], [15, 15]]) expect(px(p.data, x, y)).toEqual(px(direct.data, x, y));
+	});
+	it("keeps at most `keep`, releasing the least recently drawn", () => {
+		const p = pixelPainter(W, H, art, 2);
+		for (const key of ["a", "b", "a", "c"]) p.chunk(key, "1", brickBake, 0, 0, 8, 8);
+		expect(p.chunks.kept()).toBe(2);
+		expect(p.chunks).toMatchObject({ made: 3, released: 1 });
+		p.chunk("a", "1", brickBake, 0, 0, 8, 8); // "a" was kept (drawn after "b"), so no bake
+		expect(p.chunks.made).toBe(3);
+		p.release?.();
+		expect(p.chunks.kept()).toBe(0);
+		expect(p.chunks.released).toBe(3);
+	});
+	it("the canvas painter empties an evicted chunk's canvas, and every kept one on release", () => {
+		const canvases: { width: number; height: number }[] = [];
+		const ctx = () => ({ canvas: { width: 512, height: 512 }, imageSmoothingEnabled: false, globalAlpha: 1, clearRect() {}, drawImage() {}, fillRect() {}, save() {}, restore() {}, translate() {}, scale() {} });
+		vi.stubGlobal("document", {
+			createElement: () => {
+				const c = { width: 0, height: 0, getContext: () => ctx() };
+				canvases.push(c);
+				return c;
+			},
+		});
+		try {
+			const p = canvasPainter(ctx() as unknown as CanvasRenderingContext2D, art, {}, 2);
+			for (const key of ["a", "b", "c"]) p.chunk(key, "1", () => {}, 0, 0, 8, 8);
+			expect(canvases.map((c) => [c.width, c.height])).toEqual([[0, 0], [512, 512], [512, 512]]);
+			p.release?.();
+			expect(canvases.every((c) => c.width === 0 && c.height === 0)).toBe(true);
+		} finally {
+			vi.unstubAllGlobals();
+		}
 	});
 });

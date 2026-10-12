@@ -4,17 +4,22 @@ import { blocksOf, START_X } from "./blueprints";
 import { CASTLE_BLOCKS } from "./blueprints/castle";
 import { HALL } from "./blueprints/hall";
 import { ISLAND } from "./blueprints/island";
-import { GROUND_Y, TILE } from "./blueprints/types";
-import { newCamera, toScreen, zoomAt } from "./camera";
+import { CASTLE_ROOMS, GROUND_Y, TILE, type Block } from "./blueprints/types";
+import { newCamera, toScreen, zoomAt, type Camera, type View } from "./camera";
+import { chunkCache } from "./chunks";
+import { CHUNK_KEEP, CHUNK_PX } from "./lod";
+import { BALLOON_BASKET, BALLOON_ENVELOPE, homeGround, shiftBlocks } from "./map/home";
 import { PALETTE } from "./palette";
 import { hashPixels, pixelPainter } from "./pixel-painter";
 import { snapshot } from "./png";
 import { colours, parseColor } from "./raster";
-import { artFor, drawSky, drawWorld, GHOST_ALPHA, HAZE, OUTLINE_ALPHA, sheetBitmap, type Painter, type WorldScene } from "./render";
-import { BIRD_CELL, CLOUD_CELL, CLOUD_GRIDS, HILLS } from "./backdrop";
+import {
+	ATLAS_MAX, artFor, BAKE_BUDGET, CELL, drawSky, drawWorld, GHOST_ALPHA, HAZE, OUTLINE_ALPHA, sheetBitmap, type Painter, type Sheet, type WorldScene,
+} from "./render";
+import { BIRD_CELL, CLOUD_CELL, CLOUD_GRIDS, FAR_ISLANDS, HILLS } from "./backdrop";
 import { hslCss, skyAt, starField, twinkle } from "./sky";
 import { poolsOf, shadowed, SHADOW_ALPHA, variantOf } from "./texture";
-import { TILE_IDS, TILES } from "./tiles";
+import { TILE_IDS, TILES, tileIndex } from "./tiles";
 import { birdsAt, dustAt, lifeAt, MAX_PARTICLES, NO_LIFE, smokeAt, snowAt, type Life } from "./life";
 import { pose } from "./actor";
 import { TRAIL_AT, TRAIL_W } from "./osmo-sprite";
@@ -358,6 +363,279 @@ describe("life in the world (polish pass)", () => {
 	});
 });
 
+// The big-world fixture (fakes, not T1's generator; today's 71 tiles only): home and the whole castle at the offset,
+// island A (columns 300 to 419, top row 70, 12 rows of stone) with twenty small pines, and island B (560 to 699, top 100).
+const slab = (x0: number, w: number, top: number, depth: number): Block[] => {
+	const out: Block[] = [];
+	for (let c = 0; c < w; c++) {
+		out.push({ x: x0 + c, y: top, tile: c === 0 ? "snow-edge-l" : c === w - 1 ? "snow-edge-r" : "snow", layer: "ground" });
+		for (let r = 1; r <= depth; r++) out.push({ x: x0 + c, y: top + r, tile: r <= 2 ? "stone" : "stone-dark", layer: "ground" });
+	}
+	return out;
+};
+const pines = (x0: number, top: number): Block[] =>
+	Array.from({ length: 20 }, (_, i) => x0 + 4 + i * 5).flatMap((x): Block[] => [
+		{ x, y: top - 1, tile: "trunk-base", layer: "ground" },
+		{ x, y: top - 2, tile: "pine-small", layer: "ground" },
+		{ x, y: top - 3, tile: "pine-tip", layer: "ground" },
+	]);
+const BIG_GROUND: Block[] = [...homeGround(), ...slab(300, 120, 70, 12), ...pines(300, 70), ...slab(560, 140, 100, 14)];
+const BIG_LAID: Block[] = CASTLE_ROOMS.flatMap((room) => shiftBlocks(CASTLE_BLOCKS[room], 445, 60));
+// The densest view (ruling 8): land 40 rows deep under the whole of a 1920 by 1080 view at zoom 1, and three castles'
+// worth of builds standing on it (the castle's snow row, 26, moved to 70).
+const DENSE_GROUND: Block[] = slab(380, 200, 70, 40);
+const DENSE_LAID: Block[] = [382, 442, 502].flatMap((dx) => CASTLE_ROOMS.flatMap((room) => shiftBlocks(CASTLE_BLOCKS[room], dx, 44)));
+const cam = (x: number, y: number, z: number): Camera => ({ x, y, from: z, to: z, at: 0, aimX: x, aimY: y, ox: 0, oy: 0, glideAt: Number.NEGATIVE_INFINITY });
+const HOME = { x: 7640, y: 86 * TILE };
+const bigScene = (z: number, view: View, over: Partial<WorldScene> = {}): WorldScene => ({
+	camera: cam(HOME.x, HOME.y - 120, z), view, now: 0, clock: 0, ground: BIG_GROUND, laid: BIG_LAID, ghost: null, outline: [],
+	him: { x: HOME.x, y: HOME.y, look: look(newActor(HOME.x, 0, 12), 0, "warm") }, anchor: { x: HOME.x, groundY: HOME.y }, ...over,
+});
+const dense = (z: number, view: View, over: Partial<WorldScene> = {}): WorldScene =>
+	bigScene(z, view, { ground: DENSE_GROUND, laid: DENSE_LAID, camera: cam(480 * TILE, 78 * TILE, z), anchor: { x: 480 * TILE, groundY: 70 * TILE }, ...over });
+// Draw a scene until the bake budget has caught up (no chunk pending), at most 30 frames; the last frame's result.
+const settle = (p: Painter, s: WorldScene) => {
+	let r = drawWorld(p, s);
+	for (let k = 1; k <= 30 && r.pending > 0; k++) r = drawWorld(p, { ...s, now: s.now + k });
+	return r;
+};
+// A painter that passes every call on and records it.
+type Call = { kind: string; sheet?: string; cell?: number; color?: string; x?: number; y?: number; scale?: number };
+const recording = (p: Painter) => {
+	const log: Call[] = [];
+	const counted: Painter = {
+		get w() {
+			return p.w;
+		},
+		get h() {
+			return p.h;
+		},
+		get chunkKeep() {
+			return p.chunkKeep;
+		},
+		clear: () => (log.push({ kind: "clear" }), p.clear()),
+		gradient: (...a) => (log.push({ kind: "gradient" }), p.gradient(...a)),
+		rect: (x, y, w, h, color, alpha) => (log.push({ kind: "rect", color, x, y }), p.rect(x, y, w, h, color, alpha)),
+		stamp: (sheet, cell, ...a) => (log.push({ kind: "stamp", sheet, cell, x: a[0], y: a[1], scale: a[2] }), p.stamp(sheet, cell, ...a)),
+		glow: (...a) => (log.push({ kind: "glow" }), p.glow(...a)),
+		pool: (...a) => (log.push({ kind: "pool" }), p.pool(...a)),
+		shape: (...a) => (log.push({ kind: "shape" }), p.shape(...a)),
+		chunk: (...a) => (log.push({ kind: "chunk" }), p.chunk(...a)),
+	};
+	return { counted, log };
+};
+// A painter that draws nothing and counts (the budgets: fast at any size): n, the calls to the screen; inner, what the
+// bakes stamp; stats, the chunk cache's, the same chunkCache the real painters keep their bitmaps in.
+const budgetPainter = (w: number, h: number, keep: number = CHUNK_KEEP.desk) => {
+	const count = { n: 0, inner: 0 };
+	const inner: Painter = {
+		w: CHUNK_PX, h: CHUNK_PX, clear() {}, gradient() {}, glow() {}, pool() {}, shape() {},
+		rect: () => void count.inner++,
+		stamp: () => void count.inner++,
+		chunk: () => "missing",
+	};
+	const cache = chunkCache(keep, () => inner, () => {});
+	const p: Painter = {
+		w, h, chunkKeep: keep,
+		clear: () => void count.n++,
+		gradient: () => void count.n++,
+		rect: () => void count.n++,
+		stamp: () => void count.n++,
+		glow: () => void count.n++,
+		pool: () => void count.n++,
+		shape: () => void count.n++,
+		chunk: (key, version, bake, x, y, cw, ch, mayBake = true) => {
+			void [x, y, cw, ch];
+			count.n++;
+			return cache.get(key, version, mayBake, bake)?.state ?? "missing";
+		},
+		release: () => cache.release(),
+	};
+	return { p, count, stats: cache.stats };
+};
+
+describe("the big world (free-will spec 3.3)", () => {
+	const V = { w: 480, h: 270 };
+	it("draws the far islands behind the big world but not home's hills and haze, which would make a horizon across its sky", () => {
+		const shapes = (scene: WorldScene) => {
+			const seen: unknown[] = [];
+			const p = pixelPainter(V.w, V.h, art);
+			drawWorld({ ...p, shape: (...a: Parameters<Painter["shape"]>) => (seen.push(a[0]), p.shape(...a)) }, scene);
+			return seen;
+		};
+		const sky = skyAt("hsl(172 38% 50%)", "hsl(212 38% 50%)", 12);
+		// The camera on the ground line, where the hills would stand.
+		const big = shapes(bigScene(1, V, { sky, camera: cam(HOME.x, HOME.y + 20, 1) }));
+		expect(big.some((f) => (FAR_ISLANDS as readonly unknown[]).includes(f))).toBe(true);
+		expect(big).not.toContain(HILLS);
+		expect(shapes({ ...scene(40), sky })).toContain(HILLS); // the small world keeps them
+	});
+	it("walks only the chunks on screen: after the first frame a frame reads no block from the lists themselves", () => {
+		let reads = 0;
+		const watch = (list: Block[]): Block[] =>
+			new Proxy(list, {
+				get(t, k, r) {
+					if (typeof k === "string" && /^\d+$/.test(k)) reads++;
+					return Reflect.get(t, k, r);
+				},
+			});
+		const s = bigScene(2, V, { ground: watch([...BIG_GROUND]), laid: watch([...BIG_LAID]) });
+		const p = pixelPainter(V.w, V.h, art);
+		drawWorld(p, s);
+		reads = 0;
+		drawWorld(p, { ...s, now: 1 });
+		expect(reads).toBe(0);
+	});
+	it("bakes each chunk once, again when a block lands in it or the lamps light, and not otherwise", () => {
+		const p = pixelPainter(V.w, V.h, art);
+		const s = bigScene(0.5, V);
+		expect(settle(p, s).pending).toBe(0);
+		const first = p.chunks.baked;
+		expect(first).toBeGreaterThan(0);
+		drawWorld(p, { ...s, now: 50 });
+		expect(p.chunks.baked).toBe(first);
+		const laid = [...BIG_LAID, { x: 470, y: 70, tile: "brick", layer: "walls" } as Block];
+		drawWorld(p, { ...s, laid });
+		expect(p.chunks.baked).toBe(first + 1);
+		drawWorld(p, { ...s, laid, dark: 0.6 });
+		expect(p.chunks.baked).toBeGreaterThan(first + 1);
+	});
+	it("bakes at most four chunks a frame, with the silhouette under the ones still to come", () => {
+		const { p, stats } = budgetPainter(1920, 1080);
+		const { counted, log } = recording(p);
+		const r = drawWorld(counted, bigScene(0.25, { w: 1920, h: 1080 }));
+		expect(stats.baked).toBe(4);
+		expect(r.pending).toBeGreaterThan(0);
+		expect(log.filter((c) => c.kind === "shape")).toHaveLength(1);
+	});
+	it("draws the far steps as one silhouette, the lights of finished builds at night, and his mark, never his sprite", () => {
+		const { counted, log } = recording(pixelPainter(V.w, V.h, art));
+		drawWorld(counted, bigScene(0.125, V, { dark: 1, lights: [{ x: HOME.x - 200, y: HOME.y - 40 }, { x: HOME.x + 200, y: HOME.y - 40 }] }));
+		expect(log.filter((c) => c.kind === "shape")).toHaveLength(1);
+		expect(log.filter((c) => c.kind === "stamp" && c.sheet !== "clouds" && c.sheet !== "birds")).toEqual([]);
+		expect(log.filter((c) => c.kind === "rect" && c.color === PALETTE.t).length).toBeGreaterThanOrEqual(2);
+		expect(log.filter((c) => c.kind === "rect" && c.color === PALETTE.p).length).toBeGreaterThanOrEqual(1);
+	});
+	it("pools a lamp's light on the build's own floor under it, not on the snow a row below (the look pass)", () => {
+		const poolsY = (scene: WorldScene) => {
+			const ys: number[] = [];
+			const p = pixelPainter(V.w, V.h, art);
+			drawWorld({ ...p, pool: (...a: Parameters<Painter["pool"]>) => (ys.push(a[1]), p.pool(...a)) }, scene);
+			return ys;
+		};
+		const lamp: Block = { x: 477, y: 83, tile: "lantern", layer: "lanterns" };
+		const floor: Block = { x: 477, y: 85, tile: "step", layer: "floor" };
+		const camera = cam(HOME.x, HOME.y - 40, 2);
+		const on = poolsY(bigScene(2, V, { camera, dark: 1, laid: [floor, lamp] }));
+		const bare = poolsY(bigScene(2, V, { camera, dark: 1, laid: [lamp] }));
+		expect(on).toHaveLength(1);
+		expect(bare[0] - on[0]).toBe(TILE * 2); // a row higher, at zoom 2
+	});
+	it("draws no clouds at the far steps, where they would tile into a strip louder than the islands (the look pass)", () => {
+		const clouds = (z: number) => {
+			const { counted, log } = recording(pixelPainter(V.w, V.h, art));
+			drawWorld(counted, bigScene(z, V, { camera: cam(HOME.x, 600, z) })); // the clouds' height
+			return log.filter((c) => c.kind === "stamp" && c.sheet === "clouds").length;
+		};
+		expect(clouds(0.25)).toBeGreaterThan(0);
+		expect(clouds(0.125)).toBe(0);
+		expect(clouds(480 / 16384)).toBe(0);
+	});
+	it("draws his mark in his scarf's colour inside a snow outline, so at night it is no star (the look pass)", () => {
+		const { counted, log } = recording(pixelPainter(V.w, V.h, art));
+		drawWorld(counted, bigScene(0.125, V, { dark: 1, mark: "#3aa597" }));
+		const rects = log.filter((c) => c.kind === "rect");
+		const inner = rects.findIndex((c) => c.color === "#3aa597");
+		expect(inner).toBeGreaterThan(0);
+		expect(rects[inner - 1].color).toBe(PALETTE.p); // the outline, drawn first, round it
+		const dflt = recording(pixelPainter(V.w, V.h, art));
+		drawWorld(dflt.counted, bigScene(0.125, V));
+		expect(dflt.log.some((c) => c.kind === "rect" && c.color === PALETTE.Z)).toBe(true); // his scarf's own letter when none is given
+	});
+	it("draws his sprite at 1/2 and his mark at 1/4", () => {
+		const near = { camera: cam(HOME.x, HOME.y - 40, 0.5) };
+		const half = recording(pixelPainter(V.w, V.h, art));
+		drawWorld(half.counted, bigScene(0.5, V, near));
+		expect(half.log.some((c) => c.kind === "stamp" && c.sheet === "sprite")).toBe(true);
+		const quarter = recording(pixelPainter(V.w, V.h, art));
+		drawWorld(quarter.counted, bigScene(0.25, V, { camera: cam(HOME.x, HOME.y - 40, 0.25) }));
+		expect(quarter.log.some((c) => c.kind === "stamp" && c.sheet === "sprite")).toBe(false);
+		expect(quarter.log.some((c) => c.kind === "rect" && c.color === PALETTE.p)).toBe(true);
+	});
+	it("stands him on the height he is given", () => {
+		const coatRows = (y: number) => {
+			const p = pixelPainter(V.w, V.h, art);
+			drawWorld(p, bigScene(2, V, { camera: cam(HOME.x, HOME.y - 40, 2), him: { x: HOME.x, y, look: look(newActor(HOME.x, 0, 12), 0, "warm") } }));
+			const coat = (["K", "L", "M"] as const).map((l) => (parseColor(PALETTE[l]) ?? []).slice(0, 3).join());
+			let lowest = -1;
+			for (let yy = 0; yy < V.h; yy++) for (let xx = 0; xx < V.w; xx++) if (coat.includes(Array.from(p.data.slice((yy * V.w + xx) * 4, (yy * V.w + xx) * 4 + 3)).join())) lowest = yy;
+			return lowest;
+		};
+		expect(coatRows(HOME.y) - coatRows(HOME.y - 32)).toBe(64);
+	});
+	it("draws the balloon's envelope before him and its basket after him", () => {
+		const { counted, log } = recording(pixelPainter(V.w, V.h, art));
+		drawWorld(counted, bigScene(2, V, { camera: cam(HOME.x, HOME.y - 40, 2), balloon: { x: HOME.x, y: HOME.y + 4 } }));
+		const order = log.filter((c) => c.kind === "stamp").map((c) => (c.sheet === "sprite" ? "him" : c.sheet === "tiles" && c.cell === tileIndex(BALLOON_BASKET.tile) ? "basket" : c.sheet === "tiles" && c.cell === tileIndex(BALLOON_ENVELOPE[0].tile) ? "envelope" : "other"));
+		expect(order.indexOf("envelope")).toBeGreaterThanOrEqual(0);
+		expect(order.indexOf("envelope")).toBeLessThan(order.indexOf("him"));
+		expect(order.indexOf("basket")).toBeGreaterThan(order.indexOf("him"));
+	});
+	it("goes by the CSS zoom: at a device pixel ratio of 2, a canvas zoom of 1 is chunks", () => {
+		const { counted, log } = recording(pixelPainter(V.w, V.h, art));
+		drawWorld(counted, bigScene(1, V, { dpr: 2 }));
+		expect(log.some((c) => c.kind === "chunk")).toBe(true);
+		expect(log.some((c) => c.kind === "stamp" && c.sheet === "tiles" && c.cell === tileIndex("stone-dark"))).toBe(false);
+	});
+	it("never builds an atlas past scale 4: a phone at a device pixel ratio of 3 zoomed to 4 stays inside iOS's canvas limit", () => {
+		const { counted, log } = recording(pixelPainter(V.w, V.h, art));
+		const life = lifeAt({ wallMs: 20_000, now: 0, view: V, scale: 12, day: true, night: false, chimney: true, landing: null, motion: true, force: "all" });
+		drawWorld(counted, bigScene(12, V, { camera: cam(HOME.x, HOME.y - 40, 12), dpr: 3, life }));
+		drawWorld(counted, bigScene(12, V, { camera: cam(667, 200, 12), dpr: 3 })); // in the clouds: a layer-0 cloud's cell spans x 40 to 360 at parallax 0.3
+		const stamps = log.filter((c) => c.kind === "stamp");
+		const sheets = new Set(stamps.map((c) => c.sheet));
+		for (const sheet of ["tiles", "sprite", "clouds"]) expect(sheets.has(sheet), sheet).toBe(true); // the cloud sheet is the largest atlas
+		const atlasPx = (sheet: Sheet, scale: number) => art.grids[sheet].length * CELL[sheet].w * scale * CELL[sheet].h * scale;
+		for (const c of stamps) {
+			expect(c.scale, String(c.sheet)).toBeLessThanOrEqual(ATLAS_MAX);
+			expect(atlasPx(c.sheet as Sheet, c.scale ?? 1)).toBeLessThanOrEqual(16_000_000);
+		}
+	});
+});
+
+describe("every zoom step's pixels (480 by 270, day, no life)", () => {
+	const V = { w: 480, h: 270 };
+	const hashAt = (z: number) => {
+		const p = pixelPainter(V.w, V.h, art);
+		settle(p, bigScene(z, V, { sky: skyAt("hsl(172 38% 50%)", "hsl(212 38% 50%)", 12) }));
+		snapshot(`big-step-${String(z).replace(".", "_")}`, p);
+		return hashPixels(p.data);
+	};
+	it("draws each step the same every time", () => {
+		for (const z of [4, 1, 0.25, 0.125]) expect(hashAt(z)).toBe(hashAt(z));
+	});
+	it("pins each step", () => {
+		expect(hashAt(4)).toMatchInlineSnapshot(`"9da4a4c5"`);
+		expect(hashAt(3)).toMatchInlineSnapshot(`"bea28ec4"`);
+		expect(hashAt(2)).toMatchInlineSnapshot(`"0c4c2065"`);
+		expect(hashAt(1)).toMatchInlineSnapshot(`"d8d75cf9"`);
+		expect(hashAt(0.5)).toMatchInlineSnapshot(`"e28abdcc"`);
+		expect(hashAt(0.25)).toMatchInlineSnapshot(`"f6042c13"`);
+		expect(hashAt(0.125)).toMatchInlineSnapshot(`"cbf64e6b"`);
+		expect(hashAt(480 / 16384)).toMatchInlineSnapshot(`"c0a65374"`);
+	});
+	it("draws the same pixels with the ground from chunk bitmaps as stamped, at a whole zoom", () => {
+		for (const z of [1, 2, 3]) {
+			const hashOf = (stampCap: number) => {
+				const p = pixelPainter(V.w, V.h, art);
+				settle(p, dense(z, V, { stampCap }));
+				return hashPixels(p.data);
+			};
+			expect(hashOf(0), `zoom ${z}`).toBe(hashOf(Number.POSITIVE_INFINITY));
+		}
+	});
+});
+
 describe("the cost of a frame (review B1)", () => {
 	// A Painter that passes every call on and counts it.
 	const counting = (p: Painter) => {
@@ -369,6 +647,9 @@ describe("the cost of a frame (review B1)", () => {
 			get h() {
 				return p.h;
 			},
+			get chunkKeep() {
+				return p.chunkKeep;
+			},
 			clear: () => (calls.n++, p.clear()),
 			gradient: (...a) => (calls.n++, p.gradient(...a)),
 			rect: (...a) => (calls.n++, p.rect(...a)),
@@ -376,6 +657,7 @@ describe("the cost of a frame (review B1)", () => {
 			glow: (...a) => (calls.n++, p.glow(...a)),
 			pool: (...a) => (calls.n++, p.pool(...a)),
 			shape: (...a) => (calls.n++, p.shape(...a)),
+			chunk: (...a) => (calls.n++, p.chunk(...a)),
 		};
 		return { counted, calls };
 	};
@@ -396,6 +678,69 @@ describe("the cost of a frame (review B1)", () => {
 			him: { x: him.x, look: look(him, 0, "warm") }, sky: skyAt("hsl(172 38% 50%)", "hsl(212 38% 50%)", 23), dark: 1, life,
 		});
 		expect(calls.n).toBeLessThan(2_000);
+	});
+	const BIG = { w: 1920, h: 1080 };
+	// Measured (calls to the screen): 798, 1,082, 1,644, 1,700, 237, 94, 156 and 166; each ceiling is the count rounded up
+	// to the next 250.
+	const CEILINGS: [number, number][] = [[4, 1000], [3, 1250], [2, 1750], [1, 1750], [0.5, 250], [0.25, 250], [0.125, 250], [1920 / 16384, 250]];
+	const nightLife = lifeAt({ wallMs: 20_000, now: 0, view: BIG, scale: 1, day: true, night: true, chimney: true, landing: null, motion: true, force: "all" });
+	const night = (s: WorldScene): WorldScene => ({ ...s, sky: skyAt("hsl(172 38% 50%)", "hsl(212 38% 50%)", 23), dark: 1, life: nightLife });
+	it.each(CEILINGS)("step %f stays under %i calls to the screen at 1920 by 1080, at night with all its life, baking at most 4 chunks", (z, ceiling) => {
+		const { p, count, stats } = budgetPainter(BIG.w, BIG.h);
+		drawWorld(p, night(bigScene(z, BIG)));
+		expect(count.n).toBeLessThan(ceiling);
+		expect(stats.baked).toBeLessThanOrEqual(BAKE_BUDGET);
+	});
+	// Measured: 1,944 at zoom 1, 1,010 at 2.
+	it.each([[1, 2000], [2, 1250]] as const)("the densest view at CSS zoom %f stays under %i calls to the screen, its ground from chunk bitmaps when it is over the cap", (z, ceiling) => {
+		const { p, count, stats } = budgetPainter(BIG.w, BIG.h);
+		expect(settle(p, night(dense(z, BIG))).pending).toBe(0);
+		const baked = stats.baked;
+		count.n = 0;
+		drawWorld(p, night(dense(z, BIG, { now: 99 })));
+		expect(count.n).toBeLessThan(ceiling);
+		expect(stats.baked).toBe(baked);
+		expect(baked).toBeGreaterThan(0); // about 4,900 ground blocks in view at zoom 1, 1,660 in the chunks at 2: over the cap
+	});
+	it("a phone pans the whole world: at most 16 chunk bitmaps kept, every evicted one released, at most 4 bakes a frame, nothing baked again at rest", () => {
+		const phone = { w: 750, h: 1400 }; // 375 by 700 CSS px at a device pixel ratio of 2
+		const ground = [...BIG_GROUND, ...[40, 100, 130].flatMap((top) => slab(2, 1020, top, 5))]; // land on four chunk rows, 1 to 4
+		for (const css of [0.5, 0.25]) {
+			const { p, count, stats } = budgetPainter(phone.w, phone.h, CHUNK_KEEP.phone);
+			const at = (x: number, now: number) => bigScene(css * 2, phone, { ground, camera: cam(x, 1300, css * 2), dpr: 2, now });
+			for (let x = 0; x <= 16384; x += 600) {
+				const baked = stats.baked;
+				count.n = 0;
+				drawWorld(p, at(x, x));
+				expect(count.n).toBeLessThan(600);
+				expect(stats.baked - baked).toBeLessThanOrEqual(BAKE_BUDGET);
+				expect(stats.kept()).toBeLessThanOrEqual(CHUNK_KEEP.phone);
+			}
+			expect(settle(p, at(8000, 20_000)).pending).toBe(0);
+			const baked = stats.baked;
+			drawWorld(p, at(8000, 20_100));
+			expect(stats.baked).toBe(baked);
+			expect(stats.released).toBeGreaterThan(0);
+			expect(stats.made).toBe(stats.kept() + stats.released);
+		}
+	});
+	describe.runIf(process.env.WORLD_TIMING === "1")("the drawing code's own time (WORLD_TIMING=1 only)", () => {
+		const median = (s: WorldScene) => {
+			const { p } = budgetPainter(BIG.w, BIG.h);
+			settle(p, s);
+			const times = Array.from({ length: 7 }, (_, k) => {
+				const t = performance.now();
+				drawWorld(p, { ...s, now: s.now + 100 + k });
+				return performance.now() - t;
+			}).sort((a, b) => a - b);
+			return times[3];
+		};
+		it.each(CEILINGS.map(([z]) => z))("step %f takes under 4 ms (median of 7)", (z) => {
+			expect(median(night(bigScene(z, BIG)))).toBeLessThan(4);
+		});
+		it.each([1, 2])("the densest view at CSS zoom %f takes under 4 ms (median of 7)", (z) => {
+			expect(median(night(dense(z, BIG)))).toBeLessThan(4);
+		});
 	});
 });
 
