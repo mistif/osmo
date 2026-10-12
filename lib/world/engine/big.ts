@@ -42,6 +42,7 @@ import { awayOf, createWorld, loadWorld, saveWorld } from "../map/world-data";
 import { FRAME_H } from "../osmo-sprite";
 import { AMBIENT_MS, FRAME_MS, framePace, shouldDraw, SLOW_MS, type DrawKey } from "../pace";
 import { decidedToday, decisionDue, fallbackLine, moodOf, newRow, pickByCode, plan, returnDecisions, willBody, type PlanDeps } from "../plan/planner";
+import { spaced } from "../plan/sites";
 import type { VillageNews, VillageRow } from "../progress";
 import { artFor, drawSky, drawWorld } from "../render";
 import { clickable, hitAreas, placeOf, roomContext, spotX } from "../rooms";
@@ -393,7 +394,7 @@ function buildBigWorld(
 		} catch {
 			return;
 		}
-		if (!shouldRise(map, builtRects(builds), max)) return;
+		if (!shouldRise(map, builtRects(builds).map(spaced), max)) return;
 		const n = map.islands.length + 1;
 		map = generateWorld(map.seed, map.gen, n);
 		drawn = null;

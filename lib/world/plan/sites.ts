@@ -13,6 +13,11 @@ const HOUSES = ["cottage", "workshop-shed", "greenhouse", "tower", "windmill", "
 const NEAR_HOUSE = 2; // a beside site starts or ends within this many columns of a house
 const FAR_WORDS = ["", "far ", "outer ", "farthest "];
 export const rectOf = (r: BuildRow): Rect => ({ x: r.x, y: r.y, w: r.footprint.map[0]?.length ?? 0, h: r.footprint.map.length });
+// Open ground kept on each side of a build (the look pass: builds one column apart line up like a street). Sites are
+// found around each taken rect widened by it, and an island's built share counts it (engine/big.ts rise), so the
+// columns kept open never hold an island back from rising.
+export const SPACE = 2;
+export const spaced = (r: Rect): Rect => ({ ...r, x: r.x - SPACE, w: r.w + 2 * SPACE });
 const centre = (i: Island) => (i.x0 + i.x1) / 2;
 const topAt = (i: Island, x: number) => i.top[x - i.x0] ?? i.ground;
 
@@ -62,7 +67,7 @@ export function sitesFor(recipe: Recipe, map: WorldMap, rows: readonly BuildRow[
 	const p = last ? rectOf(last).x + rectOf(last).w / 2 : near.x;
 	const houses = rows.filter(isHouse);
 	const entries: { site: Ground; key: [number, number, number, number] }[] = [];
-	for (const run of freeRuns(map, taken)) {
+	for (const run of freeRuns(map, taken.map(spaced))) {
 		const island = islandById(map, run.island);
 		if (!island) continue;
 		const cliffs: (Ground["cliff"])[] = [];

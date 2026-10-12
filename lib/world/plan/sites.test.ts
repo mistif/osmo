@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CASTLE_RECTS } from "../build/castle-sites";
 import type { BuildRow, Part, Recipe, Variation } from "../build/types";
 import type { Island, WorldMap } from "../map/types";
-import { freeRuns, placeWords, sitesFor } from "./sites";
+import { freeRuns, placeWords, SPACE, sitesFor, spaced } from "./sites";
 
 const flat = (id: number, x0: number, w: number, top: number, home = false): Island => ({ id, x0, x1: x0 + w, ground: top, top: Array.from({ length: w }, () => top), home });
 const HOME = flat(0, 448, 58, 86, true);
@@ -31,6 +31,13 @@ describe("where he may build (spec 4.8)", () => {
 		expect(east.map((r) => [r.x, r.w])).toEqual([[531, 29], [570, 59]]);
 		const west = runs.filter((r) => r.island === 2);
 		expect(west.map((r) => [r.x, r.w, r.ground])).toEqual([[301, 59, 110], [360, 59, 111]]);
+	});
+	it("keeps SPACE columns of open ground on each side of every build, so his builds never line up like a street", () => {
+		expect(SPACE).toBe(2);
+		expect(spaced({ x: 560, y: 66, w: 5, h: 4 })).toEqual({ x: 558, y: 66, w: 9, h: 4 });
+		const sites = sitesFor(recipe("cottage"), MAP, [row("f1", "cottage")], { island: 1, x: 600 }, [{ x: 560, y: 66, w: 5, h: 4 }]);
+		expect(sites.length).toBeGreaterThan(0);
+		for (const s of sites) if (s.kind === "ground" && s.island === 1) expect(s.x + s.w <= 558 || s.x >= 567, JSON.stringify(s)).toBe(true);
 	});
 	it("puts his own island first, nearest his last build, then the nearest island", () => {
 		const sites = sitesFor(recipe("cottage"), MAP, [row("f1", "cottage")], { island: 1, x: 600 }, []);

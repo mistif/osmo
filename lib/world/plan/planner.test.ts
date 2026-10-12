@@ -77,8 +77,8 @@ describe("the planner (spec 4.8)", () => {
 		expect(light?.site.kind === "ground" && light.site.cliff).toBeTruthy();
 		const garden = cands.find((c) => c.recipe.id === "garden");
 		expect(garden?.site).toMatchObject({ kind: "ground", island: 1, ground: 70 });
-		// a run that starts or ends within 2 columns of the house (560 to 564)
-		if (garden?.site.kind === "ground") expect(garden.site.x === 565 || garden.site.x + garden.site.w === 560).toBe(true);
+		// a run that starts or ends 2 columns from the house (560 to 564): the open ground kept beside every build (sites.ts SPACE)
+		if (garden?.site.kind === "ground") expect(garden.site.x === 567 || garden.site.x + garden.site.w === 558).toBe(true);
 		const meets = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 		for (const c of cands) for (const r of [{ x: 560, y: 66, w: 5, h: 4 }, ...CASTLE_RECTS]) expect(meets(c.compiled, r), `${c.recipe.id} on ${JSON.stringify(r)}`).toBe(false);
 	});
