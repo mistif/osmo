@@ -1,10 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { TILE } from "./blueprints/types";
 import { canvasPainter } from "./canvas-painter";
 import { CHUNK_PX } from "./lod";
+import { FRAME_H, FRAME_NAMES, FRAME_W } from "./osmo-sprite";
 import { hashPixels, pixelPainter } from "./pixel-painter";
 import { colours } from "./raster";
 import { artFor, sheetBitmap, type Painter } from "./render";
-import { tileIndex } from "./tiles";
+import { TILE_IDS, tileIndex } from "./tiles";
 
 // The polish pass's two additions to the Painter (render.ts): stamp into a box of any size (the camera eases between
 // whole scales), and pool (a lamp's light on the ground). Both are drawn here by the pixel painter the tests hash.
@@ -155,5 +157,65 @@ describe("the painter's clock (what drawWorld times a frame's bakes with)", () =
 		const own = canvasPainter(ctx, art).clock;
 		expect(typeof own?.()).toBe("number");
 		expect(pixelPainter(W, H, art).clock).toBeUndefined();
+	});
+});
+
+describe("the optional art files (/village/tiles.png and /village/osmo-sheet.png)", () => {
+	const TILES_FILE = "/village/tiles.png";
+	const SPRITE_FILE = "/village/osmo-sheet.png";
+	// A fresh copy of the module each time: what it remembers lives as long as the page, here as long as the copy.
+	const fresh = async () => {
+		vi.resetModules();
+		return (await import("./canvas-painter")).loadSheets;
+	};
+	const image = (w: number, h: number) => ({ img: { tag: `${w}x${h}` } as unknown as CanvasImageSource, w, h });
+	const RIGHT = { [TILES_FILE]: image(TILE_IDS.length * TILE, TILE), [SPRITE_FILE]: image(FRAME_NAMES.length * FRAME_W, FRAME_H) };
+	const quiet = () => ({ info: vi.spyOn(console, "info").mockImplementation(() => {}), warn: vi.spyOn(console, "warn").mockImplementation(() => {}) });
+	afterEach(() => vi.restoreAllMocks());
+
+	it("asks for a file that is not there once per page load, however often the world restarts", async () => {
+		const loadSheets = await fresh();
+		const { info } = quiet();
+		const asked: string[] = [];
+		const load = async (file: string) => (asked.push(file), null);
+		for (let k = 0; k < 3; k++) expect(await loadSheets(load)).toEqual({});
+		expect(asked).toEqual([TILES_FILE, SPRITE_FILE]);
+		expect(info).toHaveBeenCalledTimes(2); // the console says so once for each, not at every restart
+	});
+	it("asks for a file of the wrong size once too, and says why once", async () => {
+		const loadSheets = await fresh();
+		const { warn } = quiet();
+		const asked: string[] = [];
+		const load = async (file: string) => (asked.push(file), image(10, 10));
+		for (let k = 0; k < 2; k++) expect(await loadSheets(load)).toEqual({});
+		expect(asked).toEqual([TILES_FILE, SPRITE_FILE]);
+		expect(warn).toHaveBeenCalledTimes(2);
+	});
+	it("uses a file that is there and the right size, and does not ask for it again", async () => {
+		const loadSheets = await fresh();
+		const asked: string[] = [];
+		const load = async (file: string) => (asked.push(file), RIGHT[file as keyof typeof RIGHT] ?? null);
+		const first = await loadSheets(load);
+		expect(first).toEqual({ tiles: RIGHT[TILES_FILE].img, sprite: RIGHT[SPRITE_FILE].img });
+		expect(await loadSheets(load)).toEqual(first);
+		expect(asked).toEqual([TILES_FILE, SPRITE_FILE]);
+	});
+	it("keeps what each file answered on its own: one there, one missing", async () => {
+		const loadSheets = await fresh();
+		quiet();
+		const asked: string[] = [];
+		const load = async (file: string) => (asked.push(file), file === TILES_FILE ? RIGHT[TILES_FILE] : null);
+		expect(await loadSheets(load)).toEqual({ tiles: RIGHT[TILES_FILE].img });
+		expect(await loadSheets(load)).toEqual({ tiles: RIGHT[TILES_FILE].img });
+		expect(asked).toEqual([TILES_FILE, SPRITE_FILE]);
+	});
+	it("asks once when two restarts overlap, and treats a loader that throws as a miss", async () => {
+		const loadSheets = await fresh();
+		quiet();
+		const asked: string[] = [];
+		const load = (file: string): Promise<null> => (asked.push(file), Promise.reject(new Error("offline")));
+		const both = await Promise.all([loadSheets(load), loadSheets(load)]);
+		expect(both).toEqual([{}, {}]);
+		expect(asked).toEqual([TILES_FILE, SPRITE_FILE]);
 	});
 });

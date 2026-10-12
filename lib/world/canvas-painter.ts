@@ -177,25 +177,58 @@ const SHEETS = {
 	sprite: { file: "/village/osmo-sheet.png", w: FRAME_NAMES.length * FRAME_W, h: FRAME_H },
 } as const;
 
-// The optional PNG sheets: used only when present and exactly the right size; otherwise the console says why.
-export async function loadSheets(): Promise<Overrides> {
+// What asking for one of the files brings back: the image and its size in pixels, or null when the file is not there.
+export type SheetFile = { img: CanvasImageSource; w: number; h: number };
+export type SheetLoader = (file: string) => Promise<SheetFile | null>;
+const fromPage: SheetLoader = async (file) => {
+	const img = new Image();
+	img.src = file;
+	try {
+		await img.decode();
+	} catch {
+		return null;
+	}
+	return { img, w: img.naturalWidth, h: img.naturalHeight };
+};
+
+// What each file came to (its image, or null: missing or the wrong size), kept for the life of the page. The world starts
+// again for a new scarf, a darker hour, a clear or a visit back to it, and each start used to ask for both files again:
+// a 404 in the console every time for a file nobody has drawn. The promise is kept, so two starts that overlap ask once.
+const answers = new Map<string, Promise<CanvasImageSource | null>>();
+async function answer(sheet: keyof typeof SHEETS, load: SheetLoader): Promise<CanvasImageSource | null> {
+	const { file, w, h } = SHEETS[sheet];
+	let got: SheetFile | null = null;
+	try {
+		got = await load(file);
+	} catch {
+		got = null;
+	}
+	if (!got) {
+		console.info(`[village] No ${file}; using the drawn ${sheet}.`);
+		return null;
+	}
+	const problem = sheetProblem(got.w, got.h, w, h);
+	if (problem) {
+		console.warn(`[village] ${file} ${problem}; using the drawn ${sheet}.`);
+		return null;
+	}
+	return got.img;
+}
+
+// The optional PNG sheets: used only when present and exactly the right size; otherwise the console says why, once. Each
+// file is asked for at most once per page load, found or not. load: how a file is asked for (the page's own, a fake in
+// the tests).
+export async function loadSheets(load: SheetLoader = fromPage): Promise<Overrides> {
 	const out: Overrides = {};
 	for (const sheet of ["tiles", "sprite"] as const) {
-		const { file, w, h } = SHEETS[sheet];
-		const img = new Image();
-		img.src = file;
-		try {
-			await img.decode();
-		} catch {
-			console.info(`[village] No ${file}; using the drawn ${sheet}.`);
-			continue;
+		const { file } = SHEETS[sheet];
+		let asked = answers.get(file);
+		if (!asked) {
+			asked = answer(sheet, load);
+			answers.set(file, asked);
 		}
-		const problem = sheetProblem(img.naturalWidth, img.naturalHeight, w, h);
-		if (problem) {
-			console.warn(`[village] ${file} ${problem}; using the drawn ${sheet}.`);
-			continue;
-		}
-		out[sheet] = img;
+		const img = await asked;
+		if (img) out[sheet] = img;
 	}
 	return out;
 }
