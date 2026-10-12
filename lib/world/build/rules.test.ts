@@ -86,6 +86,17 @@ describe("the rules every build passes (spec 4.3)", () => {
 		expect(rules(one, SITE, { ...FLAT, taken: (x, y) => x === 105 && y === 59 }, NO_DOOR)).toContain("overlap");
 		expect(rules(at(fp(["S", "S"], { S: L("step", "floor") }), 105, 59), SITE, FLAT, NO_DOOR)).toContain("overlap");
 	});
+	it("lets a dug build take the land of its dug rows and no more, and never dig into the sky", () => {
+		const legend = { c: L("step", "walls"), W: L("water", "walls") };
+		const pond = (x: number, dug: number): Compiled => ({ ...at(fp(["c..", "WWW", "WWW"], legend), x, 59), dug });
+		expect(rules(pond(105, 2), SITE, FLAT, NO_DOOR)).toEqual([]);
+		expect(rules(pond(105, 1), SITE, FLAT, NO_DOOR)).toContain("overlap"); // its second row is in the ground, undug
+		expect(rules(pond(105, 0), SITE, FLAT, NO_DOOR)).toContain("overlap");
+		// at the island's east end the hole's last column is over the sky; a notch in the top is no ground to dig either
+		expect(rules(pond(138, 2), { ...SITE, x: 130, w: 12 }, FLAT, NO_DOOR)).toContain("site");
+		const notch = { ...FLAT, land: (x: number, y: number) => FLAT.land(x, y) && !(x === 106 && y === 60) };
+		expect(checkBuild(pond(105, 2), NO_DOOR, SITE, notch)).toEqual([{ rule: "site", x: 106, y: 60 }]);
+	});
 	it("is at most 24 rows tall and inside the world", () => {
 		const column = at(fp(Array.from({ length: 25 }, () => "B"), { B: L("brick", "walls") }), 105, 35);
 		expect(rules(column, SITE, FLAT, NO_DOOR)).toContain("tall");

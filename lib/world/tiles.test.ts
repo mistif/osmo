@@ -37,6 +37,13 @@ const FIX_ROUND = ["deck", "spire-l", "spire-r", "spire-l-hi", "spire-r-hi", "sp
 	"sail-lying", "sail-roof", "sail-thatch", "hub-roof", "hub-thatch",
 	"statue-top", "statue-foot", "arch-wide-l", "arch-wide-k", "arch-wide-r",
 ];
+// Appended in the hand checks' fix round, after the 155.
+const HAND = ["pond-coping", "pond-jetty", "pond-deep", "pond-bank-l", "pond-bank-r",
+	"light-red-l", "light-red", "light-red-r", "light-white-l", "light-white", "light-white-r", "gallery-rail",
+	"lamp-room-l", "lamp-room", "lamp-room-r", "lamp-room-l-lit", "lamp-room-lit", "lamp-room-r-lit",
+	"lamp-cap-l", "lamp-cap", "lamp-cap-r", "lamp-cap-peak",
+	"pond-surface", "pond-edge-l", "pond-edge-r",
+];
 // Tiles with no transparent pixel.
 const FILLED: TileId[] = [
 	"snow", "stone", "stone-dark", "brick", "brick-dark", "plank", "beam-h", "glass", "window", "window-top",
@@ -61,8 +68,8 @@ const mean = (chars: string[]) => {
 
 describe("the tiles", () => {
 	it("are the 38 tiles in the fixed cell order, then the look pass's, the rooms', the polish pass's and the free-will tiles, appended", () => {
-		expect([...TILE_IDS]).toEqual([...ORDER, ...ADDED, ...ROOMS, ...POLISH, ...FREE_WILL, ...FIX_ROUND]);
-		expect(Object.keys(TILES).sort()).toEqual([...ORDER, ...ADDED, ...ROOMS, ...POLISH, ...FREE_WILL, ...FIX_ROUND].sort());
+		expect([...TILE_IDS]).toEqual([...ORDER, ...ADDED, ...ROOMS, ...POLISH, ...FREE_WILL, ...FIX_ROUND, ...HAND]);
+		expect(Object.keys(TILES).sort()).toEqual([...ORDER, ...ADDED, ...ROOMS, ...POLISH, ...FREE_WILL, ...FIX_ROUND, ...HAND].sort());
 		expect(tileIndex("fence")).toBe(54);
 		expect(tileIndex("tower-cap")).toBe(55);
 		expect(tileIndex("dome-r")).toBe(60);
@@ -145,6 +152,22 @@ describe("the tiles", () => {
 			expect(n.join("").replace(/[^tuv]/g, "").length, night).toBeGreaterThan(day === "shelf-window" ? 20 : 30);
 		}
 	});
+	it("lights the lighthouse's lamp room at night in the same frame as by day (the hand checks)", () => {
+		for (const [day, night] of [["lamp-room-l", "lamp-room-l-lit"], ["lamp-room", "lamp-room-lit"], ["lamp-room-r", "lamp-room-r-lit"]] as const) {
+			const d = TILES[day];
+			const n = TILES[night];
+			let same = 0;
+			for (let y = 0; y < 16; y++) {
+				for (let x = 0; x < 16; x++) {
+					if (d[y][x] === n[y][x]) same++;
+					expect(n[y][x] === ".", `${night} ${x},${y}`).toBe(d[y][x] === ".");
+				}
+			}
+			expect(same, night).toBeGreaterThan(40); // the iron frame, the mullions and the brass are unchanged
+			expect(d.join(""), day).not.toMatch(/[tuv]/); // no lamp light by day
+			expect(n.join("").replace(/[^tuv]/g, "").length, night).toBeGreaterThan(80); // the panes full of it at night
+		}
+	});
 	it("keeps the worked example exactly", () => {
 		expect(TILES.step[0]).toBe("eddddddaedddddda");
 		expect(TILES.step[8]).toBe("dddaeddddddaeddd");
@@ -168,6 +191,10 @@ describe("the free-will tiles (spec 4.5)", () => {
 			expect(inside.size, `${id} is still one flat fill`).toBeGreaterThan(2);
 		}
 	});
+	// The dug pond's cells in the ground (the hand checks) are opaque, so the snow and rock drawn under them never show.
+	it.each(["pond-surface", "pond-deep", "pond-edge-l", "pond-edge-r", "pond-bank-l", "pond-bank-r"] as TileId[])("%s, dug into the ground, has no transparent pixel", (id) => {
+		expect(TILES[id].join("")).not.toContain(".");
+	});
 	it.each(OPAQUE)("%s has no transparent pixel", (id) => {
 		expect(TILES[id].join("")).not.toContain(".");
 	});
@@ -186,6 +213,21 @@ describe("the free-will tiles (spec 4.5)", () => {
 	it("gives the thatch and the glass roof the shingle roof's outline, so they meet a wall the same way", () => {
 		for (const [shingle, other] of [["roof-left", "thatch-l"], ["roof-right", "thatch-r"], ["roof-left", "glass-roof-l"], ["roof-right", "glass-roof-r"]] as const) {
 			for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) expect(TILES[other][y][x] === ".", `${other} ${x},${y}`).toBe(TILES[shingle][y][x] === ".");
+		}
+	});
+	it("draws the bridge's handrail so it survives the half-scale chunk bitmap, by day and at night (the hand checks)", () => {
+		// At 1/2 a chunk keeps every other row and column of it (even ones here, odd ones in a browser): from either, each
+		// column of the rope keeps a dark strand (against the day's sky) and a lighter one (against the night's), and the
+		// hanger down to the board keeps a dark column.
+		const g = TILES.rope;
+		for (const parity of [0, 1]) {
+			for (let x = 0; x < 16; x++) {
+				const kept = g.map((r) => r[x]).filter((ch, y) => y % 2 === parity && y < 6 && ch !== ".");
+				expect(kept.some((ch) => (lum(ch) ?? 255) < 80), `column ${x}, rows of parity ${parity}`).toBe(true);
+				expect(kept.some((ch) => (lum(ch) ?? 0) > 100), `column ${x}, rows of parity ${parity}`).toBe(true);
+			}
+			const hanger = g.slice(6).map((r) => r[parity]);
+			expect(hanger.every((ch) => (lum(ch) ?? 255) < 80), `hanger column ${parity}`).toBe(true);
 		}
 	});
 	it("puts the water's bright line on top", () => {

@@ -46,14 +46,18 @@ export function checkBuild(c: Compiled, recipe: Recipe, site: Site, world: RuleW
 		const wall = cells.get(key(b.x, b.y));
 		if (!wall || (wall.layer !== "walls" && wall.layer !== "backwall")) out.push({ rule: "decor", x: b.x, y: b.y });
 	}
+	// A dug build (a pond's basin) takes the land of its dug rows, from the site's top row down, and only that: each of
+	// those cells must be land (it is dug into the island, never into the sky beside it).
+	const dug = (b: Block) => site.kind === "ground" && b.y >= site.ground && b.y < site.ground + (c.dug ?? 0);
 	if (site.kind === "ground") {
 		if (c.x < site.x || c.x + c.w > site.x + site.w) out.push({ rule: "site", x: c.x, y: c.y });
 		const bottom = c.y + c.h - 1;
 		for (const b of solid) if (b.y === bottom && !world.land(b.x, b.y + 1)) out.push({ rule: "site", x: b.x, y: b.y });
+		for (const b of blocks) if (dug(b) && !world.land(b.x, b.y)) out.push({ rule: "site", x: b.x, y: b.y });
 	} else {
 		for (const end of [site.a, site.b]) if (!world.land(end.x, end.y)) out.push({ rule: "site", x: end.x, y: end.y });
 	}
-	for (const b of blocks) if (world.land(b.x, b.y) || world.taken(b.x, b.y)) out.push({ rule: "overlap", x: b.x, y: b.y });
+	for (const b of blocks) if ((world.land(b.x, b.y) && !dug(b)) || world.taken(b.x, b.y)) out.push({ rule: "overlap", x: b.x, y: b.y });
 	return out;
 }
 

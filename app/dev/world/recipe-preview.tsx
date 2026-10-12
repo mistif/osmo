@@ -17,6 +17,7 @@ import { PARTS } from "@/lib/world/build/parts";
 import { RECIPES } from "@/lib/world/build/recipes";
 import { checkBuild, ruleWorldOf } from "@/lib/world/build/rules";
 import type { Compiled, Problem, Recipe, Site, Variation } from "@/lib/world/build/types";
+import { standBeside } from "@/lib/world/build/stand";
 import { sizeOf } from "@/lib/world/build/util";
 import { chooseVariation } from "@/lib/world/build/variation";
 import type { Camera } from "@/lib/world/camera";
@@ -86,8 +87,8 @@ function homeFixture(): Fixture {
 	return homeKept;
 }
 
-// The camera: the build, a margin of two tiles left and above, three right (for him) and below (for the ground), at the
-// nearest zoom of 2, 1 and 1/2 at which all of it fits.
+// The camera: the build, a margin of two tiles left (where he stands when the ground is only there) and above, three right
+// (for him) and below (for the ground), at the nearest zoom of 2, 1 and 1/2 at which all of it fits.
 function framing(c: Compiled, bridge: boolean): { z: number; x: number; y: number } {
 	const left = c.x - 2;
 	const right = c.x + c.w + (bridge ? 2 : 3);
@@ -110,9 +111,12 @@ function preview(id: string, seed: number): Result {
 		const bridge = site.kind === "bridge";
 		const f = framing(c, bridge);
 		const camera: Camera = { x: f.x, y: f.y, from: f.z, to: f.z, at: 0, aimX: f.x, aimY: f.y, ox: 0, oy: 0, glideAt: Number.NEGATIVE_INFINITY };
+		const laid = cellsOf(c.footprint, c.x, c.y, c.recipe);
+		// Beside the build on the side that has ground, else on its own floor (standBeside); a bridge's picture has no one in it.
+		const stand = site.kind === "ground" ? standBeside(c, fx.map.islands.find((i) => i.id === site.island), laid) : null;
 		const scene: WorldScene = {
-			camera, view: VIEW, now: 0, clock: 0, ground: fx.map.ground, laid: cellsOf(c.footprint, c.x, c.y, c.recipe), ghost: null, outline: [],
-			him: { x: site.kind === "ground" ? (c.x + c.w + 1) * TILE + TILE / 2 : OFF_SCREEN, y: site.kind === "ground" ? site.ground * TILE : 0, look: STANDING },
+			camera, view: VIEW, now: 0, clock: 0, ground: fx.map.ground, laid, ghost: null, outline: [],
+			him: { x: stand ? stand.x : OFF_SCREEN, y: stand ? stand.y : 0, look: STANDING },
 			dark: 0,
 		};
 		return { ok: true, shown: { recipe, v, c, problems, scene, zoom: f.z } };

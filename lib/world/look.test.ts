@@ -273,7 +273,7 @@ describe("rope bridges, finished, at zoom 2", () => {
 		}
 		throw new Error("no such bridge site");
 	};
-	const shot = (name: string, f: ReturnType<typeof find>, onIt: boolean, time: Time) => {
+	const shot = (name: string, f: ReturnType<typeof find>, onIt: boolean, time: Time, z = 2) => {
 		if (!bridge) throw new Error("no rope bridge recipe");
 		const c = compile(bridge, chooseVariation(bridge, PARTS, f.seed), f.site, PARTS);
 		const blocks = cellsOf(c.footprint, c.x, c.y, c.recipe);
@@ -281,7 +281,7 @@ describe("rope bridges, finished, at zoom 2", () => {
 		const deck = deckOf(blocks, f.site.from, f.site.to);
 		const mid = Math.floor((deck.x0 + deck.x1) / 2);
 		const him = onIt ? walking((mid + 0.5) * TILE, deck.rows[mid - deck.x0] * TILE) : standing((f.site.a.x - 3 + 0.5) * TILE, f.site.a.y * TILE);
-		const { camera, view } = around(c, 2, { l: 6, t: 6, r: 6, b: 6 });
+		const { camera, view } = around(c, z, { l: 6, t: 6, r: 6, b: 6 });
 		const scene: WorldScene = {
 			camera, view, now: 0, clock: 0, ground: lists.ground, laid: [...lists.laid, ...blocks], ghost: null, outline: [], him,
 			sky: skyAt(SCARF, SKY_B, HOUR[time]), anchor: ANCHOR, lights: lists.lights,
@@ -291,6 +291,12 @@ describe("rope bridges, finished, at zoom 2", () => {
 	it.each(TIMES)("between two islands, him half way across, %s", (time) => {
 		const f = find((s) => s.a.x !== 509 && s.b.x !== HOME_ISLAND.x0);
 		expect(() => shot(`bridge-across-${time}`, f, true, time)).not.toThrow();
+	}, SLOW.timeout);
+	// The hand checks: at 1/2 (the chunk bitmaps, drawn at half scale) the handrail read as gone, the deck as a plank stair.
+	it.each(TIMES)("between two islands, him half way across, at zoom 1 and 1/2, %s", (time) => {
+		const f = find((s) => s.a.x !== 509 && s.b.x !== HOME_ISLAND.x0);
+		expect(() => shot(`bridge-across-1-${time}`, f, true, time, 1)).not.toThrow();
+		expect(() => shot(`bridge-across-half-${time}`, f, true, time, 0.5)).not.toThrow();
 	}, SLOW.timeout);
 	it.each(TIMES)("east of home from the dock's far board, %s", (time) => {
 		const f = find((s) => s.a.x === 509);

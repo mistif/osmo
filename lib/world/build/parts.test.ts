@@ -14,6 +14,8 @@ const IDS = [
 	"well-ring", "plinth-row", "orchard-row", "bridge-span", "bridge-anchor", "storey-shaft", "side-sign",
 	// the fix round's
 	"storey-shrine", "loft-posts",
+	// the hand checks' (the lighthouse)
+	"storey-lighthouse", "beam-gallery", "top-lamp-room", "roof-lamp-cap",
 ];
 // The rows a part shows at width w (row parts and roofs), or its own grid.
 const shown = (p: (typeof PARTS)[number], w: number): string[] =>

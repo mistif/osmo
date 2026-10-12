@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { cellsOf } from "../blueprints";
+import { litOf } from "../texture";
+import { compile } from "./compile";
 import { PARTS } from "./parts";
 import { RECIPES } from "./recipes";
 import { SEED_KINDS, type Material, type Recipe } from "./types";
+import { chooseVariation } from "./variation";
 
 const byId = new Map(PARTS.map((p) => [p.id, p]));
 const fits = (id: string, m: Material) => {
@@ -80,11 +84,33 @@ describe("the twenty seed recipes (spec 4.2)", () => {
 			expect(between.some((t) => !t.optional && (t.parts.includes("loft-posts") || t.role === "top")), r.id).toBe(true);
 		}
 	});
-	it("keeps the glowing dome for the lighthouse and the belvedere, never the shrine (it was the loudest thing at night)", () => {
+	it("keeps the glowing dome for the belvedere, never the shrine (it was the loudest thing at night)", () => {
 		const roofs = (id: string) => RECIPES.find((r) => r.id === id)?.tiers.filter((t) => t.role === "roof").flatMap((t) => t.parts) ?? [];
 		expect(roofs("shrine")).not.toContain("roof-dome");
 		expect(roofs("shrine").length).toBeGreaterThan(0);
-		expect(roofs("lighthouse")).toContain("roof-dome");
+		expect(roofs("belvedere")).toContain("roof-dome");
+	});
+	it("builds the lighthouse as one, not a second bell tower (the hand checks): a slim striped shaft, a railed gallery, a glazed lamp room lit at night, its cap", () => {
+		const r = RECIPES.find((x) => x.id === "lighthouse");
+		if (!r) throw new Error("no lighthouse");
+		for (let seed = 0; seed < 20; seed++) {
+			const c = compile(r, chooseVariation(r, PARTS, seed), { kind: "ground", island: 1, x: 100, w: 40, ground: 60, cliff: "left" }, PARTS);
+			const bs = cellsOf(c.footprint, c.x, c.y, c.recipe);
+			const rows = Array.from({ length: c.h }, (_, i) => bs.filter((b) => b.y === c.y + i).sort((a, b) => a.x - b.x).map((b) => b.tile));
+			expect(rows.slice(0, 5), `seed ${seed}`).toEqual([
+				["lamp-cap-peak"],
+				["lamp-cap-l", "lamp-cap", "lamp-cap-r"],
+				["lamp-room-l", "lamp-room", "lamp-room-r"],
+				["rail", "gallery-rail", "gallery-rail", "gallery-rail", "rail"],
+				["deck", "deck", "deck", "deck", "deck"],
+			]);
+			for (const t of rows[2]) expect(litOf(t, 1), t).not.toBe(t);
+			expect(rows[rows.length - 1]).toEqual(["step", "step", "step", "step", "step"]);
+			const shaft = rows.slice(5, -1);
+			for (const row of shaft) expect(row).toHaveLength(3);
+			const bands = shaft.map((row) => (row.some((t) => t.startsWith("light-red")) ? "R" : row.some((t) => t.startsWith("light-white")) ? "W" : "?")).join("");
+			expect(bands, `seed ${seed}`).toMatch(/^(RRWW){3,4}$/); // three or four storeys, taller than any bell tower's shaft is wide by far
+		}
 	});
 	it("builds the arch gate five wide, so its one arch spans the three cells between its posts", () => {
 		expect(RECIPES.find((r) => r.id === "arch-gate")?.width).toEqual([5, 5]);

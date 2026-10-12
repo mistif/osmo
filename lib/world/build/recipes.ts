@@ -49,8 +49,10 @@ export const RECIPES: readonly Recipe[] = [
 		doors: [], decor: { parts: ["decor-banner", "decor-lantern"], max: 2 }, sides: { parts: ["side-sign"], max: 1 } },
 	{ id: "statue", name: "statue", kind: "statue", size: "small", site: "level", width: [3, 5], materials: ["stone"],
 		tiers: [T("plinth", "floor", ["plinth-row"]), T("figure", "top", ["top-statue"])], doors: [], decor: none, sides: { parts: ["side-bench", "side-bed"], max: 2 } },
-	{ id: "lighthouse", name: "small lighthouse", kind: "lighthouse", size: "medium", site: "cliff", width: [5, 5], materials: ["stone", "brick"],
-		tiers: [T("floor", "floor", ["floor-step"]), T("storey", "storey", ["storey-stone", "storey-brick", "storey-shaft"], { count: [2, 3] }), T("beam", "beam", ["beam-balcony"], { optional: true }), T("lamp", "top", ["top-lamp"]), T("roof", "roof", ["roof-dome"])],
+	// A slim striped shaft, three or four storeys of bands, its gallery, its glazed lamp room and its cap (the hand checks:
+	// on the bell tower's shaft under a small dome it read as a second bell tower).
+	{ id: "lighthouse", name: "small lighthouse", kind: "lighthouse", size: "medium", site: "cliff", width: [3, 3], materials: ["stone", "brick"],
+		tiers: [T("floor", "floor", ["floor-step"]), T("storey", "storey", ["storey-lighthouse"], { count: [3, 4] }), T("gallery", "beam", ["beam-gallery"]), T("lamp", "top", ["top-lamp-room"]), T("cap", "roof", ["roof-lamp-cap"])],
 		doors: ["door-oak"], decor: none, sides: none },
 	{ id: "workshop-shed", name: "workshop shed", kind: "workshop-shed", size: "medium", site: "level", width: [7, 11], materials: ["wood", "brick"],
 		tiers: [T("floor", "floor", ["floor-boards", "floor-step"]), T("storey", "storey", ["storey-wood", "storey-brick"]), T("roof", "roof", ["roof-tile-gable", "roof-thatch-gable"]), T("chimney", "chimney", ["chimney-brick"], { optional: true })],

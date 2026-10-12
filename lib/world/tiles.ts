@@ -6,7 +6,7 @@
 // Brick is shaded by a small helper from hand-laid maps (one letter per brick); the rest is drawn from per-pixel
 // rules and a few hand-drawn grids. Texture comes from a fixed hash, so every run draws the same pixels.
 import type { Grid } from "./raster";
-import { chimneyFoot, hubOver, MORE_TILE_IDS, MORE_TILES, onPaving } from "./tiles-more";
+import { chimneyFoot, hubOver, MORE_TILE_IDS, MORE_TILES, onPaving, pondBank } from "./tiles-more";
 
 export const TILE_IDS = [
 	"snow", "snow-edge-l", "snow-edge-r", "stone", "stone-dark", "stone-edge-l", "stone-edge-r", "stone-bottom",
@@ -1343,6 +1343,11 @@ export const TILES: Readonly<Record<TileId, Grid>> = {
 	"chimney-base-thatch": chimneyFoot(brick, MORE_TILES["thatch-r"]),
 	"lamp-post-paved": onPaving(lanternPost),
 	"hub-roof": hubOver(roofPeak),
+	// The pond's banks: the island's own snow over rock, and its rock under that (tiles-more.ts pondBank).
+	"pond-edge-l": pondBank(snowBase, "w", false),
+	"pond-edge-r": pondBank(snowBase, "e", false, true),
+	"pond-bank-l": pondBank(stone, "w", true),
+	"pond-bank-r": pondBank(stone, "e", true),
 };
 
 const INDEX = new Map<TileId, number>(TILE_IDS.map((id, i) => [id, i]));

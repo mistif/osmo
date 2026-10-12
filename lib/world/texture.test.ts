@@ -53,6 +53,7 @@ describe("lit after dark", () => {
 		expect(litOf("window-top", 1)).toBe("window-top-lit");
 		expect(litOf("shelf-window", 1)).toBe("shelf-window-lit");
 		expect([litOf("dome-l", 1), litOf("dome", 1), litOf("dome-r", 1)]).toEqual(["dome-l-lit", "dome-lit", "dome-r-lit"]);
+		expect([litOf("lamp-room-l", 1), litOf("lamp-room", 1), litOf("lamp-room-r", 1)]).toEqual(["lamp-room-l-lit", "lamp-room-lit", "lamp-room-r-lit"]);
 		expect(litOf("shelf-window", LIT_FROM - 0.01)).toBe("shelf-window");
 		expect(litOf("brick", 1)).toBe("brick");
 	});

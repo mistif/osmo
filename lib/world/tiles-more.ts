@@ -21,6 +21,12 @@ export const MORE_TILE_IDS = [
 	"chimney-base", "chimney-base-thatch", "paving", "lamp-post-paved",
 	"sail-lying", "sail-roof", "sail-thatch", "hub-roof", "hub-thatch",
 	"statue-top", "statue-foot", "arch-wide-l", "arch-wide-k", "arch-wide-r",
+	// Appended in the hand checks' fix round; every tile above keeps its cell.
+	"pond-coping", "pond-jetty", "pond-deep", "pond-bank-l", "pond-bank-r",
+	"light-red-l", "light-red", "light-red-r", "light-white-l", "light-white", "light-white-r", "gallery-rail",
+	"lamp-room-l", "lamp-room", "lamp-room-r", "lamp-room-l-lit", "lamp-room-lit", "lamp-room-r-lit",
+	"lamp-cap-l", "lamp-cap", "lamp-cap-r", "lamp-cap-peak",
+	"pond-surface", "pond-edge-l", "pond-edge-r",
 ] as const;
 export type MoreTileId = (typeof MORE_TILE_IDS)[number];
 
@@ -304,19 +310,26 @@ const thatchPeak = make((x, y) => {
 	return straw(x, y);
 });
 
-// --- A hand rope near the top of its cell (a bridge's handrail, at his waist over the board under it): three rows thick,
-// its strands twisted in a slant every 4 px, lit on top, shaded under, sagging a
-// pixel between x 4 and 11; level at both ends, so ropes join. ---
+// --- A hand rope near the top of its cell (a bridge's handrail, at his waist over the board under it), its strands
+// twisted in a slant every 4 px, sagging a pixel between x 4 and 11, level at both ends so ropes join; and a hanger down
+// its west edge to the board under it. The hand checks: three rows of light rope were lost against the sky, and at 1/2
+// (the chunk bitmap drawn at half scale keeps every other row and column) the bridge read as a plank stair. So it is four
+// rows, two light over two dark, so every other row of it keeps one light and one dark (the dark against the day's sky,
+// the light against the night's), and the hanger is two columns wide and dark. ---
 const SAG = [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0];
+// The tie under a board (bridgeBoard): a strand's colour i rows down from its top, three rows of it, as it was.
 function twisted(x: number, i: number): string {
 	const seam = (x + i) % 4 === 0;
 	if (i === 0) return seam ? "@" : "?";
 	if (i === 1) return seam ? "8" : "@";
 	return seam ? "A" : "8";
 }
+const HANDRAIL = ["@?", "@?", "8A", "Az"]; // each row's strand and seam colours: two light rows over two dark
 const rope = make((x, y) => {
 	const i = y - 1 - SAG[x];
-	return i < 0 || i > 2 ? "." : twisted(x, i);
+	if (i >= 0 && i <= 3) return HANDRAIL[i][(x + i) % 4 === 0 ? 1 : 0];
+	if (i > 3 && x <= 1) return x === 0 ? "8" : "A"; // the hanger
+	return ".";
 });
 
 // --- A rope bridge's deck from the side: the ends of two cross boards, lit along the top he walks on, with the end
@@ -718,7 +731,8 @@ const spirePeak = make((x, y) => {
 	return verge(dl, x, y, true) ?? verge(dr, x, y, false) ?? shingle(x, y);
 });
 
-// --- A low pond, one row deep: the water's surface half way down the cell behind a stone lip along its front (the
+// --- The fix round's low pond, one row deep, kept as it was for the ponds saved before the hand checks (their saved
+// footprints name these cells): the water's surface half way down the cell behind a stone lip along its front (the
 // dressed stone's colours, a block every 8 px, lit along its top); its end is a stone rim a little higher than the lip;
 // the dock is the lip and the water with a jetty's boards over them at the rim's height, on a post into the water. ---
 const LIP = 11;
@@ -728,14 +742,14 @@ const lip = (x: number, y: number): string => {
 	if ((x & 7) === 0) return "|";
 	return y === 14 ? "}" : "|";
 };
-const pondWater = make((x, y) => {
+const lowPondWater = make((x, y) => {
 	if (y < 7) return ".";
 	if (y >= LIP) return lip(x, y);
 	if (y === 7) return noise(x, 7, 210) > 0.65 ? "$" : "#";
 	if (y === 8) return noise(x, 8, 211) > 0.7 ? "#" : "!";
 	return (x + y * 3) % 7 === 0 ? "#" : y === 10 && noise(x, 10, 212) < 0.4 ? "9" : "!";
 });
-const pondRim = make((x, y) => {
+const lowPondRim = make((x, y) => {
 	if (y < 6 || x < 1 || x > 14) return ".";
 	if (y === 6) return x === 14 ? "|" : "{";
 	if (y === 15 || x === 14) return "~";
@@ -743,13 +757,166 @@ const pondRim = make((x, y) => {
 	if (y === 10) return x === 8 ? "|" : "~"; // the joint between its two courses
 	return x >= 12 ? "}" : "|";
 });
-const pondDock = make((x, y) => {
+const lowPondDock = make((x, y) => {
 	if (y === 4) return (x & 7) === 7 ? "j" : x % 8 === 0 ? "`" : "_";
 	if (y === 5 || y === 6) return (x & 7) === 7 ? "j" : y === 5 ? "l" : "k";
 	if (y === 7) return "j";
 	if ((x === 3 || x === 4) && y >= 8 && y < LIP) return x === 3 ? "l" : "j"; // the post into the water
-	return pondWater[y][x];
+	return lowPondWater[y][x];
 });
+
+// --- The pond, dug two rows into the island and seen in cross-section, as the island's rock is (the hand checks: one
+// row on top of the snow read as a trough). Its water over the two rows (wy 0 to 31): the far bank's snow in shade, the
+// surface two px under the snow line, the well's water deepening to the dark, a bed of silt on the rock. Its two banks
+// are the island's own snow and rock (tiles.ts passes them in, pondBank), faced with dressed stone along the water: the
+// west one steep under a low coping course on the rim, the east one under the jetty, whose two posts stand in the water;
+// both slope in to the bed in the lower row. ---
+const POND_SURFACE = 2;
+function pondAt(x: number, wy: number): string {
+	if (wy === 0) return noise(x, 0, 213) > 0.75 ? "o" : "Y";
+	if (wy === 1) return "n";
+	if (wy >= 31) return "z";
+	if (wy === 30) return "A";
+	if (wy === 29) return checker(x, wy) ? "A" : "9";
+	return water(x, wy - POND_SURFACE);
+}
+// How far a pixel lies inside a bank (1 and 2 its stone facing; 0 and below the water): the west bank steep in the
+// upper row and sloping to the bed in the lower; the east one, under the jetty, the same mirrored a little nearer.
+const bankDepth = (side: "w" | "e", x: number, wy: number): number =>
+	side === "w" ? 9 + (wy < N ? 0 : Math.round(((wy - N) * 7) / 15)) - x : x - 10 + (wy < N ? 0 : Math.round(((wy - N) * 11) / 15));
+const pondSurface = make((x, y) => pondAt(x, y));
+const pondDeep = make((x, y) => pondAt(x, y + N));
+// The jetty's two posts, x 2 to 3 and 7 to 8: lit on the left, dark under the surface.
+const jettyPost = (x: number, wy: number): string | null => {
+	const k = x === 2 || x === 7 ? 0 : x === 3 || x === 8 ? 1 : -1;
+	if (k < 0 || wy > 11) return null;
+	return wy < POND_SURFACE ? (k === 0 ? "l" : "j") : k === 0 ? "k" : "z";
+};
+// A bank of the pond from the island's own tile for that row (snow over rock above, rock below), and the water.
+export const pondBank = (ground: Grid, side: "w" | "e", lower: boolean, posts = false): Grid =>
+	make((x, y) => {
+		const wy = y + (lower ? N : 0);
+		const d = bankDepth(side, x, wy);
+		if (d <= 0) return (posts ? jettyPost(x, wy) : null) ?? pondAt(x, wy);
+		if (d > 2 || wy < POND_SURFACE) return ground[y][x];
+		if (wy >= 30) return "z";
+		return side === "w" ? (d === 1 ? "~" : "}") : d === 1 ? "{" : "|"; // the facing: shaded on the west bank, lit on the east
+	});
+export type PondTileId = "pond-edge-l" | "pond-edge-r" | "pond-bank-l" | "pond-bank-r";
+// The rim's coping: two dressed stones lying on the snow line, lit along their top and left, a little snow on one.
+const pondCoping = over(make(() => "."), [
+	"",
+	"",
+	"",
+	"",
+	"",
+	"",
+	"",
+	"",
+	"",
+	"",
+	"",
+	"  oppoo         ",
+	" {{{{{{~{{{{{{~ ",
+	" {||||}~{||||}~ ",
+	" |}}}}}~|}}}}}~ ",
+	" ~~~~~~~~~~~~~~ ",
+].map((r) => r.replace(/ /g, ",")));
+// The jetty's deck over the water at the east bank: the boards' ends lit along the top he would walk on, a joint every
+// 8 px, a bollard at its west end, the tops of its two posts under it (they go on down into the water, pondBank).
+const pondJetty = make((x, y) => {
+	if ((x === 1 || x === 2) && y >= 7 && y <= 11) return y === 7 ? (x === 1 ? "`" : "m") : x === 1 ? "l" : "j"; // the bollard
+	if (y === 11) return (x & 7) === 7 ? "j" : x % 8 === 0 ? "`" : "_";
+	if (y === 12) return (x & 7) === 7 ? "j" : "m";
+	if (y === 13) return (x & 7) === 7 ? "j" : "l";
+	if (y === 14) return "k";
+	if (y === 15) return jettyPost(x, 0) ?? ".";
+	return ".";
+});
+
+// --- The lighthouse (the hand checks: it read as a second bell tower). Its shaft is three cells round, painted in red
+// and white bands a storey's half deep (light at its upper left, the shade toward the right, outlined on its right),
+// laid in courses of dressed stone. Over it the gallery's rail stands in front of the lamp room's dark drum; the lamp
+// room is glazed in an iron frame round its lens on a brass stand, inset from the drum; it is lit at night (its -lit
+// cells); over it the cap, a ribbed red dome on an eave, and on its top a vent ball and spike. Each is three cells,
+// drawn across all 48 px (gx), so the shaft reads as round and the room as one. ---
+const LIGHT_RAMP = { red: ["i", ":", ";", "f"], white: ["p", "-", "{", "|"] } as const;
+const LIGHT_EDGE = { red: "f", white: "~" } as const;
+function lightBand(c: "red" | "white", gx: number, y: number): string {
+	if (gx === 47) return LIGHT_EDGE[c];
+	const lv =
+		gx >= 5 && gx <= 12 ? 0
+		: gx === 4 || gx === 13 ? (checker(gx, y) ? 0 : 1)
+		: gx < 30 ? 1
+		: gx === 30 ? (checker(gx, y) ? 2 : 1)
+		: gx < 40 ? 2
+		: gx === 40 ? (checker(gx, y) ? 3 : 2)
+		: 3;
+	const course = y === 7 || y === 15; // the bed joints, two courses a cell
+	const joint = (gx + (y < 8 ? 0 : 6)) % 12 === 11; // the head joints, a stone every 12 px, every other course offset
+	return LIGHT_RAMP[c][Math.min(3, lv + (course || joint ? 1 : 0))];
+}
+const band = (c: "red" | "white", k: number) => make((x, y) => lightBand(c, x + k * N, y));
+// The gallery's rail (rail) in front of the lamp room's drum, dark between the balusters.
+const galleryRail = make((x, y) => (rail[y][x] === "." ? (y < 2 ? (y === 0 ? "a" : "b") : "a") : rail[y][x]));
+// The lamp room, 42 px of it inset 3 px from each side of the drum: an iron frame and four mullions round three panes,
+// the middle one holding the lens. Lit: the panes warm with the lamp, the lens its white-hot core.
+const LENS = { cx: 23.5, cy: 7, r: 5.2 };
+function lampRoom(gx: number, y: number, lit: boolean): string {
+	if (gx < 3 || gx > 44) return ".";
+	if (y === 0) return "a";
+	if (y === 1) return gx === 44 ? "a" : "c";
+	if (y === 15) return "a";
+	if (y === 14) return gx === 44 ? "a" : "d";
+	if (gx === 3) return "d";
+	if (gx === 44) return "a";
+	if (gx === 14 || gx === 33) return gx === 14 ? "c" : "b";
+	const d = Math.hypot(gx - LENS.cx, (y - LENS.cy) * 0.85) / LENS.r;
+	if (gx >= 22 && gx <= 25 && y >= 12) return gx === 22 ? "=" : gx === 25 ? ">" : "<"; // the lens's brass stand
+	if (d <= 1) {
+		if (d > 0.78) return gx + y < LENS.cx + LENS.cy ? "=" : ">"; // the brass rim, lit on its upper left
+		if (lit) return d < 0.45 ? "v" : "t";
+		return (y & 1) === 0 ? "s" : "#"; // the prism's rings catching the day
+	}
+	if (lit) return y >= 11 ? "u" : (gx + y) % 7 === 0 ? "v" : "t";
+	const px = gx < 14 ? gx - 4 : gx < 33 ? gx - 15 : gx - 34;
+	if (px + y === 7 || px + y === 8) return "s"; // the sky's glint across each pane
+	return px + y < 7 ? "r" : "q";
+}
+const lampRoomCell = (k: number, lit: boolean) => make((x, y) => lampRoom(x + k * N, y, lit));
+// The cap: an eave three rows deep across the drum's width, a dome over the room ribbed every 8 px, lit on its upper
+// left and outlined on its right; the vent ball and its spike stand in the cell over its middle.
+function lampCap(gx: number, y: number): string {
+	if (y >= 12) return y === 12 ? (gx === 47 ? "f" : gx < 8 ? "i" : ":") : y === 15 ? "f" : gx === 47 ? "f" : ";";
+	const half = 21;
+	const t = (gx + 0.5 - 24) / half;
+	if (Math.abs(t) >= 1) return ".";
+	const top = 12 - Math.round(11 * Math.sqrt(1 - t * t));
+	if (y < top) return ".";
+	if (y === top) return t < 0 ? "i" : t < 0.5 ? ":" : "f";
+	if (t > 0.86) return "f";
+	if (gx % 8 === 3) return ";"; // a rib
+	return t < -0.35 && y < 9 ? "i" : t > 0.45 ? ";" : ":";
+}
+const lampCapCell = (k: number) => make((x, y) => lampCap(x + k * N, y));
+const VENT = [
+	"................",
+	".......c........",
+	".......cb.......",
+	".......cb.......",
+	".......ca.......",
+	"......cba.......",
+	".....i::;f......",
+	"....i:i::;f.....",
+	"....:i:::;f.....",
+	"....::::;;f.....",
+	".....;;;;f......",
+	"......fff.......",
+	".......ca.......",
+	"......:::;......",
+	".....i:::;f.....",
+	".....::::;f.....",
+];
 
 // --- A canopy's four corners: the leaves with the corner rounded off (a leafy edge, its radius stirred a little by the
 // hash), the edge in deep shadow where it faces down or right, so a tree reads as a round crown, not a box. ---
@@ -929,7 +1096,7 @@ function wideArch(gx: number, y: number): string {
 }
 const wideThird = (n: number) => make((x, y) => wideArch(x + n * N, y));
 
-export const MORE_TILES: Readonly<Record<Exclude<MoreTileId, FootTileId>, Grid>> = {
+export const MORE_TILES: Readonly<Record<Exclude<MoreTileId, FootTileId | PondTileId>, Grid>> = {
 	paving,
 	"statue-top": FIGURE.slice(0, N),
 	"statue-foot": FIGURE.slice(N),
@@ -981,9 +1148,30 @@ export const MORE_TILES: Readonly<Record<Exclude<MoreTileId, FootTileId>, Grid>>
 	"spire-l-hi": spireL(true),
 	"spire-r-hi": spireR(true),
 	"spire-peak": spirePeak,
-	"pond-water": pondWater,
-	"pond-rim": pondRim,
-	"pond-dock": pondDock,
+	"pond-water": lowPondWater,
+	"pond-rim": lowPondRim,
+	"pond-dock": lowPondDock,
+	"pond-surface": pondSurface,
+	"pond-coping": pondCoping,
+	"pond-jetty": pondJetty,
+	"pond-deep": pondDeep,
+	"light-red-l": band("red", 0),
+	"light-red": band("red", 1),
+	"light-red-r": band("red", 2),
+	"light-white-l": band("white", 0),
+	"light-white": band("white", 1),
+	"light-white-r": band("white", 2),
+	"gallery-rail": galleryRail,
+	"lamp-room-l": lampRoomCell(0, false),
+	"lamp-room": lampRoomCell(1, false),
+	"lamp-room-r": lampRoomCell(2, false),
+	"lamp-room-l-lit": lampRoomCell(0, true),
+	"lamp-room-lit": lampRoomCell(1, true),
+	"lamp-room-r-lit": lampRoomCell(2, true),
+	"lamp-cap-l": lampCapCell(0),
+	"lamp-cap": lampCapCell(1),
+	"lamp-cap-r": lampCapCell(2),
+	"lamp-cap-peak": VENT,
 	"leaves-tl": canopyCorner(false, false),
 	"leaves-tr": canopyCorner(true, false),
 	"leaves-bl": canopyCorner(false, true),

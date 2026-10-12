@@ -16,14 +16,28 @@ const clampAt = (x: number, y: number, z: number, v: View, b: Bounds) => ({ x: c
 // The centre's height that puts his feet where the small world puts the ground.
 const frameY = (feet: number, vh: number) => feet - groundAbove(vh) + vh / 2;
 
-// The whole-world step for a view cssW wide.
-export const fitZoom = (cssW: number, bounds: Bounds): number => cssW / bounds.w;
-// The steps for a view cssW wide (CSS px per world px): the fixed steps larger than the fit, then the fit; the fixed
-// steps alone when cssW is not above 0.
-export function zoomSteps(cssW: number, bounds: Bounds): number[] {
+// How far the islands reach across the world, world px: the leftmost island's start to the rightmost island's end.
+export type Reach = { x0: number; x1: number };
+export const FAR_MIN = 1 / 16; // the farthest step is never below this: a phone's whole world is a speck below it
+export const REACH_MARGIN = 0.04; // sky left at each end of the whole-world step, a share of the reach
+const paddedWidth = (reach: Reach): number => (reach.x1 - reach.x0) * (1 + 2 * REACH_MARGIN);
+// The reach of a world's islands (columns, as the map keeps them), in world px; null when there are none.
+export function reachOf(islands: readonly { x0: number; x1: number }[]): Reach | null {
+	if (islands.length === 0) return null;
+	return { x0: Math.min(...islands.map((i) => i.x0)) * TILE, x1: Math.max(...islands.map((i) => i.x1)) * TILE };
+}
+export const FIT_MAX = 1; // the whole-world step is a far view: never closer than scale 1, so zooming out never zooms in
+export const FIT_GAP = 1.2; // a fixed step within a fifth of the fit adds a near no-op zoom, so it is left out
+// The whole-world step for a view cssW wide: the islands' reach and its margin fitted to the width (the whole width of
+// the world when no reach is given), but never below FAR_MIN nor above FIT_MAX.
+export const fitZoom = (cssW: number, bounds: Bounds, reach?: Reach | null): number =>
+	Math.min(FIT_MAX, Math.max(FAR_MIN, cssW / (reach ? paddedWidth(reach) : bounds.w)));
+// The steps for a view cssW wide (CSS px per world px): the fixed steps more than FIT_GAP times the fit, then the fit;
+// the fixed steps alone when cssW is not above 0.
+export function zoomSteps(cssW: number, bounds: Bounds, reach?: Reach | null): number[] {
 	if (!(cssW > 0)) return [...STEPS];
-	const fit = fitZoom(cssW, bounds);
-	return [...STEPS.filter((s) => s > fit), fit];
+	const fit = fitZoom(cssW, bounds, reach);
+	return [...STEPS.filter((s) => s > fit * FIT_GAP), fit];
 }
 // The index of the step nearest to z.
 export function nearestStep(steps: readonly number[], z: number): number {
@@ -45,8 +59,11 @@ export function drift(c: Camera, v: View, bounds: Bounds, now: number): Camera {
 	return { ...c, x: p.x, y: p.y };
 }
 // One step in (1) or out (-1) from the step the camera heads for, about the canvas point `at`: the world point under it
-// is under it again once the ease is over, unless the clamp moves the centre. instant: jump (reduced motion).
-export function zoomAbout(c: Camera, steps: readonly number[], dir: 1 | -1, at: { x: number; y: number }, v: View, bounds: Bounds, now: number, instant: boolean): Camera {
+// is under it again once the ease is over, unless the clamp moves the centre. instant: jump (reduced motion). reach: the
+// islands'; a step that shows all of it (the fit) rests with the islands in the middle, not wherever the point was.
+export function zoomAbout(
+	c: Camera, steps: readonly number[], dir: 1 | -1, at: { x: number; y: number }, v: View, bounds: Bounds, now: number, instant: boolean, reach?: Reach | null,
+): Camera {
 	if (steps.length === 0) return c;
 	const i = nearestStep(steps, c.to);
 	const z1 = steps[Math.max(0, Math.min(steps.length - 1, i - dir))]; // index 0 is the nearest step
@@ -55,7 +72,8 @@ export function zoomAbout(c: Camera, steps: readonly number[], dir: 1 | -1, at: 
 	const z0 = zoomAt(c, now);
 	const wx = here.x + (at.x - v.w / 2) / z0;
 	const wy = here.y + (at.y - v.h / 2) / z0;
-	const aim = clampAt(wx - (at.x - v.w / 2) / z1, wy - (at.y - v.h / 2) / z1, z1, v, bounds);
+	const whole = reach != null && v.w / z1 >= paddedWidth(reach) - 1e-6;
+	const aim = clampAt(whole ? (reach.x0 + reach.x1) / 2 : wx - (at.x - v.w / 2) / z1, wy - (at.y - v.h / 2) / z1, z1, v, bounds);
 	if (instant) return { ...c, x: aim.x, y: aim.y, from: z1, to: z1, at: now, aimX: aim.x, aimY: aim.y, ox: 0, oy: 0, glideAt: Number.NEGATIVE_INFINITY };
 	return { ...c, x: here.x, y: here.y, from: z0, to: z1, at: now, aimX: aim.x, aimY: aim.y, ox: here.x - aim.x, oy: here.y - aim.y, glideAt: now };
 }
@@ -106,4 +124,9 @@ export function offScreen(c: Camera, him: Him, v: View, now: number): boolean {
 	const a = toScreen(c, v, now, him.x - 8, him.y - 32);
 	const b = toScreen(c, v, now, him.x + 8, him.y);
 	return b.x <= 0 || b.y <= 0 || a.x >= v.w || a.y >= v.h;
+}
+// Where his feet are on the view, canvas px, while any of him is in view; null once none of him is. The zoom keys and the
+// zoom control zoom about it, so the ground under him stays where it is as the world grows or shrinks round him.
+export function himOnScreen(c: Camera, him: Him, v: View, now: number): { x: number; y: number } | null {
+	return offScreen(c, him, v, now) ? null : toScreen(c, v, now, him.x, him.y);
 }

@@ -9,14 +9,17 @@ import { CELL, GLOW_STOPS, shapeCache, sheetBitmap, type Art, type Painter } fro
 // chunks: the chunk bitmaps' cache's counts (the same chunkCache the canvas painter keeps its bitmaps in).
 export type PixelPainter = Painter & { readonly data: Uint8ClampedArray<ArrayBuffer>; readonly chunks: ChunkStats };
 
-// keep: the most chunk bitmaps it keeps (CHUNK_KEEP.desk, or .phone).
-export function pixelPainter(w: number, h: number, art: Art, keep: number = CHUNK_KEEP.desk): PixelPainter {
-	return make(w, h, art, new Map(), shapeCache((bmp) => bmp), keep);
+// keep: the most chunk bitmaps it keeps (CHUNK_KEEP.desk, or .phone). clock: what drawWorld times a frame's chunk bakes
+// with (none: a frame is held to BAKE_BUDGET alone).
+export function pixelPainter(w: number, h: number, art: Art, keep: number = CHUNK_KEEP.desk, clock?: () => number): PixelPainter {
+	return make(w, h, art, new Map(), shapeCache((bmp) => bmp), keep, clock);
 }
 
 // A painter over its own buffer, sharing the atlases (sheets) and the kept silhouettes (shapes) it is given: a chunk's
 // painter draws from its parent's.
-function make(w: number, h: number, art: Art, sheets: Map<string, Bitmap>, shapes: (shape: Shape, tones: readonly string[]) => Bitmap, keep: number): PixelPainter {
+function make(
+	w: number, h: number, art: Art, sheets: Map<string, Bitmap>, shapes: (shape: Shape, tones: readonly string[]) => Bitmap, keep: number, clock?: () => number,
+): PixelPainter {
 	const data = new Uint8ClampedArray(w * h * 4);
 	const blend = (o: number, r: number, g: number, b: number, a: number) => {
 		if (a <= 0) return;
@@ -54,6 +57,7 @@ function make(w: number, h: number, art: Art, sheets: Map<string, Bitmap>, shape
 		data,
 		chunks: cache.stats,
 		chunkKeep: keep,
+		clock,
 		clear: () => {
 			data.fill(0);
 		},

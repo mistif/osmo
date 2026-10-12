@@ -13,8 +13,8 @@ import type { RoomSignals } from "../signals";
 // attend: Gur is typing or focused the composer. takeNews: the oldest room started or finished since the last call (for
 // TurnFacts.village). context: the line for the open panel's room (lib/world/rooms.ts roomContext), null in Talk or
 // before the visit's counts are read. The last two are the language lane's to call. zoom and home: the big world's
-// camera, one zoom step in (1) or out (-1) about the middle, and back to him (the dev page's buttons; the room calls
-// only attend). In the small world they do nothing.
+// camera, one zoom step in (1) or out (-1) about him while he is on screen and about the middle of the view when he is
+// not, and back to him (the dev page's buttons; the room calls only attend). In the small world they do nothing.
 export type WorldControl = { attend(): void; takeNews(): VillageNews | null; context(): string | null; zoom(dir: 1 | -1): void; home(): void };
 // The dev page's pins: the hour, each room's laid blocks (a room left out is locked), his pose, the hit areas drawn,
 // and the life in the world (polish pass: "all" keeps snow, smoke and birds going whatever the hour, "none" stops them).

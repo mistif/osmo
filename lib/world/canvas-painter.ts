@@ -11,8 +11,11 @@ import { TILE_IDS } from "./tiles";
 
 export type Overrides = Partial<Record<"tiles" | "sprite", CanvasImageSource>>;
 
-// keep: the most chunk bitmaps it keeps (free-will spec 3.3: CHUNK_KEEP.desk, or .phone on a phone).
-export function canvasPainter(ctx: CanvasRenderingContext2D, art: Art, overrides: Overrides = {}, keep: number = CHUNK_KEEP.desk): Painter {
+// keep: the most chunk bitmaps it keeps (free-will spec 3.3: CHUNK_KEEP.desk, or .phone on a phone). clock: what drawWorld
+// times a frame's chunk bakes with (ms; the page's own clock, a fake in the tests).
+export function canvasPainter(
+	ctx: CanvasRenderingContext2D, art: Art, overrides: Overrides = {}, keep: number = CHUNK_KEEP.desk, clock: () => number = () => performance.now(),
+): Painter {
 	const atlases = new Map<string, HTMLCanvasElement>();
 	const atlas = (sheet: Sheet, scale: number): HTMLCanvasElement => {
 		const key = `${sheet}@${scale}`;
@@ -44,7 +47,7 @@ export function canvasPainter(ctx: CanvasRenderingContext2D, art: Art, overrides
 		if (bmp.w > 0 && bmp.h > 0) c.getContext("2d")?.putImageData(new ImageData(bmp.data, bmp.w, bmp.h), 0, 0);
 		return c;
 	});
-	return over(ctx, atlas, shapes, keep);
+	return over(ctx, atlas, shapes, keep, clock);
 }
 
 // A painter over one context, drawing from the atlases and silhouettes it is given: a chunk's painter shares its
@@ -55,6 +58,7 @@ function over(
 	atlas: (sheet: Sheet, scale: number) => HTMLCanvasElement,
 	shapes: (shape: Shape, tones: readonly string[]) => HTMLCanvasElement,
 	keep: number,
+	clock?: () => number,
 ): Painter {
 	const cache = chunkCache(
 		keep,
@@ -72,6 +76,7 @@ function over(
 	);
 	return {
 		chunkKeep: keep,
+		clock,
 		get w() {
 			return ctx.canvas.width;
 		},
@@ -172,25 +177,58 @@ const SHEETS = {
 	sprite: { file: "/village/osmo-sheet.png", w: FRAME_NAMES.length * FRAME_W, h: FRAME_H },
 } as const;
 
-// The optional PNG sheets: used only when present and exactly the right size; otherwise the console says why.
-export async function loadSheets(): Promise<Overrides> {
+// What asking for one of the files brings back: the image and its size in pixels, or null when the file is not there.
+export type SheetFile = { img: CanvasImageSource; w: number; h: number };
+export type SheetLoader = (file: string) => Promise<SheetFile | null>;
+const fromPage: SheetLoader = async (file) => {
+	const img = new Image();
+	img.src = file;
+	try {
+		await img.decode();
+	} catch {
+		return null;
+	}
+	return { img, w: img.naturalWidth, h: img.naturalHeight };
+};
+
+// What each file came to (its image, or null: missing or the wrong size), kept for the life of the page. The world starts
+// again for a new scarf, a darker hour, a clear or a visit back to it, and each start used to ask for both files again:
+// a 404 in the console every time for a file nobody has drawn. The promise is kept, so two starts that overlap ask once.
+const answers = new Map<string, Promise<CanvasImageSource | null>>();
+async function answer(sheet: keyof typeof SHEETS, load: SheetLoader): Promise<CanvasImageSource | null> {
+	const { file, w, h } = SHEETS[sheet];
+	let got: SheetFile | null = null;
+	try {
+		got = await load(file);
+	} catch {
+		got = null;
+	}
+	if (!got) {
+		console.info(`[village] No ${file}; using the drawn ${sheet}.`);
+		return null;
+	}
+	const problem = sheetProblem(got.w, got.h, w, h);
+	if (problem) {
+		console.warn(`[village] ${file} ${problem}; using the drawn ${sheet}.`);
+		return null;
+	}
+	return got.img;
+}
+
+// The optional PNG sheets: used only when present and exactly the right size; otherwise the console says why, once. Each
+// file is asked for at most once per page load, found or not. load: how a file is asked for (the page's own, a fake in
+// the tests).
+export async function loadSheets(load: SheetLoader = fromPage): Promise<Overrides> {
 	const out: Overrides = {};
 	for (const sheet of ["tiles", "sprite"] as const) {
-		const { file, w, h } = SHEETS[sheet];
-		const img = new Image();
-		img.src = file;
-		try {
-			await img.decode();
-		} catch {
-			console.info(`[village] No ${file}; using the drawn ${sheet}.`);
-			continue;
+		const { file } = SHEETS[sheet];
+		let asked = answers.get(file);
+		if (!asked) {
+			asked = answer(sheet, load);
+			answers.set(file, asked);
 		}
-		const problem = sheetProblem(img.naturalWidth, img.naturalHeight, w, h);
-		if (problem) {
-			console.warn(`[village] ${file} ${problem}; using the drawn ${sheet}.`);
-			continue;
-		}
-		out[sheet] = img;
+		const img = await asked;
+		if (img) out[sheet] = img;
 	}
 	return out;
 }

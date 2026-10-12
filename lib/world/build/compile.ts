@@ -122,6 +122,11 @@ export function compile(recipe: Recipe, v: Variation, site: Site, parts: readonl
 			throw new Error(`${recipe.id}: the ${tier.slot} tier is required`);
 		}
 		const p = part(choice.part, tier.role);
+		if (p.dig) {
+			// Into the ground, its bottom row p.dig rows under the floor row: only as the first thing laid, a row part.
+			if (map.size > 0 || p.fit !== "row") throw new Error(`${recipe.id}: "${p.id}" digs, so it is laid first`);
+			bottom = p.dig;
+		}
 		if (tier.role === "chimney") {
 			if (!roofSpan) throw new Error(`${recipe.id}: a chimney needs a roof under it`);
 			const cx = roofSpan.x + roofSpan.w - 1 - Math.floor(roofSpan.w / 4);
@@ -246,5 +251,8 @@ export function compile(recipe: Recipe, v: Variation, site: Site, parts: readonl
 	}
 	const f = footprintOf(map, decor, recipe.id);
 	const x = site.cliff === "left" ? site.x : site.cliff === "right" ? site.x + site.w - f.w : site.x + Math.floor((site.w - f.w) / 2);
-	return finish(recipe.id, f.footprint, x, site.ground - f.h, f.w, f.h);
+	// Local row 0 is the floor row, on the row over the ground; a dug basin's rows under it lie in the ground.
+	const dug = f.y0 + f.h - 1;
+	const c = finish(recipe.id, f.footprint, x, site.ground - 1 + f.y0, f.w, f.h);
+	return dug > 0 ? { ...c, dug } : c;
 }
