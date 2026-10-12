@@ -27,6 +27,8 @@ const FREE_WILL = [
 	"glass-roof-l", "glass-roof-r", "balloon-tl", "balloon-tr", "balloon-bl", "balloon-br", "basket", "bell", "awning", "sail",
 	"statue", "arch", "rail", "plank-wall-2", "stone-wall-2",
 ];
+// Appended in the free-will fix round, after the 106.
+const FIX_ROUND = ["deck"];
 // Tiles with no transparent pixel.
 const FILLED: TileId[] = [
 	"snow", "stone", "stone-dark", "brick", "brick-dark", "plank", "beam-h", "glass", "window", "window-top",
@@ -51,8 +53,8 @@ const mean = (chars: string[]) => {
 
 describe("the tiles", () => {
 	it("are the 38 tiles in the fixed cell order, then the look pass's, the rooms', the polish pass's and the free-will tiles, appended", () => {
-		expect([...TILE_IDS]).toEqual([...ORDER, ...ADDED, ...ROOMS, ...POLISH, ...FREE_WILL]);
-		expect(Object.keys(TILES).sort()).toEqual([...ORDER, ...ADDED, ...ROOMS, ...POLISH, ...FREE_WILL].sort());
+		expect([...TILE_IDS]).toEqual([...ORDER, ...ADDED, ...ROOMS, ...POLISH, ...FREE_WILL, ...FIX_ROUND]);
+		expect(Object.keys(TILES).sort()).toEqual([...ORDER, ...ADDED, ...ROOMS, ...POLISH, ...FREE_WILL, ...FIX_ROUND].sort());
 		expect(tileIndex("fence")).toBe(54);
 		expect(tileIndex("tower-cap")).toBe(55);
 		expect(tileIndex("dome-r")).toBe(60);
@@ -148,7 +150,7 @@ describe("the tiles", () => {
 });
 
 describe("the free-will tiles (spec 4.5)", () => {
-	const OPAQUE: TileId[] = ["plank-wall", "stone-wall", "back-wood", "back-stone", "leaves", "fruit-leaves", "hedge", "water", "water-top", "soil", "glass-wall", "thatch-flat", "plank-wall-2", "stone-wall-2"];
+	const OPAQUE: TileId[] = ["deck", "plank-wall", "stone-wall", "back-wood", "back-stone", "leaves", "fruit-leaves", "hedge", "water", "water-top", "soil", "glass-wall", "thatch-flat", "plank-wall-2", "stone-wall-2"];
 	const SEE_THROUGH: TileId[] = ["post", "rope", "bridge-board", "flowers", "balloon-tl", "balloon-tr", "balloon-bl", "balloon-br", "basket", "bell", "awning", "sail", "statue", "arch", "rail", "thatch-l", "thatch-r", "thatch-peak", "glass-roof-l", "glass-roof-r"];
 	const LIT_NEW: TileId[] = ["plank-wall", "stone-wall", "back-wood", "back-stone", "hedge", "soil", "thatch-flat", "plank-wall-2", "stone-wall-2"];
 	it("draws every one of them, none a placeholder box any more", () => {

@@ -15,7 +15,7 @@ const L = (tile: TileId, layer: Layer) => ({ tile, layer });
 export const PARTS: readonly Part[] = [
 	// Structure: floors, wall storeys, the balcony, the door and shutters.
 	{ id: "floor-step", name: "stone step", group: "structure", role: "floor", material: null, fit: "row", overhang: 1, map: ["SSS"], legend: { S: L("step", "floor") } },
-	{ id: "floor-boards", name: "wooden floor", group: "structure", role: "floor", material: "wood", fit: "row", overhang: 1, map: ["BBB"], legend: { B: L("bridge-board", "floor") } },
+	{ id: "floor-boards", name: "wooden floor", group: "structure", role: "floor", material: "wood", fit: "row", overhang: 1, map: ["BBB"], legend: { B: L("deck", "floor") } },
 	{ id: "storey-brick", name: "brick wall", group: "structure", role: "storey", material: "brick", fit: "row",
 		map: ["hhhhhh", "IBBvBI", "IBBwBI", "IBBBBI"],
 		legend: { h: L("beam-h", "walls"), I: L("pillar", "walls"), B: L("brick", "walls"), v: L("window-top", "windows"), w: L("window", "windows") } },
@@ -35,7 +35,7 @@ export const PARTS: readonly Part[] = [
 		map: ["hhhhhh", "PgggPP", "PgggPP", "PgggPP"],
 		legend: { h: L("beam-h", "walls"), P: L("post", "walls"), g: L("glass-wall", "walls") } },
 	{ id: "beam-balcony", name: "railed balcony", group: "additions", role: "beam", material: null, fit: "row", overhang: 1,
-		map: ["rrr", "BBB"], legend: { r: L("rail", "walls"), B: L("bridge-board", "walls") } },
+		map: ["rrr", "BBB"], legend: { r: L("rail", "walls"), B: L("deck", "walls") } },
 	{ id: "door-oak", name: "oak door", group: "structure", role: "door", material: null, fit: "fixed", map: ["a", "d"], legend: { a: L("door-top", "door"), d: L("door", "door") } },
 	{ id: "decor-shutter", name: "shutters", group: "structure", role: "decor", material: null, fit: "fixed", map: ["s", "s"], legend: { s: L("shutter", "banners") } },
 	// Tops: roofs, crowns, the chimney and what stands on a roof or a storey.
@@ -85,7 +85,7 @@ export const PARTS: readonly Part[] = [
 	{ id: "side-lamp-post", name: "lamp post", group: "around", role: "side", material: null, fit: "fixed", map: ["l", "p"],
 		legend: { l: L("lantern", "windows"), p: L("lantern-post", "walls") } },
 	{ id: "side-dock", name: "little dock", group: "around", role: "side", material: null, fit: "fixed", map: ["BBB", "P.P"],
-		legend: { B: L("bridge-board", "walls"), P: L("post", "walls") } },
+		legend: { B: L("deck", "walls"), P: L("post", "walls") } },
 	{ id: "bed-row", name: "garden beds", group: "around", role: "storey", material: null, fit: "row", map: ["HfffHH", "ssssss"],
 		legend: { H: L("hedge", "walls"), f: L("flowers", "walls"), s: L("soil", "floor") } },
 	{ id: "walk-lamps", name: "lamp-lit path", group: "around", role: "storey", material: null, fit: "row", map: ["l...ll", "p...pp", "ssssss"],

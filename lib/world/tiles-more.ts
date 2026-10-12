@@ -12,6 +12,8 @@ export const MORE_TILE_IDS = [
 	"rope", "bridge-board", "leaves", "fruit-leaves", "hedge", "water", "water-top", "flowers", "soil", "glass-wall",
 	"glass-roof-l", "glass-roof-r", "balloon-tl", "balloon-tr", "balloon-bl", "balloon-br", "basket", "bell", "awning", "sail",
 	"statue", "arch", "rail", "plank-wall-2", "stone-wall-2",
+	// Appended in the fix round (the look pass's findings); the 106 above keep their cells.
+	"deck",
 ] as const;
 export type MoreTileId = (typeof MORE_TILE_IDS)[number];
 
@@ -642,6 +644,24 @@ const rail = make((x, y) => {
 	return i === 1 ? "_" : i === 2 ? "k" : "j";
 });
 
+// --- A timber deck, full depth (a floor or a balcony, so nothing under it shows sky): the ends of the cross boards along
+// the top, lit where he walks, their joints every 8 px; under them a fascia beam lit along its top with grain along it,
+// outlined below. ---
+const deck = make((x, y) => {
+	const i = x & 7;
+	if (y === 0) return i === 7 ? "j" : i === 0 ? "`" : "_";
+	if (y <= 4) return i === 7 ? "j" : i === 0 ? "m" : BOARD_END[y][i];
+	if (y === 5) return "j";
+	if (y === 6) return "k";
+	if (y === 7) return x % 8 === 3 ? "`" : "m";
+	if (y >= 14) return "j";
+	if (y === 13) return "k";
+	if ((x === 4 || x === 12) && y === 10) return "a"; // the bolts through the beam
+	if ((x === 4 || x === 12) && y === 9) return "j";
+	const grain = noise((x + y * 3) >> 2, y, 200) < 0.18;
+	return grain ? "k" : "l";
+});
+
 export const MORE_TILES: Readonly<Record<MoreTileId, Grid>> = {
 	"plank-wall": plankWall,
 	"stone-wall": stoneWall,
@@ -678,4 +698,5 @@ export const MORE_TILES: Readonly<Record<MoreTileId, Grid>> = {
 	rail,
 	"plank-wall-2": plankWall2,
 	"stone-wall-2": stoneWall2,
+	deck,
 };
