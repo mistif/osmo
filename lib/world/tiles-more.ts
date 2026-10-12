@@ -293,7 +293,8 @@ const thatchPeak = make((x, y) => {
 	return straw(x, y);
 });
 
-// --- A hand rope: three rows thick, its strands twisted in a slant every 4 px, lit on top, shaded under, sagging a
+// --- A hand rope near the top of its cell (a bridge's handrail, at his waist over the board under it): three rows thick,
+// its strands twisted in a slant every 4 px, lit on top, shaded under, sagging a
 // pixel between x 4 and 11; level at both ends, so ropes join. ---
 const SAG = [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0];
 function twisted(x: number, i: number): string {
@@ -303,7 +304,7 @@ function twisted(x: number, i: number): string {
 	return seam ? "A" : "8";
 }
 const rope = make((x, y) => {
-	const i = y - 7 - SAG[x];
+	const i = y - 1 - SAG[x];
 	return i < 0 || i > 2 ? "." : twisted(x, i);
 });
 

@@ -90,16 +90,24 @@ describe("the compiler (spec 4.2)", () => {
 		expect(() => compile(HUT, { ...V1, tiers: { ...V1.tiers, roof: { part: "f", count: 1 } } }, SITE, FAKE)).toThrow();
 		expect(() => compile(HUT, { ...V1, tiers: { ...V1.tiers, roof: null } }, SITE, FAKE)).toThrow("the roof tier is required");
 	});
-	it("hangs a bridge between its two anchors, sagging, every deck cell joined to the next", () => {
+	it("hangs a bridge between its two anchors: one board a column on a sagging curve, level with each end, a rope over every board", () => {
 		const v: Variation = { width: 1, material: "wood", tiers: { span: { part: "span", count: 1 }, anchor: { part: "post", count: 1 } }, door: null, decor: [], sides: [] };
 		const site: Site = { kind: "bridge", from: 1, to: 2, a: { x: 200, y: 60 }, b: { x: 230, y: 64 } };
 		const br = compile(BRIDGE, v, site, FAKE);
-		expect([br.x, br.y, br.w, br.h]).toEqual([200, 57, 31, 7]);
 		const bb = cellsOf(br.footprint, br.x, br.y, "bridge");
 		for (const y of [57, 58, 59]) expect(bb).toContainEqual({ x: 200, y, tile: "pillar", layer: "walls" });
 		for (const y of [61, 62, 63]) expect(bb).toContainEqual({ x: 230, y, tile: "pillar", layer: "walls" });
-		expect(bb.filter((b) => b.x === 215 && b.tile === "plank").map((b) => b.y)).toEqual([63]);
-		expect(bb).toContainEqual({ x: 201, y: 59, tile: "plank", layer: "floor" });
+		const deck: number[] = [];
+		for (let x = 201; x < 230; x++) {
+			const boards = bb.filter((b) => b.x === x && b.tile === "plank").map((b) => b.y);
+			expect(boards, `column ${x}`).toHaveLength(1);
+			expect(bb, `the rope over column ${x}`).toContainEqual({ x, y: boards[0] - 1, tile: "fence", layer: "walls" });
+			expect(bb.filter((b) => b.x === x)).toHaveLength(2);
+			deck.push(boards[0]);
+		}
+		expect([deck[0], deck[deck.length - 1]]).toEqual([60, 64]); // level with the island top at each end
+		for (let k = 1; k < deck.length; k++) expect(Math.abs(deck[k] - deck[k - 1]), `step at ${201 + k}`).toBeLessThanOrEqual(1);
+		expect(deck[215 - 201]).toBeGreaterThan(62); // half way it hangs below the straight line between its ends (62)
 		expect(() => compile(BRIDGE, v, SITE, FAKE)).toThrow("needs a bridge site");
 	});
 });

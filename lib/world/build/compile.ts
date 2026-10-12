@@ -81,19 +81,22 @@ export function compile(recipe: Recipe, v: Variation, site: Site, parts: readonl
 		if (b.x - a.x < 2) throw new Error(`${recipe.id}: the two ends are too close`);
 		lay(map, anchor, anchor.map, a.x, a.y - 1);
 		lay(map, anchor, anchor.map, b.x, b.y - 1);
+		// One board a column on a sagging curve, level with the island's top at each end (he steps on and off without a
+		// step), never more than a row from the board before it, with its rope in the cell over it as a handrail at his
+		// waist. A board a row lower hangs from its rope, which sits beside the board before it; one a row higher stands
+		// beside the rope before it (bridges may hang from above, rules.ts).
 		const rope = span.map[0][1];
 		const board = span.map[1][1];
 		const n = b.x - a.x - 1;
 		const sag = Math.min(3, Math.max(1, Math.round(n / 12)));
-		let prev = a.y - 1;
+		let prev = a.y;
 		for (let x = a.x + 1; x < b.x; x++) {
 			const t = (x - a.x) / (b.x - a.x);
-			let row = Math.round(a.y - 1 + (b.y - a.y) * t + sag * 4 * t * (1 - t));
-			if (x === b.x - 1) row = Math.max(row, Math.min(prev, b.y - 1)); // the last column meets the far post
-			const lo = Math.min(prev, row);
-			const hi = Math.max(prev, row);
-			for (let y = lo; y <= hi; y++) lay(map, span, [board], x, y);
-			lay(map, span, [rope], x, lo - 1);
+			const left = b.x - 1 - x; // columns after this one: the last board is level with the far end
+			const want = Math.round(a.y + (b.y - a.y) * t + sag * 4 * t * (1 - t));
+			const row = Math.min(b.y + left, Math.max(b.y - left, Math.min(prev + 1, Math.max(prev - 1, want))));
+			lay(map, span, [board], x, row);
+			lay(map, span, [rope], x, row - 1);
 			prev = row;
 		}
 		const f = footprintOf(map, decor, recipe.id);
