@@ -3,7 +3,7 @@ import { CASTLE_RECTS } from "../build/castle-sites";
 import type { BuildRow, Compiled, Part, Recipe, RuleWorld, Site, Variation } from "../build/types";
 import type { Island, Rect, WorldMap } from "../map/types";
 import { WILL_LIMITS } from "../will/types";
-import { decidedToday, decisionDue, newRow, pickByCode, plan, returnDecisions, willBody } from "./planner";
+import { decidedToday, decisionDue, newRow, OWN_MAX, pickByCode, plan, returnDecisions, willBody } from "./planner";
 
 const flat = (id: number, x0: number, w: number, top: number, home = false): Island => ({ id, x0, x1: x0 + w, ground: top, top: Array.from({ length: w }, () => top), home });
 const HOME = flat(0, 448, 58, 86, true);
@@ -109,6 +109,28 @@ describe("the planner (spec 4.8)", () => {
 	it("offers nothing when no site is free", () => {
 		const full = [{ x: 0, y: 0, w: 1024, h: 160 }];
 		expect(plan({ ...INPUT, blocked: full }, DEPS)).toEqual([]);
+	});
+	it("stays cheap as his builds pile up: each option is tried on each site at most once, his own recipes from his last OWN_MAX builds", () => {
+		const tried: string[] = [];
+		let varied = 0;
+		const counting = {
+			...DEPS,
+			compile: (r: Recipe, v: Variation, s: Site, p: readonly Part[]) => {
+				tried.push(JSON.stringify([r.id, v, s]));
+				return fakeCompile(r, v, s);
+			},
+			check: () => [{ rule: "site" as const, x: 0, y: 0 }], // nothing fits: every pass tries every option
+			vary: (v: Variation) => {
+				varied++;
+				return fakeVary(v);
+			},
+		};
+		const rows = Array.from({ length: 12 }, (_, i) => row(`r${i}`, i % 2 ? "well" : "orchard", { started_at: `2026-10-${String(i + 1).padStart(2, "0")}T10:00:00.000Z`, finished_at: `2026-10-${String(i + 1).padStart(2, "0")}T11:00:00.000Z` }));
+		expect(plan({ ...INPUT, rows, mood: "missing" }, counting)).toEqual([]);
+		expect(OWN_MAX).toBe(8);
+		expect(varied).toBe(OWN_MAX);
+		expect(tried.length).toBeGreaterThan(0);
+		expect(new Set(tried).size).toBe(tried.length);
 	});
 	it("builds the model's body inside its limits, and the row to insert", () => {
 		const cands = plan({ ...INPUT, rows: [row("w1", "well", { reason: "x".repeat(300) })] }, DEPS);

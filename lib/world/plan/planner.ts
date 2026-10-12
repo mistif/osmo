@@ -16,6 +16,9 @@ export const MAX_A_DAY = 4;
 export const MAX_ON_RETURN = 3;
 export const AWAY_LONG_MS = 3 * 86_400_000; // "Gur away a long time"
 const HALL_X = 477; // the hall's column: "near the hall" is near this
+// His own recipes offered in a decision: variations of his last OWN_MAX finished builds (spec 4.2), so the options, and
+// the compiles a decision may try, do not grow with every build he has ever made.
+export const OWN_MAX = 8;
 const REASON_MAX = 200;
 export type PlanInput = {
 	seed: number; // the world's seed
@@ -43,21 +46,28 @@ export function plan(input: PlanInput, deps: PlanDeps): Candidate[] {
 	const world = deps.world(taken);
 	const seeds = input.recipes.filter((r) => r.kind !== "castle");
 	const options: Option[] = [];
+	const known = new Set<string>(); // an option the same as one already offered (recipe and variation) adds nothing
+	const offer = (recipe: Recipe, v: Variation) => {
+		const key = JSON.stringify([recipe.id, v]);
+		if (known.has(key)) return;
+		known.add(key);
+		options.push({ recipe, v, score: scoreOf(recipe.id, v, taste), fresh: isFresh(recipe.id, v, taste) });
+	};
 	seeds.forEach((recipe, i) => {
 		try {
-			const v = deps.choose(recipe, input.parts, mix(input.seed, input.n, i));
-			options.push({ recipe, v, score: scoreOf(recipe.id, v, taste), fresh: isFresh(recipe.id, v, taste) });
+			offer(recipe, deps.choose(recipe, input.parts, mix(input.seed, input.n, i)));
 		} catch {
 			// a recipe with no part for its materials is never offered
 		}
 	});
-	input.rows.filter((r) => r.finished_at !== null && roomOfRecipe(r.recipe) === null).forEach((r, j) => {
+	const finishedAt = (r: BuildRow) => Date.parse(r.finished_at ?? "") || 0;
+	const own = input.rows.filter((r) => r.finished_at !== null && roomOfRecipe(r.recipe) === null).sort((a, b) => finishedAt(a) - finishedAt(b)).slice(-OWN_MAX);
+	own.forEach((r, j) => {
 		const recipe = seeds.find((x) => x.id === r.recipe);
 		const v = asVariation(r.params);
 		if (!recipe || !v) return;
 		try {
-			const w = deps.vary(v, recipe, input.parts, mix(input.seed, input.n, 100 + j));
-			options.push({ recipe, v: w, score: scoreOf(recipe.id, w, taste), fresh: isFresh(recipe.id, w, taste) });
+			offer(recipe, deps.vary(v, recipe, input.parts, mix(input.seed, input.n, 100 + j)));
 		} catch {
 			// his own recipe that cannot be varied is not offered again this time
 		}
@@ -71,17 +81,30 @@ export function plan(input: PlanInput, deps: PlanDeps): Candidate[] {
 		if (!sites) sitesOf.set(recipe.id, (sites = sitesFor(recipe, input.map, input.rows, input.him, taken)));
 		return sites;
 	};
+	// An option compiled on a site and checked against every rule once per decision (the leaned, mood and fresh passes
+	// try many of the same): the compiled build, or null when it does not compile or breaks a rule.
+	const tried = new Map<Option, Map<Site, Compiled | null>>();
+	const fits = (o: Option, site: Site): Compiled | null => {
+		let bySite = tried.get(o);
+		if (!bySite) tried.set(o, (bySite = new Map()));
+		const hit = bySite.get(site);
+		if (hit !== undefined) return hit;
+		let out: Compiled | null = null;
+		try {
+			const compiled = deps.compile(o.recipe, o.v, site, input.parts);
+			if (deps.check(compiled, o.recipe, site, world).length === 0) out = compiled;
+		} catch {
+			out = null;
+		}
+		bySite.set(site, out);
+		return out;
+	};
 	// The option on the first of its sites that compiles and passes every rule. order: which of its sites to try, in what
 	// order (as sitesFor gives them, by default).
 	const place = (o: Option, why: Why, order: (sites: Site[]) => Site[] = (s) => s): Candidate | null => {
 		for (const site of order(sitesFrom(o.recipe))) {
-			let compiled: Compiled;
-			try {
-				compiled = deps.compile(o.recipe, o.v, site, input.parts);
-			} catch {
-				continue;
-			}
-			if (deps.check(compiled, o.recipe, site, world).length > 0) continue;
+			const compiled = fits(o, site);
+			if (compiled === null) continue;
 			const names = partsOf(o.v).map((id) => input.parts.find((p) => p.id === id)?.name ?? id).slice(0, WILL_LIMITS.parts);
 			return {
 				recipe: o.recipe, variation: o.v, site, compiled, why, fresh: o.fresh, score: Math.max(0.1, o.score),
