@@ -3,12 +3,23 @@
 Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk.
 
 ## Now
-- **Free will: Task 0 and ten tracks running in worktrees under `C:/Users/Gurra/GroupProject/fw` (branches `fw/*`), plan `docs/superpowers/plans/2026-10-11-osmo-free-will.md` (`e5751b5`), Gur's go 2026-10-12.** An overlap watcher merges into `fw/merge`; then I0 to I3, one reviewer, a fix round. Nothing pushed. Migrations to come for main: `free-will-world.sql`, `free-will-builds.sql` (moves the village rows).
-**Osmo's free will, the big world and the build grammar (2026-10-11, handed over by main at Gur's request; brief `handoffs/2026-10-11-osmo-free-will.md`).** The world is mine now: `lib/world/**`, `components/osmo/world.tsx`, `world.module.css`, `app/dev/world/**`, and the village specs and plans. Design approved section by section; spec written (`84b02fe`, `docs/superpowers/specs/2026-10-11-osmo-free-will-design.md`), waiting for Gur's review. No code yet. Migrations to come for main: `world`, `builds` (with the castle move from `village`).
+- **Free will is on local main, dark** (see Just landed). Hand checks on `/dev/world` are running: an Opus agent in the browser pane, on the one dev server (port 3000), which I started. Waiting on Gur for:
+  - his OK for the migrations and the push (asks to main below);
+  - confirming the budget change (150 to 40 blocks a day, to keep "fills in about three months");
+  - his go for the will probe.
 **Connectors phase 0, language's part is on local main** (see Just landed). 0.17 (the action probe) and 0.18's measured half wait for Gur's yes in chat. Artifacts A6 and B5 to B8 wait behind the world.
 **The fallback v2 spec is written and waiting for Gur's review:** `docs/superpowers/specs/2026-10-02-osmo-fallback-v2-design.md` (`201887d`; guests reach tier 2, Gur's answer, `d9317ae`). Gur chose gpt-4.1-mini as tier 2, a short honest line with no model, and the dictionary for no-model only. Cloud's eight points are folded in (the crisis check keeps its typo tolerance with a small generated list; one budget split 90/10 between the tiers; timing 6 s plus the rest of 12 s; retry only on errors another model can fix; the quota day-stop). **→ main:** it removes vocabulary learning, so `user_words` goes unread (your migration, later). `chatlog.test.ts` replies will change when small talk goes.
 
 ## Just landed
+- **Free will, the big world and the build grammar: on local main as `32c955b` (merge of `fw/merge`) plus `a7c6c80` (two lint warnings), not pushed, dark** (`NEXT_PUBLIC_OSMO_BIGWORLD`, `NEXT_PUBLIC_OSMO_BUILDS` and `OSMO_WILL` all off, so the room is unchanged).
+  - **How it was built:** Task 0 (contracts), then ten tracks in parallel worktrees, each merged by an overlap watcher. Every track stayed in its own files, with no repair rounds. Then I0 to I3, an Opus whole-branch review (9 findings, all fixed), and 22 look fixes.
+  - **Checks:** 188 files and 3,474 tests pass; tsc, lint and `next build --webpack` are green.
+  - **Changes from the spec:**
+    - the work budget is 40 blocks a day, capped at 120: the grammar's builds average 40 to 63 blocks, so 150 a day would have filled the world in about a month;
+    - the `world` table gains `seen_at`, which drives "Gur away a long time";
+    - the big world draws no hills or haze band and no clouds at the far steps;
+    - the tile list is now 155.
+  - Plan `docs/superpowers/plans/2026-10-11-osmo-free-will.md`; spec `docs/superpowers/specs/2026-10-11-osmo-free-will-design.md`.
 - **`b7d1b76` (merge of `f1e9e26`), local main, not pushed: the room sends the waiting row's id.**
   - `ChatAnswer` and `AskResult` carry `pendingId: string | null`, which `ask.ts` takes only while `waiting` is set, as 1 to 100 characters.
   - `lib/chat/branch.ts` exports `Waiting = { pendingId } | null` in place of the boolean flag.
@@ -55,6 +66,11 @@ Session "Opus 5.5 Secondary Osmo Agent". Only the language agent edits this desk
    - **Finding 5, with main:** `mind.ts` runs `understand()` twice.
 
 ## Asks
+- **→ main (2026-10-12, free will):**
+  1. **Migrations, with Gur's OK:** apply `docs/migrations/free-will-world.sql`, then `docs/migrations/free-will-builds.sql`, before any push that turns `NEXT_PUBLIC_OSMO_BIGWORLD` or `NEXT_PUBLIC_OSMO_BUILDS` on. The builds migration copies Gur's six `village` rows into `builds` (it drops and revokes nothing). Please read both first.
+  2. **`components/osmo/village-clear.tsx`:** when `BUILDS` is on, "Clear the village" should read "Clear the world", and its confirmation should say the islands stay. The clearing itself already clears every build.
+  3. **Push `main` with Gur's OK.** All three switches stay off, so the live room is unchanged until Gur turns them on, in this order: BIGWORLD (phase 1); then BUILDS, after the builds migration (phase 2); then OSMO_WILL, after the probe (phase 3).
+  4. **Later, with Gur's OK:** make `village` read-only, then drop it one release after BUILDS is on. With BUILDS on, Clear the world already treats a read-only or missing `village` as cleared.
 - **→ main (2026-10-08, connectors phase 0):** asks 1 to 4 done by you in `5a50955` (thanks); 5 is on your phase 1 go-live list; 6 accepted. The room's half of 2 is `b7d1b76`. Closed.
 - **→ main (2026-10-01, the AI conversation is on local `main`; also sent to you directly):**
   1. **The Settings line:** pass `aiUsage` from the room: `<SettingsPanel voice={voice} aiUsage={aiUsage} />`. The prop is `aiUsage: ChatStatus | null` (`@/lib/chat/types`). The line reads:
