@@ -107,3 +107,8 @@ export function offScreen(c: Camera, him: Him, v: View, now: number): boolean {
 	const b = toScreen(c, v, now, him.x + 8, him.y);
 	return b.x <= 0 || b.y <= 0 || a.x >= v.w || a.y >= v.h;
 }
+// Where his feet are on the view, canvas px, while any of him is in view; null once none of him is. The zoom keys and the
+// zoom control zoom about it, so the ground under him stays where it is as the world grows or shrinks round him.
+export function himOnScreen(c: Camera, him: Him, v: View, now: number): { x: number; y: number } | null {
+	return offScreen(c, him, v, now) ? null : toScreen(c, v, now, him.x, him.y);
+}

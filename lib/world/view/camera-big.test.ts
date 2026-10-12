@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { toScreen, zoomAt, type Camera } from "../camera";
-import { BIG_BOUNDS, drift, fitZoom, followBig, homeTo, nearestStep, newBigCamera, offScreen, panBy, STEPS, zoomAbout, zoomSteps } from "./camera-big";
+import { BIG_BOUNDS, drift, fitZoom, followBig, himOnScreen, homeTo, nearestStep, newBigCamera, offScreen, panBy, STEPS, zoomAbout, zoomSteps } from "./camera-big";
 
 const V = { w: 1000, h: 600 };
 const cam = (x: number, y: number, z: number): Camera => ({ x, y, from: z, to: z, at: 0, aimX: x, aimY: y, ox: 0, oy: 0, glideAt: Number.NEGATIVE_INFINITY });
@@ -96,5 +96,41 @@ describe("following him and coming home", () => {
 		expect(offScreen(c, him, V, 0)).toBe(false);
 		expect(offScreen(cam(2000, 1300, 1), him, V, 0)).toBe(true);
 		expect(offScreen(cam(7640, 300, 1), him, V, 0)).toBe(true);
+	});
+});
+
+describe("where he is on the view (the zoom keys and control zoom about him)", () => {
+	const him = { x: 7640, y: 1376 };
+	it("is his feet in canvas px while any of him is in view", () => {
+		const c = newBigCamera(him, V, 1, BIG_BOUNDS);
+		const at = himOnScreen(c, him, V, 0);
+		expect(at).toEqual(toScreen(c, V, 0, him.x, him.y));
+		expect(at?.x).toBe(500);
+	});
+	it("is still there with only his head in view, and gone once none of him is", () => {
+		const head = cam(7640, 1376 - 330, 1); // his feet 30 px below the view, his head 2 px inside
+		expect(himOnScreen(head, him, V, 0)).not.toBeNull();
+		expect(himOnScreen(cam(7640, 1376 - 333, 1), him, V, 0)).toBeNull();
+		expect(himOnScreen(cam(2000, 1300, 1), him, V, 0)).toBeNull();
+	});
+	it("keeps him where he stands on the view through a zoom about it, at home three steps in", () => {
+		const steps = [4, 3, 2, 1, 0.5, 0.25, 0.125];
+		let c = newBigCamera(him, V, 1, BIG_BOUNDS);
+		for (let k = 0; k < 3; k++) {
+			const at = himOnScreen(c, him, V, 0);
+			expect(at).not.toBeNull();
+			c = zoomAbout(c, steps, 1, at as { x: number; y: number }, V, BIG_BOUNDS, 0, true);
+			const now = toScreen(c, V, 0, him.x, him.y);
+			expect(now.x).toBeCloseTo(at?.x ?? NaN, 5);
+			expect(now.y).toBeCloseTo(at?.y ?? NaN, 5);
+			expect(offScreen(c, him, V, 0)).toBe(false);
+		}
+		expect(c.to).toBe(4);
+	});
+	it("pushes him off the bottom when the same steps zoom about the middle", () => {
+		const steps = [4, 3, 2, 1, 0.5, 0.25, 0.125];
+		let c = newBigCamera(him, V, 1, BIG_BOUNDS);
+		for (let k = 0; k < 3; k++) c = zoomAbout(c, steps, 1, { x: V.w / 2, y: V.h / 2 }, V, BIG_BOUNDS, 0, true);
+		expect(offScreen(c, him, V, 0)).toBe(true);
 	});
 });

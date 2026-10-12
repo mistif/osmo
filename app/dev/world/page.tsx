@@ -268,9 +268,10 @@ export default function WorldPage() {
 				<p className={`${dev.note} ${dev.takes}`}>
 					The big world: Small is today&apos;s village and where this page starts; Big is the world of floating islands (the
 					castle on the home island, then four to eight islands); Builds adds the balloon dock, his work budget and the
-					planner. A new seed or island count starts that world again. Zoom in and Zoom out step the zoom about the middle of
-					the view, Back to Osmo takes the camera to him, and the frame timer shows the average and the slowest of the last 60
-					draws (Clear timer starts it again, so each zoom step can be read by itself). Castle done begins with the whole
+					planner. A new seed or island count starts that world again. Zoom in and Zoom out (and the + and - keys) step the zoom
+					about him while he is on screen, else about the middle of the view; the wheel and a pinch zoom about the pointer. Back
+					to Osmo takes the camera to him, and the frame timer shows the average and the slowest of the last 60 draws (Clear
+					timer starts it again, so each zoom step can be read by itself). Castle done begins with the whole
 					castle built. Grant puts that many blocks into his work budget at once: Grant {BUDGET_CAP} plays the time-lapse of a
 					three-day return, and he is left at work. The planner mood buttons pin the mood the planner follows; press the
 					same one again to let the real mood decide. The recipe preview and the planner panel below work on their own:

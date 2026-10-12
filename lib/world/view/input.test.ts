@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { interacting, NO_GESTURE, onKey, onPointer, onWheel, worldMayTake, type Gesture, type Intent, type PointerIn } from "./input";
+import { interacting, NO_GESTURE, onKey, onPointer, onWheel, worldMayTake, zoomIntent, type Gesture, type Intent, type PointerIn } from "./input";
 
 const P = (kind: PointerIn["kind"], id: number, x: number, y: number, t: number, onWorld = true): PointerIn => ({ kind, id, x, y, t, onWorld });
 const play = (events: PointerIn[], g: Gesture = NO_GESTURE) => {
@@ -86,5 +86,33 @@ describe("the wheel and the keys", () => {
 		expect(k("ArrowDown")).toEqual([{ kind: "pan", dx: 0, dy: -75 }]);
 		expect(k("Home")).toEqual([{ kind: "home" }]);
 		expect(k("a")).toEqual([]);
+	});
+});
+
+describe("what the zoom keys and the zoom control zoom about", () => {
+	const key = (k: string, him?: { x: number; y: number } | null) => onKey({ key: k, w: 800, h: 600, him });
+	it("zoom about him when he is on screen, the keys and the control alike", () => {
+		const him = { x: 320, y: 410 };
+		expect(key("+", him)).toEqual([{ kind: "zoom", dir: 1, x: 320, y: 410 }]);
+		expect(key("=", him)).toEqual(key("+", him));
+		expect(key("-", him)).toEqual([{ kind: "zoom", dir: -1, x: 320, y: 410 }]);
+		expect(key("_", him)).toEqual(key("-", him));
+		expect(zoomIntent(1, 800, 600, him)).toEqual({ kind: "zoom", dir: 1, x: 320, y: 410 });
+		expect(zoomIntent(-1, 800, 600, him)).toEqual({ kind: "zoom", dir: -1, x: 320, y: 410 });
+	});
+	it("zoom about the middle of the view when he is off screen, or when nothing is said", () => {
+		for (const him of [null, undefined]) {
+			expect(key("+", him)).toEqual([{ kind: "zoom", dir: 1, x: 400, y: 300 }]);
+			expect(key("-", him)).toEqual([{ kind: "zoom", dir: -1, x: 400, y: 300 }]);
+			expect(zoomIntent(1, 800, 600, him)).toEqual({ kind: "zoom", dir: 1, x: 400, y: 300 });
+		}
+	});
+	it("leave the other keys alone, him or no him", () => {
+		const him = { x: 320, y: 410 };
+		expect(key("ArrowLeft", him)).toEqual(key("ArrowLeft"));
+		expect(key("Home", him)).toEqual([{ kind: "home" }]);
+	});
+	it("leave the wheel and the pinch about the pointer", () => {
+		expect(onWheel(NO_GESTURE, wheel(100, 0)).out).toEqual([{ kind: "zoom", dir: -1, x: 300, y: 200 }]);
 	});
 });

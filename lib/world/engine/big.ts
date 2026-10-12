@@ -50,8 +50,8 @@ import { daylight, hourOf, phaseOf, skyAt, starField, sunAt } from "../sky";
 import { lapseSchedule, lookAt, shotsDue, type Shot } from "../travel/timelapse";
 import { boardingOf, floorAt, islandOfPx } from "../travel/travel";
 import { openRooms, SETTINGS_SEEN, type VillageCounts } from "../unlock";
-import { BIG_BOUNDS, drift, followBig, homeTo, newBigCamera, offScreen, panBy, zoomAbout, zoomSteps } from "../view/camera-big";
-import { interacting, NO_GESTURE, onKey, onPointer, onWheel, worldMayTake, type Gesture, type Intent, type PointerIn } from "../view/input";
+import { BIG_BOUNDS, drift, followBig, himOnScreen, homeTo, newBigCamera, offScreen, panBy, zoomAbout, zoomSteps } from "../view/camera-big";
+import { interacting, NO_GESTURE, onKey, onPointer, onWheel, worldMayTake, zoomIntent, type Gesture, type Intent, type PointerIn, type Spot } from "../view/input";
 import { admit, adoptRead, dueSaves, finishedRooms, layNext, markRoomSaved, pinnedVillage, resumeVillage, type Village } from "../village";
 import { readVillageCounts } from "../village-counts";
 import { CLEARED_KEY, loadVillage, saveRoom, VILLAGE_CLEARED } from "../village-data";
@@ -860,6 +860,12 @@ function buildBigWorld(
 		camera = homeTo(camera, him(), followZoom(css.w, css.h, facingViewer(actor), dpr), view, BIG_BOUNDS, now, reduced);
 		moveCamera("home");
 	};
+	// Where his feet are on the world region, CSS px, while any of him is in view (null: off screen): what the zoom keys and
+	// the zoom control zoom about.
+	const himSpot = (): Spot | null => {
+		const at = himOnScreen(camera, him(), view, clock());
+		return at ? { x: at.x / dpr, y: at.y / dpr } : null;
+	};
 	const tappedHim = (x: number, y: number, now: number): boolean => {
 		const a = toScreen(camera, view, now, actor.x - 8, actor.y - FRAME_H);
 		const b = toScreen(camera, view, now, actor.x + 8, actor.y);
@@ -1065,7 +1071,7 @@ function buildBigWorld(
 	});
 	const onKeyDown = guarded((e: KeyboardEvent) => {
 		if (e.altKey || e.ctrlKey || e.metaKey) return;
-		const out = onKey({ key: e.key, w: css.w, h: css.h });
+		const out = onKey({ key: e.key, w: css.w, h: css.h, him: himSpot() });
 		if (out.length === 0) return;
 		e.preventDefault();
 		intents.push(...out);
@@ -1242,7 +1248,7 @@ function buildBigWorld(
 		},
 		context: () => (counts === null ? null : roomContext(place(), counts)),
 		zoom: guarded((dir: 1 | -1) => {
-			intents.push({ kind: "zoom", dir, x: css.w / 2, y: css.h / 2 });
+			intents.push(zoomIntent(dir, css.w, css.h, himSpot()));
 			wake();
 		}),
 		home: guarded(() => {

@@ -19,7 +19,10 @@ export const NO_GESTURE: Gesture = { pointers: [], others: [], start: null, move
 // up and cancel, wherever it went down, so the mapper knows about fingers on the conversation too.
 export type PointerIn = { kind: "down" | "move" | "up" | "cancel"; id: number; x: number; y: number; t: number; onWorld: boolean };
 export type WheelIn = { dx: number; dy: number; mode: 0 | 1 | 2; ctrl: boolean; x: number; y: number; t: number; onWorld: boolean };
-export type KeyIn = { key: string; w: number; h: number }; // w, h: the world region's size, CSS px
+// w, h: the world region's size, CSS px. him: where his feet are on it, CSS px, when any of him is in view (null or left
+// out: he is off screen, or the caller does not say).
+export type Spot = { x: number; y: number };
+export type KeyIn = { key: string; w: number; h: number; him?: Spot | null };
 
 export const DRAG_PX = 4;
 export const TAP_PX = 6;
@@ -104,15 +107,18 @@ export function onWheel(g: Gesture, e: WheelIn): { g: Gesture; out: Intent[] } {
 	return { g: { ...g, wheel, wheelAt: e.t }, out };
 }
 
+// A zoom step from the keys or the zoom control: about him when he is on screen (so three steps in at home do not push
+// him off the bottom), else about the middle of the view. The wheel and the pinch zoom about the pointer.
+export const zoomIntent = (dir: 1 | -1, w: number, h: number, him?: Spot | null): Intent => ({ kind: "zoom", dir, x: him ? him.x : w / 2, y: him ? him.y : h / 2 });
+
 export function onKey(e: KeyIn): Intent[] {
-	const at = { x: e.w / 2, y: e.h / 2 };
 	switch (e.key) {
 		case "+":
 		case "=":
-			return [{ kind: "zoom", dir: 1, ...at }];
+			return [zoomIntent(1, e.w, e.h, e.him)];
 		case "-":
 		case "_":
-			return [{ kind: "zoom", dir: -1, ...at }];
+			return [zoomIntent(-1, e.w, e.h, e.him)];
 		case "ArrowLeft":
 			return [{ kind: "pan", dx: e.w * KEY_PAN, dy: 0 }];
 		case "ArrowRight":
