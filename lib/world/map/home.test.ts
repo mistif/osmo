@@ -4,8 +4,8 @@ import { START_X } from "../blueprints";
 import { CASTLE_BLOCKS } from "../blueprints/castle";
 import { TILE } from "../blueprints/types";
 import { poolsOf } from "../texture";
-import { TILE_IDS } from "../tiles";
-import { BALLOON_BASKET, BALLOON_ENVELOPE, bridgeEnd, DOCK_BLOCKS, DOCK_BOARD_X, DOCK_DECK, DOCK_END_X, HOME_ISLAND, HOME_TOP, homeGround, homePx, homePy, shiftBlocks } from "./home";
+import { TILE_IDS, TILES } from "../tiles";
+import { BALLOON_BASKET, BALLOON_ENVELOPE, BALLOON_ROPES, bridgeEnd, DOCK_BLOCKS, DOCK_BOARD_X, DOCK_DECK, DOCK_END_X, HOME_ISLAND, HOME_TOP, homeGround, homePx, homePy, RIDE_FEET, shiftBlocks } from "./home";
 import { columnOf, islandAt, islandById, surfaceAt } from "./lookup";
 import { BIG_H, BIG_W, HOME_DX, HOME_DY } from "./types";
 
@@ -41,6 +41,21 @@ describe("the home island in the big world", () => {
 		expect([DOCK_BOARD_X, DOCK_END_X]).toEqual([508, 509]);
 		expect(DOCK_DECK).toEqual({ x0: 506, x1: 510, rows: [86, 86, 86, 86], from: 0, to: 0 });
 		for (const c of [...BALLOON_ENVELOPE, BALLOON_BASKET]) expect(TILE_IDS).toContain(c.tile);
+	});
+	it("makes the balloon big enough for him: a 3 by 3 envelope over his head, a full-tile basket with its rim at his waist, the same height moored and ridden", () => {
+		expect(BALLOON_ENVELOPE).toHaveLength(9);
+		const xs = [...new Set(BALLOON_ENVELOPE.map((c) => c.dx))].sort((a, b) => a - b);
+		const ys = [...new Set(BALLOON_ENVELOPE.map((c) => c.dy))].sort((a, b) => a - b);
+		expect(xs).toEqual([-24, -8, 8]);
+		expect(ys[1] - ys[0]).toBe(TILE);
+		expect(ys[2] - ys[1]).toBe(TILE);
+		expect(ys[2] + TILE).toBeLessThanOrEqual(-32 - 8); // its throat clears his head (32 px) with room for the ropes
+		expect(BALLOON_BASKET).toMatchObject({ dx: -8, dy: -16 });
+		const basket = TILES[BALLOON_BASKET.tile];
+		expect(basket[0].replace(/\./g, "").length).toBeGreaterThan(8); // the rim on the cell's top row: 16 px over his feet
+		expect(basket[15].replace(/\./g, "").length).toBeGreaterThan(8);
+		expect(RIDE_FEET).toBe(0);
+		for (const r of BALLOON_ROPES) expect([r.top, r.bottom]).toEqual([ys[2] + TILE - 2, -16]);
 	});
 	it("meets a rope bridge at an island's end column on its top row, and east of home at the dock's far board", () => {
 		const east = { id: 1, x0: 530, x1: 630, ground: 70, top: Array.from({ length: 100 }, (_, i) => (i < 99 ? 70 : 71)), home: false };

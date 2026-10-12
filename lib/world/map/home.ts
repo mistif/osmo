@@ -39,18 +39,17 @@ export function bridgeEnd(island: Island, side: "east" | "west"): { x: number; y
 	return island.home ? { x: DOCK_END_X, y: HOME_TOP } : { x: island.x1 - 1, y: island.top[island.top.length - 1] };
 }
 
-// The balloon, drawn from tiles placed around the bottom centre of its basket (world px): the envelope's four cells high
-// above, two ropes down to the basket's rim, and the basket, which is drawn after him so he stands in it. While he rides
-// his feet are RIDE_FEET above the basket's bottom.
-export const BALLOON_ENVELOPE: readonly { tile: TileId; dx: number; dy: number }[] = [
-	{ tile: "balloon-tl", dx: -16, dy: -80 },
-	{ tile: "balloon-tr", dx: 0, dy: -80 },
-	{ tile: "balloon-bl", dx: -16, dy: -64 },
-	{ tile: "balloon-br", dx: 0, dy: -64 },
-];
-export const BALLOON_BASKET: { tile: TileId; dx: number; dy: number } = { tile: "basket", dx: -8, dy: -16 };
+// The balloon, drawn from tiles placed around the bottom centre of its basket (world px): the envelope's nine cells (48
+// by 48, half again his height) high above, two ropes from its throat down to the basket's rim, and the basket, a full
+// cell deep, drawn after him so he stands in it with its rim at his waist. His feet are on the basket's bottom, so it
+// stands at the same height moored and ridden (RIDE_FEET 0).
+export const BALLOON_ENVELOPE: readonly { tile: TileId; dx: number; dy: number }[] = ([
+	"balloon-1", "balloon-2", "balloon-3", "balloon-4", "balloon-5", "balloon-6", "balloon-7", "balloon-8", "balloon-9",
+] as const).map((tile, n) => ({ tile, dx: -24 + (n % 3) * TILE, dy: -96 + Math.floor(n / 3) * TILE }));
+export const BALLOON_BASKET: { tile: TileId; dx: number; dy: number } = { tile: "basket-full", dx: -8, dy: -16 };
+// From just inside the ring at the throat (the envelope's row 46) down to the rim.
 export const BALLOON_ROPES: readonly { x: number; top: number; bottom: number }[] = [
-	{ x: -7, top: -48, bottom: -8 },
-	{ x: 6, top: -48, bottom: -8 },
+	{ x: -6, top: -50, bottom: -16 },
+	{ x: 5, top: -50, bottom: -16 },
 ];
-export const RIDE_FEET = -4;
+export const RIDE_FEET = 0;

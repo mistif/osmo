@@ -17,6 +17,7 @@ export const MORE_TILE_IDS = [
 	"leaves-tl", "leaves-tr", "leaves-bl", "leaves-br",
 	"post-plank-l", "post-plank-r", "post-back-l", "post-back-r", "post-back", "post-glass-l", "post-glass-r", "post-glass",
 	"back-wood-top", "back-stone-top", "arch-back", "statue-back",
+	"balloon-1", "balloon-2", "balloon-3", "balloon-4", "balloon-5", "balloon-6", "balloon-7", "balloon-8", "balloon-9", "basket-full",
 ] as const;
 export type MoreTileId = (typeof MORE_TILE_IDS)[number];
 
@@ -778,6 +779,61 @@ const backStoneTop = shaded(backStone, "a");
 const archBack = make((x, y) => (arch[y][x] === "." ? backStoneTop[y][x] : arch[y][x]));
 const statueBack = make((x, y) => (STATUE[y][x] === "." ? backStone[y][x] : STATUE[y][x]));
 
+// --- The balloon at his scale (the look pass: the 32 px one was his height, a toy): an envelope 48 by 48 over nine
+// cells, drawn as the small one is (a round crown narrowing to its throat, eight gores in cream and red that curve with
+// its surface, lit from the top left, outlined on its lower right, a bronze ring at the throat), and a basket a full
+// cell deep, its rolled rim on the cell's top row, at his waist when he stands in it. ---
+const BIG = 48;
+const BIG_R = 23.5;
+const BIG_CY = 22.5; // the crown's centre row
+const BIG_NECK = 19; // rows from the crown's centre down to the throat
+const BIG_THROAT = 43; // the ring's first row
+function bigHalf(gy: number): number {
+	const t = gy + 0.5 - BIG_CY;
+	if (t <= 0) return Math.sqrt(Math.max(0, BIG_R * BIG_R - t * t));
+	const k = Math.min(1, t / BIG_NECK);
+	return 5 + (BIG_R - 5) * Math.cos((k * Math.PI) / 2) ** 0.9;
+}
+const insideBig = (gx: number, gy: number) => gy >= 0 && gy < BIG_THROAT && Math.abs(gx + 0.5 - BIG / 2) <= bigHalf(gy);
+function bigEnvelope(gx: number, gy: number): string {
+	if (gy >= BIG_THROAT) {
+		if (gx < 18 || gx > 29 || gy > BIG_THROAT + 2) return ".";
+		if (gy === BIG_THROAT + 2) return gx === 18 ? ">" : "j";
+		return gx === 18 ? "=" : gx === 29 ? "j" : gx >= 26 ? ">" : "<";
+	}
+	if (!insideBig(gx, gy)) return ".";
+	const w = bigHalf(gy);
+	const u = Math.max(-1, Math.min(1, (gx + 0.5 - BIG / 2) / w));
+	const t = gy + 0.5 - BIG_CY;
+	const ny = t <= 0 ? t / BIG_R : (t / BIG_NECK) * 0.7;
+	const nx = u * Math.sqrt(Math.max(0, 1 - ny * ny));
+	const nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny));
+	const b = -0.55 * nx - 0.55 * ny + 0.63 * nz;
+	const edge = !insideBig(gx + 1, gy) || !insideBig(gx, gy + 1);
+	if (edge && (nx > -0.2 || ny > 0.3)) return "f";
+	const g = (Math.asin(u) / Math.PI + 0.5) * 8;
+	const seam = Math.abs(g - Math.round(g)) < 0.05;
+	if (Math.floor(g) % 2 === 0) {
+		if (seam && b < 0.6) return "/";
+		return b > 0.5 ? "-" : b > -0.2 ? "/" : "W";
+	}
+	return b > 0.97 ? "i" : b > 0.1 ? ":" : ";";
+}
+const bigBalloon = (n: number) => make((x, y) => bigEnvelope(x + (n % 3) * N, y + Math.floor(n / 3) * N));
+// The basket: wicker the cell's full height, a lit rolled rim on top, the weave in two-by-two blocks, outlined.
+const basketFull = make((x, y) => {
+	if (x < 1 || x > 14) return ".";
+	if (y === 15) return x === 1 || x === 14 ? "." : "j";
+	if (x === 14) return "j";
+	if (y === 0) return x <= 2 ? "`" : x === 13 ? "m" : "_";
+	if (y === 1) return x === 13 ? "k" : x === 1 ? "m" : "j";
+	if (x === 1) return "m";
+	if (x === 13) return "k";
+	const block = ((x >> 1) + ((y - 2) >> 1)) & 1;
+	const first = (x & 1) === 0;
+	return block ? (first ? "_" : "l") : first ? "l" : "k";
+});
+
 export const MORE_TILES: Readonly<Record<MoreTileId, Grid>> = {
 	"plank-wall": plankWall,
 	"stone-wall": stoneWall,
@@ -839,4 +895,14 @@ export const MORE_TILES: Readonly<Record<MoreTileId, Grid>> = {
 	"back-stone-top": backStoneTop,
 	"arch-back": archBack,
 	"statue-back": statueBack,
+	"balloon-1": bigBalloon(0),
+	"balloon-2": bigBalloon(1),
+	"balloon-3": bigBalloon(2),
+	"balloon-4": bigBalloon(3),
+	"balloon-5": bigBalloon(4),
+	"balloon-6": bigBalloon(5),
+	"balloon-7": bigBalloon(6),
+	"balloon-8": bigBalloon(7),
+	"balloon-9": bigBalloon(8),
+	"basket-full": basketFull,
 };

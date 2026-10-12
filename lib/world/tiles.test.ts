@@ -32,6 +32,7 @@ const FIX_ROUND = ["deck", "spire-l", "spire-r", "spire-l-hi", "spire-r-hi", "sp
 	"leaves-tl", "leaves-tr", "leaves-bl", "leaves-br",
 	"post-plank-l", "post-plank-r", "post-back-l", "post-back-r", "post-back", "post-glass-l", "post-glass-r", "post-glass",
 	"back-wood-top", "back-stone-top", "arch-back", "statue-back",
+	"balloon-1", "balloon-2", "balloon-3", "balloon-4", "balloon-5", "balloon-6", "balloon-7", "balloon-8", "balloon-9", "basket-full",
 ];
 // Tiles with no transparent pixel.
 const FILLED: TileId[] = [
