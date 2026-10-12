@@ -391,9 +391,10 @@ export function drawWorld(p: Painter, s: WorldScene): { pending: number } {
 			if (seen(b.x, b.y, BIRD_CELL.w * k, BIRD_CELL.h * k)) p.stamp("birds", b.frame, b.x, b.y, Math.min(ATLAS_MAX, k), 1, b.flip, BIRD_CELL.w * k, BIRD_CELL.h * k);
 		}
 	}
-	// 2. clouds, at every step: the far layer, fainter, then the near one, each with its parallax, each cloud drawn again
-	// a span over wherever the view reaches
-	for (const layer of [0, 1] as const) {
+	// 2. clouds, at every step but the far ones (there they tile into a strip of tiny clouds louder than the islands: the
+	// look pass): the far layer, fainter, then the near one, each with its parallax, each cloud drawn again a span over
+	// wherever the view reaches
+	for (const layer of lod === "far" ? [] : ([0, 1] as const)) {
 		const left = s.camera.x * PARALLAX[layer] - s.view.w / 2 / z;
 		const right = left + s.view.w / z;
 		for (const c of CLOUDS) {

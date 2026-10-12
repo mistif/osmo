@@ -516,6 +516,16 @@ describe("the big world (free-will spec 3.3)", () => {
 		expect(log.filter((c) => c.kind === "rect" && c.color === PALETTE.t).length).toBeGreaterThanOrEqual(2);
 		expect(log.filter((c) => c.kind === "rect" && c.color === PALETTE.p).length).toBeGreaterThanOrEqual(1);
 	});
+	it("draws no clouds at the far steps, where they would tile into a strip louder than the islands (the look pass)", () => {
+		const clouds = (z: number) => {
+			const { counted, log } = recording(pixelPainter(V.w, V.h, art));
+			drawWorld(counted, bigScene(z, V, { camera: cam(HOME.x, 600, z) })); // the clouds' height
+			return log.filter((c) => c.kind === "stamp" && c.sheet === "clouds").length;
+		};
+		expect(clouds(0.25)).toBeGreaterThan(0);
+		expect(clouds(0.125)).toBe(0);
+		expect(clouds(480 / 16384)).toBe(0);
+	});
 	it("draws his sprite at 1/2 and his mark at 1/4", () => {
 		const near = { camera: cam(HOME.x, HOME.y - 40, 0.5) };
 		const half = recording(pixelPainter(V.w, V.h, art));
@@ -585,8 +595,8 @@ describe("every zoom step's pixels (480 by 270, day, no life)", () => {
 		expect(hashAt(1)).toMatchInlineSnapshot(`"d8d75cf9"`);
 		expect(hashAt(0.5)).toMatchInlineSnapshot(`"e28abdcc"`);
 		expect(hashAt(0.25)).toMatchInlineSnapshot(`"15d99be4"`);
-		expect(hashAt(0.125)).toMatchInlineSnapshot(`"ea0fdffd"`);
-		expect(hashAt(480 / 16384)).toMatchInlineSnapshot(`"57c648a7"`);
+		expect(hashAt(0.125)).toMatchInlineSnapshot(`"f18dd2d4"`);
+		expect(hashAt(480 / 16384)).toMatchInlineSnapshot(`"792a5707"`);
 	});
 	it("draws the same pixels with the ground from chunk bitmaps as stamped, at a whole zoom", () => {
 		for (const z of [1, 2, 3]) {
