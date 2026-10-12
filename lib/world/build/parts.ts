@@ -92,8 +92,9 @@ export const PARTS: readonly Part[] = [
 		legend: { H: L("hedge", "walls"), f: L("flowers", "walls"), s: L("soil", "floor") } },
 	{ id: "walk-lamps", name: "lamp-lit path", group: "around", role: "storey", material: null, fit: "row", map: ["l...ll", "p...pp", "ssssss"],
 		legend: { l: L("lantern", "windows"), p: L("lantern-post", "walls"), s: L("path", "floor") } },
-	{ id: "pond-basin", name: "stone pond", group: "around", role: "storey", material: null, fit: "row", map: ["StttS", "SwwwS"],
-		legend: { S: L("stone-wall", "walls"), t: L("water-top", "walls"), w: L("water", "walls") } },
+	// One row deep: the water behind a low stone lip, a stone rim at its west end and the dock's jetty at its east end.
+	{ id: "pond-basin", name: "stone pond", group: "around", role: "storey", material: null, fit: "row", map: ["RwwwD"],
+		legend: { R: L("pond-rim", "walls"), w: L("pond-water", "walls"), D: L("pond-dock", "walls") } },
 	{ id: "well-ring", name: "well", group: "around", role: "top", material: null, fit: "fixed", map: ["StS", "SSS"],
 		legend: { S: L("stone-wall", "walls"), t: L("water-top", "walls") } },
 	{ id: "plinth-row", name: "plinth", group: "around", role: "floor", material: null, fit: "row", overhang: 0, map: ["SSS"], legend: { S: L("stone-wall", "floor") } },

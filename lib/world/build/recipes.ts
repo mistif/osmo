@@ -38,7 +38,7 @@ export const RECIPES: readonly Recipe[] = [
 		tiers: [T("floor", "floor", ["floor-step"]), T("storey", "storey", ["storey-open-stone"]), T("roof", "roof", ["roof-tile-gable", "roof-dome"])],
 		doors: [], decor: { parts: ["decor-bell", "decor-lantern"], max: 1 }, sides: { parts: ["side-lamp-post"], max: 1 } },
 	{ id: "pond", name: "pond with a dock", kind: "pond", size: "small", site: "level", width: [5, 9], materials: ["stone"],
-		tiers: [T("basin", "storey", ["pond-basin"])], doors: [], decor: none, sides: { parts: ["side-dock", "side-bench"], max: 1 } },
+		tiers: [T("basin", "storey", ["pond-basin"])], doors: [], decor: none, sides: { parts: ["side-bench", "side-bed"], max: 1 } },
 	{ id: "watchtower", name: "watchtower", kind: "watchtower", size: "medium", site: "cliff", width: [3, 5], materials: ["wood"],
 		tiers: [T("floor", "floor", ["floor-boards"]), T("storey", "storey", ["storey-open-wood"], { count: [2, 3] }), T("beam", "beam", ["beam-balcony"]), T("loft", "beam", ["loft-posts"]), T("roof", "roof", ["roof-thatch-gable"])],
 		doors: [], decor: { parts: ["decor-lantern"], max: 1 }, sides: { parts: ["side-tree-pine"], max: 1 } },

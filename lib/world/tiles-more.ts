@@ -13,7 +13,7 @@ export const MORE_TILE_IDS = [
 	"glass-roof-l", "glass-roof-r", "balloon-tl", "balloon-tr", "balloon-bl", "balloon-br", "basket", "bell", "awning", "sail",
 	"statue", "arch", "rail", "plank-wall-2", "stone-wall-2",
 	// Appended in the fix round (the look pass's findings); the 106 above keep their cells.
-	"deck", "spire-l", "spire-r", "spire-l-hi", "spire-r-hi", "spire-peak",
+	"deck", "spire-l", "spire-r", "spire-l-hi", "spire-r-hi", "spire-peak", "pond-water", "pond-rim", "pond-dock",
 ] as const;
 export type MoreTileId = (typeof MORE_TILE_IDS)[number];
 
@@ -709,6 +709,39 @@ const spirePeak = make((x, y) => {
 	return verge(dl, x, y, true) ?? verge(dr, x, y, false) ?? shingle(x, y);
 });
 
+// --- A low pond, one row deep: the water's surface half way down the cell behind a stone lip along its front (the
+// dressed stone's colours, a block every 8 px, lit along its top); its end is a stone rim a little higher than the lip;
+// the dock is the lip and the water with a jetty's boards over them at the rim's height, on a post into the water. ---
+const LIP = 11;
+const lip = (x: number, y: number): string => {
+	if (y === LIP) return (x & 7) === 7 ? "|" : "{";
+	if (y === 15 || (x & 7) === 7) return "~";
+	if ((x & 7) === 0) return "|";
+	return y === 14 ? "}" : "|";
+};
+const pondWater = make((x, y) => {
+	if (y < 7) return ".";
+	if (y >= LIP) return lip(x, y);
+	if (y === 7) return noise(x, 7, 210) > 0.65 ? "$" : "#";
+	if (y === 8) return noise(x, 8, 211) > 0.7 ? "#" : "!";
+	return (x + y * 3) % 7 === 0 ? "#" : y === 10 && noise(x, 10, 212) < 0.4 ? "9" : "!";
+});
+const pondRim = make((x, y) => {
+	if (y < 6 || x < 1 || x > 14) return ".";
+	if (y === 6) return x === 14 ? "|" : "{";
+	if (y === 15 || x === 14) return "~";
+	if (x === 1) return "{";
+	if (y === 10) return x === 8 ? "|" : "~"; // the joint between its two courses
+	return x >= 12 ? "}" : "|";
+});
+const pondDock = make((x, y) => {
+	if (y === 4) return (x & 7) === 7 ? "j" : x % 8 === 0 ? "`" : "_";
+	if (y === 5 || y === 6) return (x & 7) === 7 ? "j" : y === 5 ? "l" : "k";
+	if (y === 7) return "j";
+	if ((x === 3 || x === 4) && y >= 8 && y < LIP) return x === 3 ? "l" : "j"; // the post into the water
+	return pondWater[y][x];
+});
+
 export const MORE_TILES: Readonly<Record<MoreTileId, Grid>> = {
 	"plank-wall": plankWall,
 	"stone-wall": stoneWall,
@@ -751,4 +784,7 @@ export const MORE_TILES: Readonly<Record<MoreTileId, Grid>> = {
 	"spire-l-hi": spireL(true),
 	"spire-r-hi": spireR(true),
 	"spire-peak": spirePeak,
+	"pond-water": pondWater,
+	"pond-rim": pondRim,
+	"pond-dock": pondDock,
 };

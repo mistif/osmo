@@ -28,7 +28,7 @@ const FREE_WILL = [
 	"statue", "arch", "rail", "plank-wall-2", "stone-wall-2",
 ];
 // Appended in the free-will fix round, after the 106.
-const FIX_ROUND = ["deck", "spire-l", "spire-r", "spire-l-hi", "spire-r-hi", "spire-peak"];
+const FIX_ROUND = ["deck", "spire-l", "spire-r", "spire-l-hi", "spire-r-hi", "spire-peak", "pond-water", "pond-rim", "pond-dock"];
 // Tiles with no transparent pixel.
 const FILLED: TileId[] = [
 	"snow", "stone", "stone-dark", "brick", "brick-dark", "plank", "beam-h", "glass", "window", "window-top",
