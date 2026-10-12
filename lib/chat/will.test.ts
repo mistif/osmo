@@ -176,6 +176,13 @@ describe("the call (spec 5.2)", () => {
 			`{"pick":2,"line":"I wanted ${"a very ".repeat(20)}garden."}`,
 			'{"pick":2,"line":"CRISIS"}',
 			'{"pick":2,"line":"I will remember this garden."}',
+			'{"pick":2,"line":"I\u2019m building a garden by the cliff."}',
+			'{"pick":2,"line":"I couldn\'t leave this cliff empty."}',
+			'{"pick":2,"line":"Here\'s a well for the east island."}',
+			'{"pick":2,"line":"We\'re due a tower here."}',
+			'{"pick":2,"line":"It\u2019s time for a tower \u2014 a tall one."}',
+			'{"pick":2,"line":"I wanted a tower \u2014 a tall one."}',
+			'{"pick":2,"line":"I wanted a tower & a well."}',
 		]) {
 			const out = await answerWith(text);
 			expect(out, text).toMatchObject({ source: "model", pick: 2, line: null });
@@ -195,6 +202,9 @@ describe("the call (spec 5.2)", () => {
 	it("checks a line by itself, and reads the model's JSON strictly", () => {
 		expect(lineOk("  I wanted still water   to look at. ")).toBe("I wanted still water to look at.");
 		expect(lineOk("")).toBeNull();
+		expect(lineOk("I wanted a light at the island's edge.")).toBe("I wanted a light at the island's edge."); // a possessive is no contraction
+		expect(lineOk("I do not know; I wanted a well, by the cliff.")).toBe("I do not know; I wanted a well, by the cliff.");
+		for (const t of ["I shouldn't.", "They've gone.", "He'd like it.", "What's this?", "There\u2019s room.", "I wanted caf\u00e9 tables.", "A well #2."]) expect(lineOk(t), t).toBeNull();
 		expect(readWill('{"pick":0,"line":"I wanted a well."}')).toEqual({ pick: 0, line: "I wanted a well." });
 		for (const t of ['{"pick":"0","line":"x"}', '{"pick":1.5,"line":"x"}', '{"pick":1}', "[]"]) expect(readWill(t), t).toBeNull();
 	});

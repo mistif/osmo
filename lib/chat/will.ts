@@ -52,13 +52,18 @@ export function readWill(raw: string): { pick: 0 | 1 | 2; line: string } | null 
 	return { pick: v.pick, line: v.line };
 }
 
-const CONTRACTION = /\b(?:I'm|I've|I'll|I'd|don't|can't|won't|isn't|aren't|wasn't|didn't|doesn't|it's|that's|there's|let's)\b/i;
-// The line as he says it, or null when it breaks his register: empty, over 140 characters, an exclamation mark, a
-// contraction, Gur named, "remember", or anything speakable would change (markdown, emoji, symbols, more than it says).
+// His register in characters: letters, digits, spaces and plain punctuation only, so a typographic apostrophe or quote,
+// a dash, an emoji or any symbol a voice would read out never reaches the bubble.
+const PLAIN = /^[A-Za-z0-9 .,;:?'"()-]+$/;
+// Every contraction: n't, 're, 've, 'll, 'd and 'm after any word, and 's after the words it shortens "is" or "us" for
+// (a possessive, "the island's edge", is no contraction).
+const CONTRACTION = /\b[a-z]+n't\b|'(?:re|ve|ll|d|m)\b|\b(?:it|that|there|here|what|who|where|when|why|how|he|she|let|this|everything|nothing|something|someone|everyone|nobody)'s\b/i;
+// The line as he says it, or null when it breaks his register: empty, over 140 characters, a character outside PLAIN
+// (an exclamation mark among them), a contraction, Gur named, "remember", or anything speakable would change.
 export function lineOk(raw: string): string | null {
 	const line = raw.replace(/\s+/g, " ").trim();
-	if (line === "" || line.length > WILL_LIMITS.line) return null;
-	if (line.includes("!") || CONTRACTION.test(line) || /\bGur\b/i.test(line) || /remember/i.test(line)) return null;
+	if (line === "" || line.length > WILL_LIMITS.line || !PLAIN.test(line)) return null;
+	if (CONTRACTION.test(line) || /\bGur\b/i.test(line) || /remember/i.test(line)) return null;
 	return speakable(line) === line ? line : null;
 }
 
