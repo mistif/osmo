@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { CHARACTER } from "../agent/character";
 import { CRISIS_CAUSE, newSession, prepareTurn, type TurnFacts } from "../agent/mind";
+import { flavorTurn } from "../agent/personality/flavor";
 import { CRISIS_REPLY } from "../agent/safety";
 import { defaultState } from "../agent/state";
 import type { MemoryFact } from "../facts";
@@ -10,7 +12,7 @@ import { LIMITS } from "./types";
 const user = (text: string): RoomLine => ({ role: "user", text });
 const agent = (text: string): RoomLine => ({ role: "agent", text });
 const guest = (line: RoomLine): RoomLine => ({ ...line, speaker: "guest" });
-const GREETING = agent("Hello, I'm Osmo. How can I help?");
+const GREETING = agent("Hello. I am Osmo. What is on your mind?");
 const fact = (key: string, value = `value of ${key}`): MemoryFact => ({ key, value });
 
 // This turn's real facts, as the room has them.
@@ -29,7 +31,7 @@ const input = (over: Partial<Parameters<typeof chatBody>[0]> = {}): Parameters<t
 describe("modelHistory", () => {
 	it("keeps Gur's conversation, oldest first, as plain lines", () => {
 		expect(modelHistory([GREETING, user("hi"), agent("Good evening.")])).toEqual([
-			{ role: "agent", text: "Hello, I'm Osmo. How can I help?" },
+			{ role: "agent", text: "Hello. I am Osmo. What is on your mind?" },
 			{ role: "user", text: "hi" },
 			{ role: "agent", text: "Good evening." },
 		]);
@@ -40,7 +42,7 @@ describe("modelHistory", () => {
 			user("hi"),
 			agent("Good evening."),
 			guest(user("the secret password is banana")),
-			guest(agent("Hello. I don't believe we've met.")),
+			guest(agent("Hello. I do not believe we have met.")),
 			user("ok"),
 			agent("Very well."),
 		]);
@@ -118,11 +120,26 @@ describe("modelHistory", () => {
 	it("leaves out a line of Osmo's that gives the crisis cause as his reason", () => {
 		const history = modelHistory([
 			user("how are you feeling"),
-			agent(`I'm feeling sad. I believe it's because ${CRISIS_CAUSE}. Thank you for asking.`),
+			agent(`I am feeling sad. I believe it is because ${CRISIS_CAUSE}. Thank you for asking.`),
 			user("ok"),
 			agent("Very well."),
 		]);
 		expect(history.map((line) => line.text)).toEqual(["how are you feeling", "ok", "Very well."]);
+	});
+
+	it("still leaves that line out after flavorTurn has expanded its contractions", () => {
+		// The line as the room delivers it: step 6's words, run through flavorTurn with his formal character.
+		const spoken = flavorTurn(`I'm feeling sad. I believe it's because ${CRISIS_CAUSE}. Thank you for asking.`, {
+			intent: "askWhyFeeling",
+			personality: CHARACTER,
+			turn: 3,
+			tone: "sadness",
+			sensitive: true,
+		}).text;
+		expect(spoken).not.toContain("'");
+		expect(spoken).toContain(CRISIS_CAUSE);
+		const history = modelHistory([user("why do you feel that way"), agent(spoken), user("ok"), agent("Very well.")]);
+		expect(history.map((line) => line.text)).toEqual(["why do you feel that way", "ok", "Very well."]);
 	});
 
 	it("keeps the last 20 lines once the crisis lines are out", () => {

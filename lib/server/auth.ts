@@ -1,5 +1,5 @@
 // Who is calling a route. The browser sends its Supabase access token, so a route acts as that
-// user and row-level security still applies. There is no service-role key anywhere.
+// user and row-level security still applies. The only service-role use is lib/server/admin.ts; this file uses the caller's own token.
 
 import { createClient } from "@supabase/supabase-js";
 

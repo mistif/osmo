@@ -1,6 +1,6 @@
 {
   "name": "my-app",
-  "version": "0.1.0",
+  "version": "0.2.9",
   "private": true,
   "scripts": {
     "dev": "node scripts/copy-ort.mjs && next dev",
@@ -8,22 +8,27 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "voice:check": "vitest run --config vitest.voice.config.mts"
+    "voice:check": "vitest run --config vitest.voice.config.mts",
+    "artifact:runtime": "node scripts/build-artifact-runtime.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.1",
     "lucide-react": "^1.48.0",
-    "next": "16.3.6",
+    "next": "16.4.0",
     "onnxruntime-web": "1.30.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "sucrase": "^3.35.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.20.4",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
-    "eslint-config-next": "16.3.6",
+    "eslint-config-next": "16.4.0",
     "typescript": "^5",
     "vitest": "^5.0.1"
   }

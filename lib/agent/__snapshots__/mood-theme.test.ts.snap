@@ -2,156 +2,156 @@
 
 exports[`moodTheme > is unchanged without a slow mood: anger 1`] = `
 {
-  "arousal": 0.2742857142857143,
+  "arousal": 0.2692073170731706,
   "base": "hsl(5 30% 11%)",
-  "colorA": "hsl(5 80% 54%)",
-  "colorB": "hsl(45 80% 54%)",
-  "pulseSeconds": 2.9417142857142857,
+  "colorA": "hsl(5 80% 55%)",
+  "colorB": "hsl(45 80% 55%)",
+  "pulseSeconds": 2.953902439024391,
   "strength": 1,
   "tone": "anger",
-  "valence": 0.012857142857142899,
+  "valence": 0.09695121951219512,
 }
 `;
 
 exports[`moodTheme > is unchanged without a slow mood: boredom 1`] = `
 {
-  "arousal": -0.004285714285714353,
-  "base": "hsl(60 30% 11%)",
-  "colorA": "hsl(60 8% 48%)",
-  "colorB": "hsl(100 8% 48%)",
-  "pulseSeconds": 3.6102857142857143,
+  "arousal": -0.0625386996904025,
+  "base": "hsl(60 30% 12%)",
+  "colorA": "hsl(60 8% 49%)",
+  "colorB": "hsl(100 8% 49%)",
+  "pulseSeconds": 3.750092879256966,
   "strength": 1,
   "tone": "boredom",
-  "valence": 0.0685714285714286,
+  "valence": 0.17275541795665633,
 }
 `;
 
 exports[`moodTheme > is unchanged without a slow mood: disgust 1`] = `
 {
-  "arousal": 0.2,
+  "arousal": 0.17661538461538462,
   "base": "hsl(92 30% 11%)",
-  "colorA": "hsl(92 40% 44%)",
-  "colorB": "hsl(132 40% 44%)",
-  "pulseSeconds": 3.12,
+  "colorA": "hsl(92 40% 45%)",
+  "colorB": "hsl(132 40% 45%)",
+  "pulseSeconds": 3.176123076923077,
   "strength": 1,
   "tone": "disgust",
-  "valence": 0.012857142857142883,
+  "valence": 0.1033846153846154,
 }
 `;
 
 exports[`moodTheme > is unchanged without a slow mood: fear 1`] = `
 {
-  "arousal": 0.27428571428571424,
+  "arousal": 0.2652307692307691,
   "base": "hsl(268 30% 11%)",
   "colorA": "hsl(268 60% 60%)",
   "colorB": "hsl(308 60% 60%)",
-  "pulseSeconds": 2.9417142857142857,
+  "pulseSeconds": 2.9634461538461543,
   "strength": 1,
   "tone": "fear",
-  "valence": -0.0057142857142856674,
+  "valence": 0.08123076923076925,
 }
 `;
 
 exports[`moodTheme > is unchanged without a slow mood: guilt 1`] = `
 {
-  "arousal": 0.1628571428571428,
+  "arousal": 0.1323076923076923,
   "base": "hsl(300 30% 11%)",
-  "colorA": "hsl(300 25% 50%)",
-  "colorB": "hsl(340 25% 50%)",
-  "pulseSeconds": 3.2091428571428575,
+  "colorA": "hsl(300 25% 51%)",
+  "colorB": "hsl(340 25% 51%)",
+  "pulseSeconds": 3.2824615384615385,
   "strength": 1,
   "tone": "guilt",
-  "valence": 0.012857142857142873,
+  "valence": 0.1033846153846154,
 }
 `;
 
 exports[`moodTheme > is unchanged without a slow mood: hope 1`] = `
 {
-  "arousal": 0.190625,
+  "arousal": 0.16076388888888885,
   "base": "hsl(22 30% 12%)",
-  "colorA": "hsl(22 85% 65%)",
-  "colorB": "hsl(62 85% 65%)",
-  "pulseSeconds": 3.1425,
+  "colorA": "hsl(22 85% 66%)",
+  "colorB": "hsl(62 85% 66%)",
+  "pulseSeconds": 3.214166666666667,
   "strength": 0.77,
   "tone": "hope",
-  "valence": 0.19062500000000004,
+  "valence": 0.3274305555555555,
 }
 `;
 
 exports[`moodTheme > is unchanged without a slow mood: joy 1`] = `
 {
-  "arousal": 0.20322580645161292,
+  "arousal": 0.17950530035335682,
   "base": "hsl(42 30% 12%)",
-  "colorA": "hsl(42 95% 59%)",
-  "colorB": "hsl(82 95% 59%)",
-  "pulseSeconds": 3.1122580645161295,
-  "strength": 0.6499999999999999,
+  "colorA": "hsl(42 95% 60%)",
+  "colorB": "hsl(82 95% 60%)",
+  "pulseSeconds": 3.1691872791519438,
+  "strength": 0.71,
   "tone": "joy",
-  "valence": 0.20483870967741946,
+  "valence": 0.3561837455830387,
 }
 `;
 
 exports[`moodTheme > is unchanged without a slow mood: loneliness 1`] = `
 {
-  "arousal": 0.08857142857142856,
+  "arousal": 0.04797507788161992,
   "base": "hsl(235 30% 11%)",
-  "colorA": "hsl(235 40% 45%)",
-  "colorB": "hsl(275 40% 45%)",
-  "pulseSeconds": 3.3874285714285715,
+  "colorA": "hsl(235 40% 46%)",
+  "colorB": "hsl(275 40% 46%)",
+  "pulseSeconds": 3.484859813084112,
   "strength": 1,
   "tone": "loneliness",
-  "valence": 0.012857142857142883,
+  "valence": 0.11214953271028036,
 }
 `;
 
 exports[`moodTheme > is unchanged without a slow mood: love 1`] = `
 {
-  "arousal": 0.1814285714285714,
-  "base": "hsl(335 30% 12%)",
+  "arousal": 0.15271565495207667,
+  "base": "hsl(335 30% 13%)",
   "colorA": "hsl(335 70% 64%)",
   "colorB": "hsl(15 70% 64%)",
-  "pulseSeconds": 3.1645714285714286,
+  "pulseSeconds": 3.233482428115016,
   "strength": 1,
   "tone": "love",
-  "valence": 0.27285714285714285,
+  "valence": 0.3987220447284345,
 }
 `;
 
 exports[`moodTheme > is unchanged without a slow mood: sadness 1`] = `
 {
-  "arousal": 0.06999999999999999,
+  "arousal": 0.024148606811145484,
   "base": "hsl(220 30% 11%)",
-  "colorA": "hsl(220 45% 46%)",
-  "colorB": "hsl(260 45% 46%)",
-  "pulseSeconds": 3.432,
+  "colorA": "hsl(220 45% 47%)",
+  "colorB": "hsl(260 45% 47%)",
+  "pulseSeconds": 3.5420433436532512,
   "strength": 1,
   "tone": "sadness",
-  "valence": -0.005714285714285685,
+  "valence": 0.08606811145510838,
 }
 `;
 
 exports[`moodTheme > is unchanged without a slow mood: surprise 1`] = `
 {
-  "arousal": 0.2928571428571428,
+  "arousal": 0.2809968847352025,
   "base": "hsl(55 30% 12%)",
-  "colorA": "hsl(55 95% 59%)",
-  "colorB": "hsl(95 95% 59%)",
-  "pulseSeconds": 2.8971428571428577,
+  "colorA": "hsl(55 95% 60%)",
+  "colorB": "hsl(95 95% 60%)",
+  "pulseSeconds": 2.925607476635514,
   "strength": 1,
   "tone": "surprise",
-  "valence": 0.14285714285714285,
+  "valence": 0.26043613707165103,
 }
 `;
 
 exports[`moodTheme > is unchanged without a slow mood: trust 1`] = `
 {
-  "arousal": 0.14126984126984127,
+  "arousal": 0.12238805970149251,
   "base": "hsl(175 30% 12%)",
-  "colorA": "hsl(175 45% 49%)",
-  "colorB": "hsl(215 45% 49%)",
-  "pulseSeconds": 3.2609523809523813,
-  "strength": 0.71,
+  "colorA": "hsl(175 45% 50%)",
+  "colorB": "hsl(215 45% 50%)",
+  "pulseSeconds": 3.306268656716418,
+  "strength": 0.53,
   "tone": "trust",
-  "valence": 0.18571428571428575,
+  "valence": 0.31455223880597016,
 }
 `;

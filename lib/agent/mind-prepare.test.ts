@@ -179,6 +179,27 @@ describe("prepareTurn: the facts a prompt may use", () => {
 		expect(prepareTurn(withBond(), session, "the weather is fine", ctx()).facts.heavy).toBe(false);
 	});
 
+	it("his own lingering anger alone does not make an open turn heavy", () => {
+		const s = withBond();
+		const sulking = { ...s, activations: { ...s.activations, anger: 0.45 } };
+		expect(prepareTurn(sulking, session, "tell me a joke", ctx()).facts.heavy).toBe(false);
+	});
+
+	it("never hands loneliness to the model, though the aura keeps it", () => {
+		const s = withBond();
+		const lonely = { ...s, activations: { ...s.activations, loneliness: 0.6 } };
+		const r = prepareTurn(lonely, session, "morning", ctx({ lastAt: 1_000_000 - 7 * 3_600_000 }));
+		expect(r.state.activations.loneliness).toBeGreaterThan(CHARACTER.baseline.loneliness + 0.1);
+		expect(r.facts.feeling).not.toMatch(/lonel|longing/);
+	});
+
+	it("drops a cause from before a long silence", () => {
+		const r = prepareTurn(withBond(), session, "morning", ctx({ lastAt: 1_000_000 - 7 * 3_600_000 }));
+		expect(r.session.cause).toBeNull();
+		expect(r.facts.cause).toBeNull();
+		expect(prepareTurn(withBond(), session, "morning", ctx({ lastAt: 1_000_000 - 60_000 })).facts.cause).toBe("of what you shared with me");
+	});
+
 	it("never hands a crisis cause to the model, on that turn or the next", () => {
 		const crisis = prepareTurn(withBond(), session, "i want to kill myself", ctx());
 		expect(crisis.session.cause).toBe(CRISIS_CAUSE);

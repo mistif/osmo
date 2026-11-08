@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { averagePrint, bestScore, cosine, judge, MATCH_THRESHOLD, MODEL_ID, outliers } from "./voiceprint";
+import { averagePrint, bestScore, cosine, judge, judgement, LEAN_THRESHOLD, MATCH_THRESHOLD, MODEL_ID, outliers } from "./voiceprint";
 
 describe("cosine", () => {
 	it("scores direction, not length", () => {
@@ -57,10 +57,35 @@ describe("bestScore", () => {
 });
 
 describe("judge", () => {
-	it("is Gur at or above the threshold, and someone else below it", () => {
+	it("is Gur at or above the confident line", () => {
 		expect(judge({ score: MATCH_THRESHOLD, speechSeconds: 3, ownerSoFar: false })).toBe("you");
-		expect(judge({ score: MATCH_THRESHOLD - 0.01, speechSeconds: 3, ownerSoFar: false })).toBe("guest");
-		expect(judge({ score: -1, speechSeconds: 3, ownerSoFar: false })).toBe("guest");
+		expect(judge({ score: 0.9, speechSeconds: 3, ownerSoFar: false })).toBe("you");
+	});
+
+	it("leans toward Gur between the lean line and the confident line while only his voice is on the device", () => {
+		expect(LEAN_THRESHOLD).toBeLessThan(MATCH_THRESHOLD);
+		expect(judge({ score: LEAN_THRESHOLD, speechSeconds: 3, ownerSoFar: false })).toBe("you");
+		expect(judge({ score: MATCH_THRESHOLD - 0.01, speechSeconds: 3, ownerSoFar: false })).toBe("you");
+	});
+
+	it("is someone else below the lean line", () => {
+		expect(judge({ score: LEAN_THRESHOLD - 0.01, speechSeconds: 3, ownerSoFar: false })).toBe("guest");
+		expect(judge({ score: 0.0, speechSeconds: 3, ownerSoFar: false })).toBe("guest");
+	});
+
+	it("counts no reading (-1) as Gur: the worst failure is the owner being answered as a stranger", () => {
+		expect(judge({ score: -1, speechSeconds: 3, ownerSoFar: false })).toBe("you");
+	});
+
+	it("falls back to the confident line once a second voice has been enrolled", () => {
+		expect(judge({ score: 0.4, speechSeconds: 3, ownerSoFar: false, secondVoice: true })).toBe("guest");
+		expect(judge({ score: MATCH_THRESHOLD, speechSeconds: 3, ownerSoFar: false, secondVoice: true })).toBe("you");
+		expect(judge({ score: -1, speechSeconds: 3, ownerSoFar: false, secondVoice: true })).toBe("guest");
+	});
+
+	it("never leans, and never trusts a missing reading, when the device holds none of Gur's voiceprints", () => {
+		expect(judge({ score: 0.4, speechSeconds: 3, ownerSoFar: false, ownerPrints: false })).toBe("guest");
+		expect(judge({ score: -1, speechSeconds: 3, ownerSoFar: false, ownerPrints: false })).toBe("guest");
 	});
 
 	it("keeps a short follow-up Gur's once he has been recognized", () => {
@@ -73,5 +98,19 @@ describe("judge", () => {
 
 	it("never carries over before Gur has been recognized", () => {
 		expect(judge({ score: 0.1, speechSeconds: 1, ownerSoFar: false })).toBe("guest");
+	});
+});
+
+describe("judgement", () => {
+	it("names why, and which line applied", () => {
+		expect(judgement({ score: 0.8, speechSeconds: 3, ownerSoFar: false })).toEqual({ speaker: "you", verdict: "match", threshold: MATCH_THRESHOLD });
+		expect(judgement({ score: 0.4, speechSeconds: 3, ownerSoFar: false })).toEqual({ speaker: "you", verdict: "lean", threshold: LEAN_THRESHOLD });
+		expect(judgement({ score: -1, speechSeconds: 3, ownerSoFar: false })).toEqual({ speaker: "you", verdict: "no-reading", threshold: LEAN_THRESHOLD });
+		expect(judgement({ score: 0.1, speechSeconds: 1, ownerSoFar: true })).toEqual({ speaker: "you", verdict: "carry-over", threshold: LEAN_THRESHOLD });
+		expect(judgement({ score: 0.1, speechSeconds: 3, ownerSoFar: false })).toEqual({ speaker: "guest", verdict: "guest", threshold: LEAN_THRESHOLD });
+	});
+
+	it("reports the confident line as the one applied when a second voice is enrolled", () => {
+		expect(judgement({ score: 0.4, speechSeconds: 3, ownerSoFar: false, secondVoice: true })).toEqual({ speaker: "guest", verdict: "guest", threshold: MATCH_THRESHOLD });
 	});
 });

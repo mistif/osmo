@@ -2,10 +2,12 @@
 
 import { Bricolage_Grotesque } from "next/font/google";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { type CSSProperties, FormEvent, useEffect, useRef, useState } from "react";
 import { Mic, Square } from "lucide-react";
 import styles from "./assistant.module.css";
 import { ensureSession, supabase } from "@/lib/supabase";
+import { ensureTimezone } from "@/lib/shell/profile-client";
 import { loadState, persistTurn } from "@/lib/agent/agent-state";
 import { moodTheme } from "@/lib/agent/mood-theme";
 import { CHARACTER } from "@/lib/agent/character";
@@ -34,9 +36,10 @@ import { CRISIS_REPLY, isCrisis } from "@/lib/agent/safety";
 import { defaultState, type AgentState } from "@/lib/agent/state";
 import { learnFact, learnSlang, type MemoryFact } from "@/lib/facts";
 import { answerFromMemory, calculateMath, findUnknownTopic, isBuiltInTopic } from "@/lib/chat/answers";
-import { ASK_TIMEOUT_MS, askForReply, askStatus, nextUsage } from "@/lib/chat/ask";
+import { askForReply, askStatus, nextUsage } from "@/lib/chat/ask";
 import { chatBody } from "@/lib/chat/body";
-import { detectionOf, keptTurn, pickBranch, quietEffects, whileWaiting, writerFor, type QuietPlan } from "@/lib/chat/branch";
+import { sendDecision, UNREACHED } from "@/lib/chat/decision";
+import { decisionEnd, decisionFor, detectionOf, keptTurn, pickBranch, quietEffects, waitingAfter, whileWaiting, writerFor, type QuietPlan, type Waiting as Confirming } from "@/lib/chat/branch";
 import type { ChatStatus } from "@/lib/chat/types";
 import { newId } from "@/lib/uuid";
 import { Panel, PanelLinks, usePanels } from "@/components/osmo/panel";
@@ -47,6 +50,15 @@ import { SPEECH_CHAR_MS } from "@/lib/voice/voices";
 import { useVoice } from "@/components/osmo/use-voice";
 import { useHeartMotion } from "@/components/osmo/use-heart-motion";
 import { Figure } from "@/components/osmo/figure";
+import { useBuild } from "@/components/osmo/use-build";
+import { ThingPanel } from "@/components/osmo/thing-panel";
+import { SHELL2, WORLD } from "@/lib/shell/flag";
+import { chatShape, clearEcho, ECHO_MS, echoStep, noEcho } from "@/lib/room/chatbox";
+import { useShell } from "@/components/osmo/use-shell";
+import { Rail } from "@/components/osmo/rail";
+import { ShellPanels } from "@/components/osmo/shell-panels";
+import type { WorldControl } from "@/components/osmo/world";
+import type { BuildTicket } from "@/lib/actions/types";
 
 type ChatMessage = {
 	role: "user" | "agent";
@@ -59,10 +71,21 @@ type ChatMessage = {
 type Waiting = { id: number; on: "model" | "lookup"; controller: AbortController | null; quiet: boolean; line: ChatMessage };
 
 const font = Bricolage_Grotesque({ subsets: ["latin"], display: "swap" });
+// The village loads after first paint, and only behind both switches (lib/shell/flag.ts).
+const WorldStage = dynamic(
+	() => import("@/components/osmo/world").then((m) => m.WorldStage).catch(() => {
+		console.warn("The village could not load; the room carries on without it.");
+		return () => null;
+	}),
+	{ ssr: false },
+);
+
+// How long a turn waits for the session before his own words answer; the model call keeps its own 15 s.
+const SESSION_TIMEOUT_MS = 3_000;
 
 export default function AgentChat() {
 	const [messages, setMessages] = useState<ChatMessage[]>([
-		{ role: "agent", text: "Hello, I'm Osmo. How can I help?" },
+		{ role: "agent", text: "Hello. I am Osmo. What is on your mind?" },
 	]);
 	const router = useRouter();
 	const panels = usePanels();
@@ -77,6 +100,10 @@ export default function AgentChat() {
 	const [aiUsage, setAiUsage] = useState<ChatStatus | null>(null);
 	const aiEnabledRef = useRef(false);
 	const aiStoppedRef = useRef(false);
+	// Whether the last answer left an action waiting for Gur's yes or no (spec 4.3), and which row: null when none waits.
+	// Only then does a bare yes or no go to /api/act instead of the conversation, with that row's id, so a row held from
+	// another tab is never answered by it. Its rules are waitingAfter's and decisionEnd's (lib/chat/branch.ts).
+	const confirmWaitingRef = useRef<Confirming>(null);
 	const waitingRef = useRef<Waiting | null>(null);
 	// Read in handlers only, never while rendering.
 	const aiOn = () => aiEnabledRef.current && !aiStoppedRef.current;
@@ -102,6 +129,17 @@ export default function AgentChat() {
 	const reduceMotionRef = useRef(false);
 	const [speaking, setSpeaking] = useState<{ index: number; chars: number } | null>(null);
 	const heart = useHeartMotion(stageRef);
+	const shell = useShell(SHELL2, stageRef, ready);
+	// The village's control: the composer's focus and typing turn him to Gur (components/osmo/world.tsx).
+	const worldRef = useRef<WorldControl | null>(null);
+	const openPanel = SHELL2 ? shell.route.panel : panels.panel;
+	// The thing he builds beside the conversation. buildRef is how sendText hands over a ticket (language, task B8);
+	// until a ticket arrives nothing renders. Locking unmounts the room, and the hook cancels a running build then.
+	const build = useBuild();
+	const buildRef = useRef<{ start(t: BuildTicket): void; cancel(): void } | null>(null);
+	useEffect(() => {
+		buildRef.current = build;
+	});
 	// How the typed-out reply keeps time: its own timer, his spoken words, or speaking pace when the device gives no word timing.
 	const paceRef = useRef<"timer" | "words" | "stretched">("timer");
 	// Which reply his voice is saying. Only that one follows his words; any other reply keeps the timer.
@@ -180,6 +218,14 @@ export default function AgentChat() {
 		})();
 	}, [router]);
 
+	// Once per load, silently: remember this device's time zone for reminders if the profile has none (spec 6.2).
+	useEffect(() => {
+		void (async () => {
+			const signedIn = await ensureSession().catch(() => null);
+			if (signedIn) await ensureTimezone(supabase, signedIn.user.id, Intl.DateTimeFormat().resolvedOptions().timeZone);
+		})();
+	}, []);
+
 	// Locking in another tab, or a session ending, sends this tab to the lock screen too.
 	useEffect(() => {
 		const { data } = supabase.auth.onAuthStateChange((event) => {
@@ -249,7 +295,7 @@ export default function AgentChat() {
 			},
 		},
 		sendTextRef,
-		openSettings: () => panels.open("settings"),
+		openSettings: () => (SHELL2 ? shell.open("settings", "voice") : panels.open("settings")),
 	});
 	useEffect(() => {
 		onReplyRef.current = voice.onReply;
@@ -260,11 +306,23 @@ export default function AgentChat() {
 		sendText(input, { via: "typed", speaker: "you" });
 	}
 
+	// A crisis cancels every waiting confirmation, so a yes afterwards finds nothing (spec 4.3, 9.1). It's posted whatever
+	// the flag says: a confirmation may still wait from before a reload, from another tab, or after a later answer
+	// cleared the flag. A crisis is rare, and the server's cancel is cheap.
+	function cancelConfirmation() {
+		// A crisis also stops a build in progress (artifacts spec 9).
+		buildRef.current?.cancel();
+		confirmWaitingRef.current = null;
+		void ensureSession().catch(() => null).then((s) => s && sendDecision(fetch, s.access_token, "crisis", "typed"));
+	}
+
 	// A crisis message that arrives while Osmo waits on another turn is answered at once, never dropped. The
 	// waiting turn owns this step of his heart, so it isn't stepped here; that turn finishes quietly instead.
 	function takeCrisis(text: string, options: SendOptions): boolean {
+		buildRef.current?.cancel();
 		setPendingLearning(null);
 		aiStoppedRef.current = true;
+		cancelConfirmation();
 		const wait = waitingRef.current;
 		// A model turn cut short gets no reply, so its line is saved here, ahead of the crisis pair as on screen.
 		// Only the crisis message that first quiets it saves it.
@@ -313,8 +371,12 @@ export default function AgentChat() {
 		const now = Date.now();
 		// A crisis message is never treated as an answer to "what does X mean?" or "what's your name?".
 		const crisis = isCrisis(text);
-		// After a crisis message the model is asked nothing more until the room is reloaded.
-		if (crisis) aiStoppedRef.current = true;
+		// After a crisis message the model is asked nothing more until the room is reloaded, and the waiting
+		// confirmation is cancelled (spec 9.1).
+		if (crisis) {
+			aiStoppedRef.current = true;
+			cancelConfirmation();
+		}
 		// A new question is answered, not saved as the explanation Osmo asked for. A guest's words never
 		// answer Gur's pending question, and leave it waiting for him.
 		const learning = guest || crisis || !answersPendingLearning(text) ? null : pendingLearning;
@@ -425,28 +487,28 @@ export default function AgentChat() {
 				]);
 				setPendingLearning(null);
 				void saveFact(learnedTopic);
-				return `Understood. "${learning}" means ${explanation}. I'll remember that.`;
+				return `Understood. "${learning}" means ${explanation}.`;
 			}
 			if (branch === "correctedName" && correctedName) {
 				rememberName(correctedName);
-				return `My apologies, ${correctedName}. I've corrected that.`;
+				return `My apologies, ${correctedName}. I have corrected that.`;
 			}
 			if (branch === "answeredName" && answeredName) {
 				rememberName(answeredName);
-				return `Nice to meet you, ${answeredName}! I'll remember that.`;
+				return `Good to meet you, ${answeredName}.`;
 			}
 			if (branch === "foundName" && foundName) {
 				rememberName(foundName);
-				return `You're ${foundName}. My apologies, I should have caught that.`;
+				return `You are ${foundName}. My apologies, I should have caught that.`;
 			}
-			if (branch === "lookedBack") return "I looked back but couldn't find it. What's your name?";
+			if (branch === "lookedBack") return "I looked back but could not find it. What is your name?";
 			// Nothing a guest says is kept, so Osmo says so rather than pretending to note it.
 			if (branch === "guestNotes") return GUEST_NO_NOTES;
 			if (branch === "slang" && taughtSlang) {
 				const slangFact = { key: `slang:${taughtSlang.word}`, value: taughtSlang.meaning };
 				setMemory((current) => [...current.filter((fact) => fact.key !== slangFact.key), slangFact]);
 				void saveFact(slangFact);
-				return `Understood. When you say "${taughtSlang.word}", I'll read it as "${taughtSlang.meaning}".`;
+				return `Understood. When you say "${taughtSlang.word}", I will read it as "${taughtSlang.meaning}".`;
 			}
 			if (branch === "fact" && learnedFact) {
 				setMemory((current) => [
@@ -454,7 +516,7 @@ export default function AgentChat() {
 					learnedFact,
 				]);
 				void saveFact(learnedFact);
-				return `Noted. Your ${learnedFact.key} is ${learnedFact.value}.`;
+				return `Understood. Your ${learnedFact.key} is ${learnedFact.value}.`;
 			}
 			// A topic he doesn't know: he asks Gur to explain it, and saves the answer next turn.
 			if (pendingTopic) setPendingLearning(pendingTopic);
@@ -486,8 +548,9 @@ export default function AgentChat() {
 		// The user's message sits at messages.length, so the reply is at messages.length + 1: the composer
 		// is locked while Osmo waits, and a crisis message taken meanwhile makes this reply a quiet one.
 		// A quiet reply is only shown and saved: it doesn't move the heart, start the typing or reach the
-		// voice, where a typed reply would cut off the crisis reply being spoken.
-		const deliver = (reply: string, how: { quiet: boolean } = { quiet: false }) => {
+		// voice, where a typed reply would cut off the crisis reply being spoken. lineSaved: takeCrisis already saved
+		// his line, ahead of the crisis pair, so only the reply is saved here.
+		const deliver = (reply: string, how: { quiet: boolean; lineSaved?: boolean } = { quiet: false }) => {
 			replied = true;
 			const agentMessage: ChatMessage = { role: "agent", text: greetGuest(reply, guest && (options.greet ?? false), crisis), ...mark };
 			if (!how.quiet) {
@@ -496,7 +559,7 @@ export default function AgentChat() {
 				setSpeaking(reduceMotionRef.current ? null : { index: messages.length + 1, chars: 0 });
 			}
 			setMessages((current) => [...current, agentMessage]);
-			void saveMessages([userMessage, agentMessage]);
+			void saveMessages(how.lineSaved ? [agentMessage] : [userMessage, agentMessage]);
 			// Handed over once sendText has returned, so the voice always knows its message was taken
 			// before the reply arrives, even when the reply is ready at once.
 			if (!how.quiet) queueMicrotask(() => onReplyRef.current?.(agentMessage.text, via));
@@ -533,7 +596,7 @@ export default function AgentChat() {
 					await work(wait);
 				} catch {
 					// Anything unexpected still ends in one reply, so a spoken turn never leaves the voice waiting.
-					if (!replied && !wait.quiet) deliver(ruleReply ?? "I'm not sure I follow. Could you rephrase that?");
+					if (!replied && !wait.quiet) deliver(ruleReply ?? "I am not sure I follow. Could you rephrase that?");
 				} finally {
 					if (waitingRef.current === wait) waitingRef.current = null;
 					setThinking(false);
@@ -541,16 +604,48 @@ export default function AgentChat() {
 			})();
 		};
 
+		// A bare yes or no, while an action waits for it, answers that action and nothing else (spec 4.3, 9.1): code
+		// matches the words, the server completes or cancels it, and its line is the reply. Never a guest's, never
+		// in a crisis. His heart doesn't step for it.
+		const decision = decisionFor({ guest, crisis, waiting: confirmWaitingRef.current !== null, text });
+		if (decision) {
+			// The row his yes or no is for, read now: only a crisis changes the flag before it is posted, and then nothing is.
+			const pendingId = confirmWaitingRef.current?.pendingId ?? null;
+			if (via === "typed") setInput("");
+			setMessages((current) => [...current, userMessage]);
+			startWait("model", null, async (wait) => {
+				// The same limit on reading the session as a model turn, so the composer never stays locked on it.
+				const signedIn = await Promise.race([
+					ensureSession().catch(() => null),
+					new Promise<null>((resolve) => setTimeout(() => resolve(null), SESSION_TIMEOUT_MS)),
+				]);
+				// A crisis message taken while the session was read has already cut this turn short: nothing is posted. No
+				// session means the decision never reached the server.
+				const answer = signedIn && !wait.quiet ? await sendDecision(fetch, signedIn.access_token, decision, via, undefined, pendingId) : UNREACHED;
+				// After a crisis taken while it was posted, the flag stays down and what the server did is still shown and saved,
+				// quietly, so a deletion that ran stays on record. One no answer came back for never says nothing waits, and the
+				// flag stays as it was (decisionEnd).
+				const end = decisionEnd({ quiet: wait.quiet, was: confirmWaitingRef.current, answer });
+				confirmWaitingRef.current = end.waiting;
+				if (end.line !== null) deliver(end.line, { quiet: end.quiet, lineSaved: end.lineSaved });
+			});
+			return true;
+		}
+		// Any other turn of Gur's moves past the question, so a later bare yes is the conversation's again (a model answer
+		// below may say one waits anew); a guest's turn leaves it waiting for him.
+		confirmWaitingRef.current = waitingAfter(confirmWaitingRef.current, { on: guest ? "guest" : "turn" });
+
 		if (writer === "model" && turn && prepared) {
 			// A spoken message leaves a half-typed draft alone.
 			if (via === "typed") setInput("");
 			setMessages((current) => [...current, userMessage]);
 			const controller = new AbortController();
 			startWait("model", controller, async (wait) => {
-				// Reading the session can refresh the token over the network, with no limit of its own.
+				// Reading the session can refresh the token over the network, with no limit of its own. A slow one falls back
+				// to his own words fast, so the composer never waits the session's limit and then the model's on top.
 				const signedIn = await Promise.race([
 					ensureSession().catch(() => null),
-					new Promise<null>((resolve) => setTimeout(() => resolve(null), ASK_TIMEOUT_MS)),
+					new Promise<null>((resolve) => setTimeout(() => resolve(null), SESSION_TIMEOUT_MS)),
 				]);
 				const body = signedIn
 					? chatBody({ text, messages, memory: view.memory, facts: prepared.facts, state: prepared.state, math: branch === "math" ? mathResult : null })
@@ -559,6 +654,8 @@ export default function AgentChat() {
 				const answer = signedIn && body && !wait.quiet ? await askForReply(fetch, signedIn.access_token, body, controller.signal) : null;
 				if (answer) {
 					setAiUsage((current) => nextUsage(current, answer));
+					// Only a model answer that says an action waits makes the next bare yes or no go to /api/act.
+					confirmWaitingRef.current = waitingAfter(confirmWaitingRef.current, { on: "model", answer });
 					// A crisis flag, a 403 or "off": nothing more is posted this visit.
 					if (answer.kind === "crisis" || (answer.kind === "fallback" && answer.stop)) aiStoppedRef.current = true;
 					// A 403 or "off" means it's really off; a crisis only pauses it for this visit.
@@ -574,8 +671,10 @@ export default function AgentChat() {
 				applyTurn(keptTurn<TurnResult>(answer?.kind === "model" ? "model" : "code", prepared, turn), { detection: detectionOf(answer), crisis: answer?.kind === "crisis" });
 				if (answer?.kind === "model") {
 					deliver(answer.reply);
+					if (answer.build) buildRef.current?.start(answer.build);
 				} else if (answer?.kind === "crisis") {
-					// The model saw talk of self-harm that the code missed: the reply is code's.
+					// The model saw talk of self-harm that the code missed: the reply is code's, and a build stops.
+					buildRef.current?.cancel();
 					deliver(CRISIS_REPLY);
 				} else {
 					// Any other answer (a fallback, a failed request, no session): today's reply for the branch.
@@ -606,12 +705,27 @@ export default function AgentChat() {
 	// The subtitle under him: the sentence he's saying. After the last word it keeps the reply's last
 	// sentence while it fades (figure.module.css shows it only while data-speaking is set).
 	const spokenText = speaking ? messages[speaking.index]?.text.slice(0, speaking.chars) : [...messages].reverse().find((m) => m.role === "agent")?.text;
-	// A browser that can't listen has no way in but typing, so it shows the conversation whatever the setting.
-	const voiceOnly = !voice.showChat && voice.listenSupported;
+	// What the room shows of the conversation (lib/room/chatbox.ts). voiceOnly means the log is hidden: with the village on
+	// that is the default, and the composer stays; off, a device that can't listen shows the conversation whatever the setting.
+	const shape = chatShape({ world: WORLD, showChat: voice.showChat, listenSupported: voice.listenSupported });
+	const voiceOnly = !shape.log;
+	// With the village on, the owner's own new line stays for a moment where what he heard goes.
+	const [echo, setEcho] = useState(noEcho);
+	if (WORLD) {
+		const next = echoStep(echo, messages, ready);
+		if (next !== echo) setEcho(next);
+	}
+	const echoed = echo.text !== null;
+	useEffect(() => {
+		if (!echoed) return;
+		const n = echo.n;
+		const timer = setTimeout(() => setEcho((current) => clearEcho(current, n)), ECHO_MS);
+		return () => clearTimeout(timer);
+	}, [echoed, echo.n]);
 	// Voice only: while he thinks, "One moment…" sits under him, and what he heard you say sits above him.
 	const said = thinking && voiceOnly ? "One moment…" : spokenText ? currentSentence(spokenText) : null;
 	const lastHeard = [...messages].reverse().find((m) => m.role === "user")?.text ?? null;
-	const heard = voiceOnly ? (voice.liveText ?? (thinking ? lastHeard : null)) : null;
+	const heard = voiceOnly ? (voice.liveText ?? (thinking ? lastHeard : echo.text)) : null;
 
 	const stageStyle = {
 		"--aura-a": theme.colorA,
@@ -619,33 +733,62 @@ export default function AgentChat() {
 		"--base": theme.base,
 		"--pulse": `${theme.pulseSeconds.toFixed(2)}s`,
 		"--strength": theme.strength.toFixed(2),
+		// Written only while a thing builds (at most 30 times a second: the controller coalesces); 1 once it has rendered.
+		...(build.view?.phase === "building" ? { "--build-progress": build.view.progress.toFixed(3) } : build.view?.phase === "ready" && build.built ? { "--build-progress": "1" } : {}),
 	} as CSSProperties;
 
 	return (
 		<div ref={stageRef} className={`${styles.stage} ${font.className}`} style={stageStyle}
 			data-tone={theme.tone}
 			data-speaking={speaking ? "" : undefined}
-			data-panel={panels.panel ?? undefined}
+			data-panel={openPanel ?? undefined}
+			data-shell={SHELL2 ? "" : undefined}
+			data-world={WORLD ? "" : undefined}
+			data-building={build.view?.phase === "building" ? "" : undefined}
+			data-built={build.built ? "" : undefined}
 			data-listening={voice.mode === "awake" || voice.mode === "followup" ? "" : undefined}
-			data-chat={voiceOnly ? undefined : ""}
+			data-chat={shape.composer ? "" : undefined}
 			data-fade={voice.fadeSaid ? "" : undefined}
 		>
-			<div className={styles.aura} aria-hidden="true">
-				<span className={`${styles.orb} ${styles.orbA}`} />
-				<span className={`${styles.orb} ${styles.orbB}`} />
-				<Figure className={styles.figure} said={said} heard={heard} />
-			</div>
+			{WORLD ? (
+				ready && (
+					<WorldStage
+						agent={agent}
+						colorA={theme.colorA}
+						colorB={theme.colorB}
+						said={said}
+						heard={heard}
+						controlRef={worldRef}
+						route={shell.route}
+						onOpen={(to) => shell.go(to)}
+						signals={{
+							lines: messages.length,
+							inTalk: voice.mode === "awake" || voice.mode === "thinking" || voice.mode === "speaking" || voice.mode === "followup",
+							speaking: speaking !== null,
+							thinking,
+						}}
+					/>
+				)
+			) : (
+				<div className={styles.aura} aria-hidden="true">
+					<span className={`${styles.orb} ${styles.orbA}`} />
+					<span className={`${styles.orb} ${styles.orbB}`} />
+					<Figure className={styles.figure} said={said} heard={heard} />
+				</div>
+			)}
+
+			{SHELL2 && <Rail items={shell.items} fill={70} onNavigate={shell.navigate} linkRef={shell.linkRef} />}
 
 			<main className={styles.column}>
 				<header className={styles.head}>
-					<span className={styles.heart} aria-hidden="true" />
+					{!SHELL2 && <span className={styles.heart} aria-hidden="true" />}
 					<div>
 						<h1 className={styles.name}>Osmo</h1>
 						<p className={styles.mood} role="status">
 							Feeling {feelingPhrase(agent.activations, baseline)}
 						</p>
 					</div>
-					<PanelLinks panel={panels.panel} toggle={panels.toggle} linkRef={panels.linkRef} />
+					{!SHELL2 && <PanelLinks panel={panels.panel} toggle={panels.toggle} linkRef={panels.linkRef} />}
 				</header>
 
 				{!voiceOnly && (
@@ -679,11 +822,17 @@ export default function AgentChat() {
 				</ol>
 				)}
 
+				<ThingPanel build={build} aura={{ a: theme.colorA, b: theme.colorB, bg: theme.base, ink: "#f3efe8" }} hidden={openPanel !== null} />
+
 				<form onSubmit={sendMessage} className={styles.composer}>
 					<input
 						className={styles.field}
 						value={voice.liveText ?? input}
-						onChange={(event) => setInput(event.target.value)}
+						onFocus={() => worldRef.current?.attend()}
+						onChange={(event) => {
+							setInput(event.target.value);
+							worldRef.current?.attend();
+						}}
 						placeholder={ready ? "Tell Osmo how you're doing" : "Osmo is waking up…"}
 						aria-label="Message"
 						disabled={!ready || thinking}
@@ -716,10 +865,21 @@ export default function AgentChat() {
 				)}
 			</main>
 
-			{panels.panel && (
+			{SHELL2 && (
+				<ShellPanels
+					shell={shell}
+					memory={memory}
+					onMemoryChange={setMemory}
+					agent={agent}
+					voice={voice}
+					aiUsage={aiUsage}
+					onOpenThing={(id, title, source) => { build.show(id, title, source); shell.close(); }}
+				/>
+			)}
+			{!SHELL2 && panels.panel && (
 				<Panel id={panels.panel} onClose={panels.close}>
 					{panels.panel === "memory" && <MemoryPanel memory={memory} onChange={setMemory} />}
-					{panels.panel === "insights" && <InsightsPanel agent={agent} />}
+					{panels.panel === "insights" && <InsightsPanel agent={agent} onOpenThing={(id, title, source) => { build.show(id, title, source); panels.close(); }} onThingDeleted={(id) => { if (build.view?.phase === "ready" && build.view.id === id) build.close(); }} />}
 					{panels.panel === "settings" && <SettingsPanel voice={voice} aiUsage={aiUsage} />}
 				</Panel>
 			)}

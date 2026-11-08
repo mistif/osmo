@@ -99,6 +99,8 @@ function checkHint(raw: unknown): { math: number } | null | undefined {
 }
 
 export function checkBody(raw: unknown): Checked {
+	// A guest's line never reaches the model, so a guest can neither propose nor confirm an action.
+	if (isFields(raw) && raw.speaker === "guest") return { ok: false };
 	if (!isFields(raw) || typeof raw.text !== "string") return { ok: false };
 	const text = raw.text.trim();
 	const history = checkHistory(raw.history);

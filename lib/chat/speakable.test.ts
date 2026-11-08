@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_REPLY_CHARS, MAX_SENTENCES, isCrisisFlag, lastFullSentence, speakable } from "./speakable";
+import { MAX_REPLY_CHARS, MAX_SENTENCES, isCrisisFlag, lastFullSentence, saidWhole, speakable } from "./speakable";
 
 // "word0 word1 … word{n-1}", with no punctuation.
 const words = (n: number) => Array.from({ length: n }, (_, i) => `word${i}`).join(" ");
@@ -187,5 +187,19 @@ describe("speakable", () => {
 		for (const raw of ["", "   \n\t ", "**", "🎉🎉🎉", "- \n* \n1. ", "(( [] ))", "... !!! ???", "#### ---", "`~~`"]) {
 			expect(speakable(raw), JSON.stringify(raw)).toBe("");
 		}
+	});
+});
+
+describe("saidWhole", () => {
+	it("is true when speakable keeps every sentence, markdown and emoji aside", () => {
+		for (const raw of ["You have two reminders. Call Dad at nine. The dentist at ten.", "**Pasta** with lemon. 🍝", "Sunny and 14 degrees", "One. Two. Three!"]) {
+			expect(saidWhole(raw), raw).toBe(true);
+		}
+	});
+
+	it("is false when speakable drops a sentence or cuts the only one", () => {
+		expect(saidWhole("One. Two. Three. Four.")).toBe(false);
+		expect(saidWhole(`${"word ".repeat(90)}word.`)).toBe(false);
+		expect(saidWhole(`First. ${"x".repeat(MAX_REPLY_CHARS)}.`)).toBe(false);
 	});
 });

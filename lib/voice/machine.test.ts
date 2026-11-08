@@ -21,15 +21,30 @@ describe("step", () => {
 		expect(listening().mode).toBe("sleeping");
 	});
 
-	it("wakes from sleep, and ignores a wake while awake, thinking or speaking", () => {
+	it("wakes from sleep, and ignores a wake while awake or thinking", () => {
 		const awake = step(listening(), { type: "wake", now: 1 });
 		expect(awake.mode).toBe("awake");
 		expect(step(awake, { type: "wake", now: 2 })).toBe(awake);
 		const thinking = inConversation();
 		expect(step(thinking, { type: "wake", now: 40 })).toBe(thinking);
-		const speaking = step(thinking, { type: "reply", via: "voice", spoken: true, now: 50 });
-		expect(step(speaking, { type: "wake", now: 60 })).toBe(speaking);
 		expect(step(initialVoice(), { type: "wake", now: 1 }).mode).toBe("off");
+	});
+
+	it("wakes from speaking (his name interrupts him) with nothing heard yet", () => {
+		const speaking = step(inConversation(), { type: "reply", via: "voice", spoken: true, now: 50 });
+		expect(speaking.mode).toBe("speaking");
+		const woken = step({ ...speaking, heard: true }, { type: "wake", now: 60 });
+		expect(woken).toMatchObject({ mode: "awake", since: 60, heard: false });
+	});
+
+	it("ignores a wake while thinking, in a follow-up, or off", () => {
+		const thinking = inConversation();
+		expect(step(thinking, { type: "wake", now: 40 })).toBe(thinking);
+		const followup = step(step(thinking, { type: "reply", via: "voice", spoken: true, now: 50 }), { type: "spoken", now: 60 });
+		expect(followup.mode).toBe("followup");
+		expect(step(followup, { type: "wake", now: 70 })).toBe(followup);
+		const off = initialVoice();
+		expect(step(off, { type: "wake", now: 1 })).toBe(off);
 	});
 
 	it("goes back to sleep silently when nothing is said after waking", () => {
@@ -155,5 +170,10 @@ describe("what runs in each mode", () => {
 		expect([detectorOn(awake), recognizerOn(awake), micOpen(awake)]).toEqual([false, true, true]);
 		expect([detectorOn(thinking), recognizerOn(thinking), micOpen(thinking)]).toEqual([false, false, false]);
 		expect(micOpen(initialVoice())).toBe(false);
+	});
+
+	it("runs the detector and keeps the microphone open while he speaks", () => {
+		const speaking = step(inConversation(), { type: "reply", via: "voice", spoken: true, now: 50 });
+		expect([detectorOn(speaking), recognizerOn(speaking), micOpen(speaking)]).toEqual([true, false, true]);
 	});
 });

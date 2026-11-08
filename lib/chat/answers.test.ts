@@ -5,17 +5,17 @@ import { agentKnowledge, answerFromMemory, calculateMath, describeFact, findUnkn
 
 // The four entries that change when the AI conversation is on, with today's words and the words when it's on.
 const OFF: Record<string, string> = {
-	"local agent": "an assistant that runs in your browser, using its built-in knowledge and what you teach it",
+	"local agent": "Osmo, a program that runs in your browser, using his built-in knowledge and what you teach him",
 	"internet access": "used only to look up word definitions from Datamuse and Wiktionary, and only the word itself is sent",
 	"conversation learning": "when the agent does not know a topic, it asks the user to explain it and saves that explanation",
 	internet: "a worldwide network of connected computer networks; this agent uses it only to look up word definitions",
 };
 const ON: Record<string, string> = {
-	"local agent": "an assistant that runs in your browser, while an OpenAI model writes its everyday replies",
+	"local agent": "Osmo, a program that runs in your browser, while an OpenAI model writes his everyday replies",
 	"internet access":
 		"used to look up word definitions from Datamuse and Wiktionary, and to have an OpenAI model write its everyday replies, so your messages, what it remembers of you and your recent chat are sent to OpenAI",
 	"conversation learning":
-		"when the agent does not know a topic, an OpenAI model answers it; if the model can't be reached, the agent asks the user to explain it and saves that explanation",
+		"when the agent does not know a topic, an OpenAI model answers it; if the model cannot be reached, the agent asks the user to explain it and saves that explanation",
 	internet:
 		"a worldwide network of connected computer networks; this agent uses it to look up word definitions and to have an OpenAI model write its everyday replies, which sends your messages, what it remembers of you and your recent chat to OpenAI",
 };
@@ -60,7 +60,7 @@ describe("agentKnowledge", () => {
 		for (const key of ["internet access", "internet"]) {
 			expect(valueOf(true, key), key).toMatch(/your messages, what it remembers of you and your recent chat/);
 		}
-		expect(valueOf(true, "conversation learning")).toMatch(/can't be reached, the agent asks the user to explain it/);
+		expect(valueOf(true, "conversation learning")).toMatch(/cannot be reached, the agent asks the user to explain it/);
 	});
 
 	it("changes only those four values, never a key", () => {
@@ -116,10 +116,10 @@ describe("answerFromMemory", () => {
 
 	it("lists what he remembers, or says he knows nothing yet", () => {
 		const listing =
-			'Here\'s what I remember. Your name is Gur. You use "bet" to mean okay. "zorp blat" means a kind of snack. You like pizza. Your sister is Maya.';
+			'Here is what I remember. Your name is Gur. You use "bet" to mean okay. "zorp blat" means a kind of snack. You like pizza. Your sister is Maya.';
 		expect(answerFromMemory("What do you know about me?", memory, 0)).toBe(listing);
 		expect(answerFromMemory("list my memories", memory, 0)).toBe(listing);
-		expect(answerFromMemory("what do you know about me", [], 0)).toBe("I don't know anything about you yet.");
+		expect(answerFromMemory("what do you know about me", [], 0)).toBe("I do not know anything about you yet.");
 	});
 
 	it("answers from an explained term and from a remembered fact", () => {
@@ -137,12 +137,12 @@ describe("answerFromMemory", () => {
 		];
 		expect(answerFromMemory("what's my name", marked, 0)).toBe("Your name is Gur.");
 		expect(answerFromMemory("how is my dog", marked, 0)).toBe("Your dog is Rex.");
-		expect(answerFromMemory("what do you know about me", marked, 0)).toBe("Here's what I remember. Your name is Gur. Your dog is Rex.");
+		expect(answerFromMemory("what do you know about me", marked, 0)).toBe("Here is what I remember. Your name is Gur. Your dog is Rex.");
 	});
 
 	it("asks the owner for a name it doesn't have, but never a guest", () => {
-		expect(answerFromMemory("whats my name", [], 0)).toBe("I don't know your name yet. What should I call you?");
-		expect(answerFromMemory("whats my name", [], 0, true)).toBe("I'm afraid I don't know your name.");
+		expect(answerFromMemory("whats my name", [], 0)).toBe("I do not know your name yet. What should I call you?");
+		expect(answerFromMemory("whats my name", [], 0, true)).toBe("I am afraid I do not know your name.");
 	});
 
 	it("answers from his built-in knowledge, in today's words unless the AI conversation is on", () => {
@@ -157,16 +157,16 @@ describe("answerFromMemory", () => {
 	});
 
 	it("falls back one step per exchange, without the offer to learn for a guest", () => {
-		expect(answerFromMemory("blorp", [], 0)).toBe("I'm not sure I follow. Could you rephrase that?");
-		expect(answerFromMemory("blorp", [], 2)).toBe("I didn't quite catch that. Could you say it another way?");
+		expect(answerFromMemory("blorp", [], 0)).toBe("I am not sure I follow. Could you rephrase that?");
+		expect(answerFromMemory("blorp", [], 2)).toBe("I did not quite catch that. Could you say it another way?");
 		expect(answerFromMemory("blorp", [], 6)).toBe(
-			"I don't recognize that. If it's a word I haven't learned, tell me what it means.",
+			"I do not recognize that. If it is a word I have not learned, tell me what it means.",
 		);
-		expect(answerFromMemory("blorp", [], 6, true)).toBe("I don't recognize that, I'm afraid. Could you put it another way?");
+		expect(answerFromMemory("blorp", [], 6, true)).toBe("I do not recognize that, I am afraid. Could you put it another way?");
 		expect(answerFromMemory("why is the sky purple?", [], 0)).toBe(
-			"That's a good question, but I don't have an answer yet. Could you ask it another way?",
+			"That is a good question, but I do not have an answer yet. Could you ask it another way?",
 		);
-		expect(answerFromMemory("why is the sky purple?", [], 2)).toBe("I'm afraid that's beyond me for now. Could you try a simpler question?");
+		expect(answerFromMemory("why is the sky purple?", [], 2)).toBe("I am afraid that is beyond me for now. Could you try a simpler question?");
 	});
 
 	it("says a saved name back in words the name code reads, but not in the listing", () => {

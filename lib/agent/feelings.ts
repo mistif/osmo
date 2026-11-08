@@ -13,7 +13,7 @@ type Row = Partial<Record<Emotion, number>>;
 
 // Spec 5.2, values at intensity 2.
 // Tuned 2026-10-02 (x1.75 from the spec's first guesses): one clear message at reactivity 0.75 must clear SALIENCE 0.1 on its lead emotion, so a single heavy message is visible in the aura.
-export const COMPLEMENT: Record<Exclude<Tone, "neutral" | "angry">, Row> = {
+const COMPLEMENT: Record<Exclude<Tone, "neutral" | "angry">, Row> = {
 	sad: { love: 0.175, trust: 0.105, sadness: 0.105, hope: 0.035 },
 	worried: { love: 0.14, trust: 0.105, sadness: 0.07, hope: 0.053 },
 	lonely: { love: 0.175, trust: 0.105, loneliness: 0.07, sadness: 0.053 },

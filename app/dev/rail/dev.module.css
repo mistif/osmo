@@ -1,0 +1,16 @@
+/* Dev page only: the rail normally pins itself to the room, so each sample sits in a box and the rail fills it. */
+.scroller { height: 100svh; overflow: auto; padding: 1.5rem 0 3rem; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 0.75rem 0 1.25rem; }
+.panels { display: flex; flex-wrap: wrap; gap: 2rem 2.5rem; align-items: flex-start; }
+.panel { display: flex; flex-direction: column; gap: 0.5rem; }
+.panel h2 { font-size: 0.85rem; font-weight: 500; margin: 0; max-width: 16rem; color: color-mix(in oklab, var(--bone) 80%, transparent); }
+.row { display: flex; gap: 1rem; }
+.box { position: relative; width: 4.25rem; }
+.box > nav { position: relative; height: 30rem; inset: auto; }
+.note { margin-top: 1.5rem; font-size: 0.85rem; color: color-mix(in oklab, var(--bone) 80%, transparent); }
+.btn { width: auto; padding: 0 1rem; height: 2.5rem; }
+@media (max-width: 40rem) {
+	.box { width: 100%; min-width: 20rem; }
+	.box > nav { height: var(--bar-h); }
+	.panel { width: 100%; }
+}

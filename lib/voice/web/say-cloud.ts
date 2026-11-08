@@ -10,12 +10,7 @@ import { chosenVoice, say } from "./say";
 import { getVoiceSettings } from "./settings-store";
 import { cachedClip, keepClip } from "./tts-cache";
 
-let tone: SpeechTone = "composed";
-
-// Set from his mood by use-voice.ts, before a reply is spoken.
-export function setSpeechTone(next: SpeechTone): void {
-	tone = next;
-}
+const tone: SpeechTone = "composed";
 
 // Set when /api/speak says there's no key, so a device without one asks only once a visit.
 let noKey = false;
@@ -32,7 +27,9 @@ async function fetchClip(text: string, forTone: SpeechTone, signal: AbortSignal)
 		headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` },
 		body: JSON.stringify({ text, tone: forTone }),
 	});
-	if (response.status === 503) {
+	// No key (503), not the owner (403) or the day's cap reached (429): the device's voice takes over,
+	// and this visit stops asking.
+	if (response.status === 503 || response.status === 403 || response.status === 429) {
 		noKey = true;
 		throw new Error("no key");
 	}

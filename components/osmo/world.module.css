@@ -1,0 +1,188 @@
+/* Osmo's village: the sky canvas, the sun (his heart, figure.tsx), the world canvas, and his line above his head.
+   Review B2: the root makes no stacking context of its own (no z-index; the stage's own background, the same
+   var(--base), shows until the sky is drawn). Its pictures (the canvases, the sun, the room buttons) sit at z-index -2
+   in the stage, under the conversation's glass (assistant.module.css, z-index -1 and up), and his line (.bubble) sits
+   above it, so the glass never blurs his words. */
+.world {
+	position: absolute;
+	inset: 0;
+	overflow: clip;
+	pointer-events: none; /* its box now lies over the room buttons (z-index -2); they take the pointer themselves */
+}
+.layer {
+	position: absolute;
+	inset: 0;
+	z-index: -2;
+	width: 100%;
+	height: 100%;
+	image-rendering: pixelated;
+	pointer-events: none;
+}
+/* The heart as the sun: placed by the hour (--sun-x, --sun-y), dim and low when it is down. */
+.sun {
+	--figure: clamp(4.5rem, 9vw, 7rem);
+	position: absolute;
+	z-index: -2;
+	left: var(--sun-x, 50%);
+	top: var(--sun-y, 30%);
+	translate: -50% -50%;
+	pointer-events: none;
+	transition: left 1s linear, top 1s linear, opacity 2s ease, filter 2s ease;
+}
+.world[data-sun="down"] .sun {
+	opacity: 0.35;
+	filter: saturate(0.6) brightness(0.7);
+}
+/* Polish pass: a soft halo round the sun in its own colour, behind the heart; gone while the sun is down. */
+.sun::before {
+	content: "";
+	position: absolute;
+	inset: -75%;
+	z-index: -1;
+	border-radius: 50%;
+	background: radial-gradient(
+		closest-side,
+		color-mix(in oklab, var(--aura-a, #3aa597) 34%, transparent),
+		color-mix(in oklab, var(--aura-a, #3aa597) 12%, transparent) 55%,
+		transparent
+	);
+	pointer-events: none;
+	transition: opacity 2s ease;
+}
+.world[data-sun="down"] .sun::before {
+	opacity: 0;
+}
+/* His line, over his head (--him-x, --him-y: the top of his sprite, in canvas px). */
+.bubble {
+	position: absolute;
+	left: var(--him-x, 50%);
+	top: var(--him-y, 50%);
+	translate: -50% calc(-100% - 0.75rem);
+	z-index: 1; /* review B2: above the conversation's glass, never blurred by it */
+	display: grid;
+	justify-items: center;
+	gap: 0.25rem;
+	width: max-content;
+	max-width: min(24rem, 80vw);
+	pointer-events: none;
+}
+/* Polish pass: set in the room's type (the stage's font, the conversation's size and line height) on no box, with a
+   soft shadow that keeps it readable over the sky, the snow and the castle alike. */
+.said,
+.heard {
+	margin: 0;
+	padding: 0 0.25rem;
+	text-align: center;
+	text-wrap: balance;
+	line-height: 1.5;
+	letter-spacing: 0.005em;
+	text-shadow:
+		0 1px 2px rgb(0 0 0 / 0.7),
+		0 0 10px rgb(0 0 0 / 0.55),
+		0 0 22px rgb(0 0 0 / 0.35);
+}
+.said {
+	font-size: 1.05rem;
+	font-weight: 500;
+	color: var(--bone);
+	transition: opacity 0.3s ease;
+}
+.said:empty {
+	padding: 0;
+}
+.heard {
+	font-size: 0.92rem;
+	color: color-mix(in oklab, var(--bone) 78%, transparent);
+}
+/* With the fade setting on, his words linger after the last word, then go (as under the heart today). */
+:global([data-fade]:not([data-speaking])) .said {
+	opacity: 0;
+	transition: opacity 1.2s ease 1.4s;
+}
+@media (prefers-reduced-motion: reduce) {
+	.sun,
+	.said {
+		transition: none;
+	}
+}
+
+/* Phase 2: a button over each finished room, placed by the loop (canvas px); the keyboard reaches it, the pointer shows
+   a hand. The dev page's "Hit areas" outlines them. */
+.hits {
+	position: absolute;
+	inset: 0;
+	z-index: -2;
+	pointer-events: none;
+}
+.hit {
+	position: absolute;
+	padding: 0;
+	border: 0;
+	border-radius: 0.25rem;
+	background: none;
+	cursor: pointer;
+	pointer-events: auto;
+}
+.hit:focus-visible {
+	outline: 2px solid var(--bone);
+	outline-offset: 2px;
+}
+.world[data-show-hits] .hit {
+	outline: 1px dashed color-mix(in oklab, var(--bone) 70%, transparent);
+}
+
+/* Free will (spec 3.2): the world takes the pointer where nothing of the conversation is drawn: behind the canvases (which
+   let the pointer through), under the room buttons. A drag or a pinch here moves the camera, never the page. */
+.input {
+	position: absolute;
+	inset: 0;
+	z-index: -3;
+	pointer-events: auto;
+	touch-action: none;
+	cursor: grab;
+	outline: none;
+}
+.input:focus-visible {
+	box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--bone) 70%, transparent);
+}
+.world[data-drag] .input {
+	cursor: grabbing;
+}
+/* Back to Osmo: shown while he is off screen after Gur has steered the camera. */
+.home {
+	position: absolute;
+	top: 4.5rem;
+	left: 50%;
+	translate: -50% 0;
+	z-index: 1;
+	padding: 0.4rem 0.9rem;
+	border: 1px solid color-mix(in oklab, var(--bone) 35%, transparent);
+	border-radius: 999px;
+	background: color-mix(in oklab, var(--base, #111) 70%, transparent);
+	color: var(--bone);
+	font: inherit;
+	font-size: 0.9rem;
+	pointer-events: auto;
+	cursor: pointer;
+}
+.home:focus-visible {
+	outline: 2px solid var(--bone);
+	outline-offset: 2px;
+}
+/* His line for a build he starts (spec 5.5), about six seconds, never hidden by the fade setting as .said is. */
+.will {
+	margin: 0;
+	padding: 0 0.25rem;
+	text-align: center;
+	text-wrap: balance;
+	line-height: 1.5;
+	font-size: 1rem;
+	font-style: italic;
+	color: var(--bone);
+	text-shadow: 0 1px 2px rgb(0 0 0 / 0.7), 0 0 10px rgb(0 0 0 / 0.55);
+}
+@media (prefers-reduced-motion: reduce) {
+	.home {
+		transition: none;
+	}
+}

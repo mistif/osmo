@@ -20,16 +20,21 @@ import type { SendOptions } from "../voice/guest";
 import type { AskResult } from "./ask";
 import { answerFromMemory, calculateMath, findUnknownTopic, isBuiltInTopic } from "./answers";
 import type { RoomLine } from "./body";
+import { NOTHING_WAITING_LINE, UNREACHED_LINE, type DecisionAnswer } from "./decision";
 import {
+	decisionEnd,
+	decisionFor,
 	detectionOf,
 	keptTurn,
 	MODEL_BRANCHES,
 	pickBranch,
 	quietEffects,
+	waitingAfter,
 	whileWaiting,
 	writerFor,
 	type Branch,
 	type ChainValues,
+	type Waiting,
 	type WriterCheck,
 } from "./branch";
 
@@ -45,7 +50,7 @@ const knownBond = {
 	toMention: ["days7" as const],
 };
 const GUR: SendOptions = { via: "typed", speaker: "you" };
-const GREETING: RoomLine = { role: "agent", text: "Hello, I'm Osmo. How can I help?" };
+const GREETING: RoomLine = { role: "agent", text: "Hello. I am Osmo. What is on your mind?" };
 const NAMED: MemoryFact[] = [{ key: "name", value: "Gur" }];
 
 type Room = {
@@ -195,7 +200,7 @@ describe("writerFor", () => {
 		aiOn: true,
 		guest: false,
 		preparedReply: null,
-		ruleReply: "I'm not sure I follow. Could you rephrase that?",
+		ruleReply: "I am not sure I follow. Could you rephrase that?",
 		textLength: 19,
 	};
 
@@ -242,10 +247,10 @@ describe("writerFor", () => {
 
 	it("keeps code's reply when it asks Gur his name or says his saved name back", () => {
 		for (const ruleReply of [
-			"I'm Osmo. What should I call you?",
-			"I don't know your name yet. What should I call you?",
-			"I'm Osmo. And you're Gur, I remember.",
-			"Welcome back, Gur. I'm Osmo. And you're Gur, I remember.",
+			"I am Osmo. What should I call you?",
+			"I do not know your name yet. What should I call you?",
+			"I am Osmo. And you are Gur, I remember.",
+			"Welcome back, Gur. I am Osmo. And you are Gur, I remember.",
 			"Your name is Gur.",
 		]) {
 			expect(writerFor({ ...everyday, branch: "turn", ruleReply }), ruleReply).toBe("code");
@@ -283,7 +288,7 @@ describe("who writes the reply, through the real chain", () => {
 	});
 
 	it("keeps code for an explanation Osmo asked for, and runs neither turn", () => {
-		const asked = { role: "agent" as const, text: `I'm not familiar with "zorp". Could you explain it? I'll remember.` };
+		const asked = { role: "agent" as const, text: `I am not familiar with "zorp". Could you explain it?` };
 		const room = { messages: [GREETING, { role: "user" as const, text: "what is zorp" }, asked], pendingLearning: "zorp" };
 		const r = send("a kind of snack from finland", GUR, room);
 		expect(r).toMatchObject({ picked: { branch: "learning" }, writer: "code", processed: null, prepared: null });
@@ -292,7 +297,7 @@ describe("who writes the reply, through the real chain", () => {
 	});
 
 	it("keeps code for Gur's answer to code's name question", () => {
-		const asked = { role: "agent" as const, text: "I don't know your name yet. What should I call you?" };
+		const asked = { role: "agent" as const, text: "I do not know your name yet. What should I call you?" };
 		const room = { messages: [GREETING, { role: "user" as const, text: "what's my name" }, asked] };
 		expect(send("its Gur", GUR, room)).toMatchObject({ values: { answeredName: "Gur" }, picked: { branch: "answeredName" }, writer: "code" });
 	});
@@ -301,7 +306,7 @@ describe("who writes the reply, through the real chain", () => {
 		const yours = send("what's your name");
 		expect(yours).toMatchObject({ picked: { branch: "turn" }, rule: expect.stringMatching(/^I(?:'m| am) Osmo\. What should I call you\?$/), writer: "code" });
 		const mine = send("what's my name");
-		expect(mine).toMatchObject({ picked: { branch: "memory" }, rule: "I don't know your name yet. What should I call you?", writer: "code" });
+		expect(mine).toMatchObject({ picked: { branch: "memory" }, rule: "I do not know your name yet. What should I call you?", writer: "code" });
 		expect(send("can't you see my name")).toMatchObject({ picked: { branch: "lookedBack" }, writer: "code" });
 	});
 
@@ -396,7 +401,7 @@ describe("quietEffects", () => {
 
 	it("gives a lookup that misses the line that doesn't ask for an explanation", () => {
 		const plan = quietEffects("lookup");
-		expect(formatDefinition({ kind: "missing", term: "valo" }, plan.reply === "noExplain")).toBe(`I'm not familiar with "valo".`);
+		expect(formatDefinition({ kind: "missing", term: "valo" }, plan.reply === "noExplain")).toBe(`I am not familiar with "valo".`);
 	});
 });
 
@@ -405,9 +410,102 @@ describe("detectionOf", () => {
 
 	it("gives the model answer's detection and nothing for any other answer", () => {
 		const detection = { tones: ["sad"] };
-		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection })).toBe(detection);
-		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection: null })).toBeNull();
+		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection, waiting: false, pendingId: null, build: null })).toBe(detection);
+		expect(detectionOf({ kind: "model", reply: "Hi.", usage, detection: null, waiting: false, pendingId: null, build: null })).toBeNull();
 		const others: (AskResult | null)[] = [{ kind: "crisis", usage }, { kind: "fallback", why: "error", usage, stop: false }, null];
 		for (const answer of others) expect(detectionOf(answer), JSON.stringify(answer)).toBeNull();
+	});
+});
+
+describe("decisionFor", () => {
+	const GUR_WAITING = { guest: false, crisis: false, waiting: true };
+
+	it("reads a bare yes or no from Gur while a confirmation waits", () => {
+		expect(decisionFor({ ...GUR_WAITING, text: "yes" })).toBe("yes");
+		expect(decisionFor({ ...GUR_WAITING, text: "Go ahead." })).toBe("yes");
+		expect(decisionFor({ ...GUR_WAITING, text: "no" })).toBe("no");
+		expect(decisionFor({ ...GUR_WAITING, text: "never mind" })).toBe("no");
+	});
+
+	it("never takes a guest's yes, a yes in a crisis, or one with nothing waiting", () => {
+		expect(decisionFor({ ...GUR_WAITING, guest: true, text: "yes" })).toBeNull();
+		expect(decisionFor({ ...GUR_WAITING, crisis: true, text: "stop" })).toBeNull();
+		expect(decisionFor({ ...GUR_WAITING, waiting: false, text: "yes" })).toBeNull();
+	});
+
+	it("leaves a longer sentence with a yes in it to the conversation", () => {
+		for (const text of ["yes, but tomorrow", "yes please send it to Sam too", "I said no to him", "no idea"]) {
+			expect(decisionFor({ ...GUR_WAITING, text }), text).toBeNull();
+		}
+	});
+});
+
+describe("waitingAfter", () => {
+	const usage = { usedToday: 1, usable: 2 };
+	const ID = "7c0e5a2b-3d41-4f8e-9b6a-1e2d3c4b5a69";
+	const HELD: Waiting = { pendingId: ID };
+	const model = (waiting: boolean, pendingId: string | null = null): AskResult => ({ kind: "model", reply: "Delete it? Say yes to go ahead, or no.", usage, detection: null, waiting, pendingId, build: null });
+
+	it("leaves the confirmation waiting through a guest's turn, for the same row", () => {
+		expect(waitingAfter(HELD, { on: "guest" })).toEqual(HELD);
+		expect(waitingAfter({ pendingId: null }, { on: "guest" })).toEqual({ pendingId: null });
+		expect(waitingAfter(null, { on: "guest" })).toBeNull();
+	});
+
+	it("moves past it on any other turn of Gur's, so a yes to Osmo's own question is never taken as one", () => {
+		expect(waitingAfter(HELD, { on: "turn" })).toBeNull();
+		expect(waitingAfter({ pendingId: null }, { on: "turn" })).toBeNull();
+	});
+
+	it("waits again only when a model answer says an action waits, for the row that answer names", () => {
+		expect(waitingAfter(null, { on: "model", answer: model(true, ID) })).toEqual(HELD);
+		expect(waitingAfter({ pendingId: "an-older-row" }, { on: "model", answer: model(true, ID) })).toEqual(HELD);
+		// An older server names no row: one still waits, and his yes goes without an id, as before.
+		expect(waitingAfter(HELD, { on: "model", answer: model(true) })).toEqual({ pendingId: null });
+		expect(waitingAfter(HELD, { on: "model", answer: model(false) })).toBeNull();
+		const others: (AskResult | null)[] = [{ kind: "crisis", usage }, { kind: "fallback", why: "timeout", usage: null, stop: false }, null];
+		for (const answer of others) expect(waitingAfter(HELD, { on: "model", answer }), JSON.stringify(answer)).toBeNull();
+	});
+
+	it("keeps the same row, with its id, after a decision only when the server says the row still waits", () => {
+		const typeIt: DecisionAnswer = { handled: true, reply: "For that one I need you to type yes.", waiting: true, reached: true };
+		expect(waitingAfter(HELD, { on: "decision", answer: typeIt })).toEqual(HELD);
+		expect(waitingAfter({ pendingId: null }, { on: "decision", answer: typeIt })).toEqual({ pendingId: null });
+		expect(waitingAfter(HELD, { on: "decision", answer: { handled: true, reply: "Deleted the note.", waiting: false, reached: true } })).toBeNull();
+		expect(waitingAfter(HELD, { on: "decision", answer: { handled: false, reply: null, waiting: false, reached: true } })).toBeNull();
+	});
+
+	it("leaves it as it was after a decision that never reached the server, which knows nothing of it", () => {
+		const unreached: DecisionAnswer = { handled: false, reply: null, waiting: false, reached: false };
+		for (const was of [HELD, { pendingId: null }, null]) expect(waitingAfter(was, { on: "decision", answer: unreached }), JSON.stringify(was)).toEqual(was);
+	});
+});
+
+describe("decisionEnd", () => {
+	const HELD: Waiting = { pendingId: "7c0e5a2b-3d41-4f8e-9b6a-1e2d3c4b5a69" };
+	const ran: DecisionAnswer = { handled: true, reply: "Deleted the note.", waiting: false, reached: true };
+	const typeIt: DecisionAnswer = { handled: true, reply: "For that one I need you to type yes.", waiting: true, reached: true };
+	const none: DecisionAnswer = { handled: false, reply: null, waiting: false, reached: true };
+	const unreached: DecisionAnswer = { handled: false, reply: null, waiting: false, reached: false };
+	const spoken = { quiet: false, lineSaved: false };
+
+	it("says the server's line, and takes whether the same row still waits from its answer", () => {
+		expect(decisionEnd({ quiet: false, was: HELD, answer: ran })).toEqual({ waiting: null, line: "Deleted the note.", ...spoken });
+		expect(decisionEnd({ quiet: false, was: HELD, answer: typeIt })).toEqual({ waiting: HELD, line: typeIt.reply, ...spoken });
+	});
+
+	it("says nothing waits only when the server answered so", () => {
+		expect(decisionEnd({ quiet: false, was: HELD, answer: none })).toEqual({ waiting: null, line: NOTHING_WAITING_LINE, ...spoken });
+	});
+
+	it("keeps the flag and its row as they were and says it did not hear back when no answer came", () => {
+		for (const was of [HELD, null]) expect(decisionEnd({ quiet: false, was, answer: unreached }), JSON.stringify(was)).toEqual({ waiting: was, line: UNREACHED_LINE, ...spoken });
+	});
+
+	it("never puts the flag back up after a crisis, and shows only a line the server sent, quietly, with his yes already saved", () => {
+		for (const was of [HELD, null]) {
+			for (const answer of [ran, typeIt]) expect(decisionEnd({ quiet: true, was, answer }), answer.reply ?? "").toEqual({ waiting: null, line: answer.reply, quiet: true, lineSaved: true });
+			for (const answer of [none, unreached]) expect(decisionEnd({ quiet: true, was, answer }), JSON.stringify(answer)).toEqual({ waiting: null, line: null, quiet: true, lineSaved: true });
+		}
 	});
 });

@@ -6,7 +6,7 @@ import { pickVoice, VOICE_SETTINGS, wordEnd } from "../voices";
 let chosen: SpeechSynthesisVoice | null = null;
 let current: SpeechSynthesisUtterance | null = null;
 
-export function speechAvailable(): boolean {
+function speechAvailable(): boolean {
 	return typeof window !== "undefined" && "speechSynthesis" in window;
 }
 

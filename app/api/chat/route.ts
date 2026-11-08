@@ -3,8 +3,9 @@
 
 import { chatDeps, handleChat } from "@/lib/chat/handler";
 
-// OpenAI gets 10 seconds; the rest is a few quick ledger reads and writes.
-export const maxDuration = 20;
+// A turn with a result makes two OpenAI calls of up to 10 seconds each; the rest is a few quick ledger reads and
+// writes. Unverified for Gur's plan: see the connectors spec, 16.3.
+export const maxDuration = 40;
 
 export async function GET(request: Request): Promise<Response> {
 	return handleChat(request, chatDeps());

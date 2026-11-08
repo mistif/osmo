@@ -32,6 +32,9 @@ const nth = (bond: Bond, t: number): Bond => ({ ...bond, messages: bond.messages
 describe("flavor: CHARACTER and determinism", () => {
 	it("speaks in full forms, as the character does", () => {
 		expect(flavor("Hi! I'm here.", ctx(CHARACTER, { intent: "greeting" }))).toBe("Greetings! I am here.");
+		expect(flavor("That wasn't it, and you'd know. Here's why we've waited: let's see, you'll agree it isn't hard.", ctx(CHARACTER, { intent: "greeting" }))).toBe(
+			"That was not it, and you would know. Here is why we have waited: let us see, you will agree it is not hard.",
+		);
 	});
 
 	// Goes through flavorTurn with a bond past stranger: with no bond at all (now = stranger), dry humor

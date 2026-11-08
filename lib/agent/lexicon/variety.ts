@@ -3,7 +3,7 @@
 const SETS: readonly (readonly string[])[] = [
 	["glad", "pleased"],
 	["difficult", "hard", "tough"],
-	["understood", "noted"],
+	["understood", "very well"],
 	["entirely", "completely"],
 ];
 

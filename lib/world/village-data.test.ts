@@ -1,0 +1,161 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// What reached the table, in order, and a way to hold an upsert open or make the delete fail.
+const log: string[] = [];
+let holdUpsert: Promise<void> | null = null;
+let deleteError: { code?: string; message: string } | null = null;
+let deleted: { column: string; values: string[] } | null = null;
+
+vi.mock("../supabase", () => ({
+	supabase: {
+		from: (table: string) => ({
+			upsert: async (row: { room: string; laid: number }) => {
+				if (holdUpsert) await holdUpsert;
+				log.push(`upsert ${table} ${row.room} ${row.laid}`);
+				return { error: null };
+			},
+			delete: () => ({
+				in: async (column: string, values: string[]) => {
+					deleted = { column, values };
+					log.push(`delete ${table}`);
+					return { error: deleteError };
+				},
+				not: async () => {
+					log.push(`delete ${table} all`);
+					return { error: null };
+				},
+			}),
+		}),
+	},
+}));
+
+import { CASTLE_ROOMS } from "./blueprints/types";
+import { resume } from "./progress";
+import { CLEAR_TIMEOUT_MS, CLEARED_KEY, clearingNow, clearVillage, saveRoom, trackSave, VILLAGE_CLEARED } from "./village-data";
+
+const NOW = "2026-10-10T12:00:00.000Z";
+const hall = (laid: number) => ({ ...resume([], "hall", 180, NOW), laid });
+
+beforeEach(() => {
+	log.length = 0;
+	holdUpsert = null;
+	deleteError = null;
+	deleted = null;
+	const win = new EventTarget();
+	win.addEventListener(VILLAGE_CLEARED, () => log.push("cleared"));
+	vi.stubGlobal("window", win);
+	vi.spyOn(console, "error").mockImplementation(() => undefined);
+});
+afterEach(() => {
+	vi.unstubAllGlobals();
+	vi.restoreAllMocks();
+});
+
+describe("clearing the village", () => {
+	it("deletes every room of the owner's village, then tells the world", async () => {
+		expect(await clearVillage()).toBe(true);
+		expect(deleted).toEqual({ column: "room", values: [...CASTLE_ROOMS] });
+		expect(log).toEqual(["delete village", "cleared"]);
+	});
+	it("waits for a save already on its way, so an old count never lands after the delete", async () => {
+		let release = () => {};
+		holdUpsert = new Promise<void>((r) => (release = r));
+		const saving = saveRoom(hall(40));
+		const clearing = clearVillage();
+		await Promise.resolve();
+		expect(log).toEqual([]);
+		release();
+		expect(await saving).toBe(true);
+		expect(await clearing).toBe(true);
+		expect(log).toEqual(["upsert village hall 40", "delete village", "cleared"]);
+	});
+	it("starts no save while it clears, and saves again afterwards", async () => {
+		let release = () => {};
+		holdUpsert = new Promise<void>((r) => (release = r));
+		const first = saveRoom(hall(8));
+		const clearing = clearVillage();
+		expect(await saveRoom(hall(16))).toBe(false);
+		release();
+		await first;
+		await clearing;
+		holdUpsert = null;
+		expect(await saveRoom(hall(1))).toBe(true);
+		expect(log).toEqual(["upsert village hall 8", "delete village", "cleared", "upsert village hall 1"]);
+	});
+	it("tells the other open tabs through localStorage, and does without it", async () => {
+		const stored = new Map<string, string>();
+		const win = Object.assign(new EventTarget(), { localStorage: { setItem: (k: string, v: string) => void stored.set(k, v) } });
+		vi.stubGlobal("window", win);
+		expect(await clearVillage()).toBe(true);
+		expect(stored.get(CLEARED_KEY)).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+		vi.stubGlobal("window", Object.assign(new EventTarget(), { localStorage: { setItem: () => { throw new Error("blocked"); } } }));
+		expect(await clearVillage()).toBe(true);
+	});
+	it("gives up after ten seconds when it never settles, warns once, and lets saves start again", async () => {
+		vi.useFakeTimers();
+		try {
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+			holdUpsert = new Promise<void>(() => undefined); // a save that never answers
+			void saveRoom(hall(8));
+			const clearing = clearVillage();
+			await vi.advanceTimersByTimeAsync(CLEAR_TIMEOUT_MS - 1);
+			expect(await saveRoom(hall(9))).toBe(false); // still clearing
+			await vi.advanceTimersByTimeAsync(1);
+			expect(await clearing).toBe(false);
+			expect(warn).toHaveBeenCalledTimes(1);
+			expect(log).toEqual([]); // nothing was deleted, nobody was told
+			holdUpsert = null;
+			expect(await saveRoom(hall(10))).toBe(true);
+			expect(log).toEqual(["upsert village hall 10"]);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+	it("says false and tells nobody when the delete fails", async () => {
+		deleteError = { message: "offline" };
+		expect(await clearVillage()).toBe(false);
+		expect(log).toEqual(["delete village"]);
+		expect(await saveRoom(hall(3))).toBe(true);
+	});
+});
+
+describe("Clear the world (free-will spec 4.9)", () => {
+	it("deletes the village rows, then every build, when builds are on", async () => {
+		expect(await clearVillage({ builds: true })).toBe(true);
+		expect(log).toEqual(["delete village", "delete builds all", "cleared"]);
+	});
+	it("deletes no build when the village delete fails, so a failed clear loses nothing", async () => {
+		deleteError = { code: "08006", message: "connection" };
+		expect(await clearVillage({ builds: true })).toBe(false);
+		expect(log).toEqual(["delete village"]);
+	});
+	it("touches no build when builds are off, as before", async () => {
+		expect(await clearVillage()).toBe(true);
+		expect(log).toEqual(["delete village", "cleared"]);
+	});
+	it("waits for a build's save in flight before it deletes", async () => {
+		let release = () => {};
+		const held = trackSave(new Promise<void>((r) => (release = r)));
+		const clearing = clearVillage({ builds: true });
+		expect(clearingNow()).toBe(true);
+		await Promise.resolve();
+		expect(log).toEqual([]);
+		release();
+		await held;
+		expect(await clearing).toBe(true);
+		expect(log).toEqual(["delete village", "delete builds all", "cleared"]);
+		expect(clearingNow()).toBe(false);
+	});
+	it("still clears the world when village is read-only or gone (main's later steps), and not when builds are off", async () => {
+		for (const code of ["42501", "42P01", "PGRST205"]) {
+			log.length = 0;
+			deleteError = { code, message: "no village" };
+			expect(await clearVillage({ builds: true }), code).toBe(true);
+			expect(log).toEqual(["delete village", "delete builds all", "cleared"]);
+		}
+		deleteError = { code: "42501", message: "no village" };
+		expect(await clearVillage()).toBe(false);
+		deleteError = { code: "08006", message: "connection" };
+		expect(await clearVillage({ builds: true })).toBe(false);
+	});
+});

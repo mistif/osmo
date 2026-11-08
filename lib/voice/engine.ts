@@ -7,7 +7,7 @@ import { speechSeconds, trimSilence } from "./levels";
 import { detectorOn, greetDue, inConversation, initialVoice, micOpen, recognizerOn, step, type VoiceEvent, type VoiceState } from "./machine";
 import type { SampleRing } from "./ring";
 import { messageFrom, spokenSeconds } from "./utterance";
-import { bestScore, CARRY_OVER_SECONDS, judge, type Voiceprint } from "./voiceprint";
+import { bestScore, judgement, type Verdict, type Voiceprint } from "./voiceprint";
 
 export const MIC_BLOCKED = "I can't hear you. Allow the microphone for this site in your browser settings, then try again.";
 export const NO_MIC = "I can't find a microphone on this device.";
@@ -59,6 +59,9 @@ export type VoiceDeps = {
 	hear(hooks: HearHooks): Promise<Hearing>;
 	// A voice embedding for 16 kHz samples on the -1..1 scale.
 	embed(samples: Float32Array): Promise<number[]>;
+	// Optional: start loading what embed() needs (the 29.6 MB speaker model) without waiting for the first message.
+	// Failures are the dep's to swallow; embed() tries again on first use.
+	warmEmbed?(): void;
 	say(text: string, hooks: SayHooks): Spoken;
 	chime(): void;
 };
@@ -91,6 +94,20 @@ export type VoiceConfig = {
 	needTeaching(reason: "mic"): void;
 };
 
+// What the speaker check made of one spoken message. Scores and verdicts only, never the words.
+export type JudgementRecord = {
+	at: number;
+	// -1 when there was no reading.
+	score: number;
+	verdict: Verdict;
+	speaker: Speaker;
+	// The line that decided it (see voiceprint.ts).
+	threshold: number;
+	speechSeconds: number;
+};
+// How many records the engine keeps.
+export const JUDGEMENT_LOG_SIZE = 50;
+
 export type VoiceView = { state: VoiceState; liveText: string | null; error: string | null };
 
 export class VoiceEngine {
@@ -115,10 +132,16 @@ export class VoiceEngine {
 	private hidden = false;
 	private spoken: Spoken | null = null;
 	private speakingNow: object | null = null;
+	// The reply being spoken contains his name, so his own voice from the speakers must not wake him.
+	private selfNamed = false;
 	private liveText: string | null = null;
 	private error: string | null = null;
 	// Bumped by dispose(), so a mic or detector still loading from before it can't land on the fresh instance.
 	private generation = 0;
+	// True from dispose() until the next configure(): a reply landing after Lock (or an unmount) is not spoken.
+	private disposed = false;
+	// The last JUDGEMENT_LOG_SIZE speaker checks, oldest first. Kept across dispose(), so a remount doesn't lose them.
+	private readonly judgements: JudgementRecord[] = [];
 
 	constructor(deps: VoiceDeps, emit: (view: VoiceView) => void) {
 		this.deps = deps;
@@ -130,6 +153,7 @@ export class VoiceEngine {
 
 	readonly configure = (config: VoiceConfig): void => {
 		this.config = config;
+		this.disposed = false;
 		const want = config.listen && config.wakeReady;
 		if (want && config.prints.length === 0) {
 			// Listening needs a taught voice, so the second check always runs while the microphone is on.
@@ -137,9 +161,22 @@ export class VoiceEngine {
 			if (this.state.listening) this.send({ type: "listen", on: false, now: this.deps.now() });
 			return;
 		}
+		// Load the speaker model as listening switches on, not on the first judgement (seconds of download mid-conversation).
+		if (want && !this.state.listening) this.warmEmbed();
 		if (want !== this.state.listening) this.send({ type: "listen", on: want, now: this.deps.now() });
 		if (want && !this.detector && !this.detectorLoading) void this.loadDetector();
 	};
+
+	// Recent speaker checks, oldest first, for Settings to show so the thresholds can be set from real use.
+	readonly lastJudgements = (): readonly JudgementRecord[] => [...this.judgements];
+
+	private warmEmbed(): void {
+		try {
+			this.deps.warmEmbed?.();
+		} catch {
+			// Only a head start; the first judgement loads it again.
+		}
+	}
 
 	readonly micPress = (): void => {
 		const config = this.config;
@@ -173,7 +210,7 @@ export class VoiceEngine {
 
 	readonly onReply = (reply: string, via: Via): void => {
 		const config = this.config;
-		if (!config) return;
+		if (!config || this.disposed) return;
 		const wanted = (via === "voice" || config.speakTyped) && config.canSpeak;
 		const before = this.state;
 		const next = this.send({ type: "reply", via, spoken: wanted, now: this.deps.now() });
@@ -192,6 +229,7 @@ export class VoiceEngine {
 	// detector is kept (reloading the model is wasted when React StrictMode remounts the same engine).
 	readonly dispose = (): void => {
 		this.generation += 1;
+		this.disposed = true;
 		this.stopHearing();
 		this.mic?.close();
 		this.mic = null;
@@ -226,7 +264,8 @@ export class VoiceEngine {
 
 	private wantsMic(state: VoiceState): boolean {
 		if (this.hidden) return false;
-		return this.exclusive ? detectorOn(state) : micOpen(state);
+		// iPhone keeps today's behaviour: its microphone cannot run under his voice.
+		return this.exclusive ? detectorOn(state) && state.mode !== "speaking" : micOpen(state);
 	}
 
 	// Opens and closes what each mode needs.
@@ -235,6 +274,8 @@ export class VoiceEngine {
 		if (inConversation(before) && !inConversation(next)) this.exclusive = false;
 		// Waiting for his name again: forget the audio that woke him, or it wakes him twice.
 		if (next.mode === "sleeping" && before.mode !== "sleeping") this.detector?.reset();
+		// Same for the start of his speech: audio from before he began must not count toward waking him.
+		if (next.mode === "speaking" && before.mode !== "speaking") this.detector?.reset();
 		if (this.wantsMic(next)) {
 			if (!this.mic && !this.micOpening) void this.openMic();
 		} else if (this.mic) {
@@ -293,7 +334,9 @@ export class VoiceEngine {
 	}
 
 	private onWake(): void {
-		if (this.state.mode !== "sleeping" || this.hidden) return;
+		if (this.hidden) return;
+		const mode = this.state.mode;
+		if (mode !== "sleeping" && !(mode === "speaking" && !this.selfNamed)) return;
 		this.deps.chime();
 		const mark = this.mic ? Math.max(0, this.mic.ring.total - WAKE_AUDIO_SAMPLES) : 0;
 		this.send({ type: "wake", now: this.deps.now() });
@@ -391,10 +434,14 @@ export class VoiceEngine {
 				return null;
 			}
 		}
-		const speaker = judge({ score, speechSeconds: seconds, ownerSoFar: this.state.owner });
-		// Dev only, for tuning MATCH_THRESHOLD against real voices: how close this line was to Gur's voiceprints.
+		const prints = this.config?.prints ?? [];
+		const result = judgement({ score, speechSeconds: seconds, ownerSoFar: this.state.owner, ownerPrints: prints.length > 0 });
+		this.judgements.push({ at: this.deps.now(), score, verdict: result.verdict, speaker: result.speaker, threshold: result.threshold, speechSeconds: seconds });
+		if (this.judgements.length > JUDGEMENT_LOG_SIZE) this.judgements.splice(0, this.judgements.length - JUDGEMENT_LOG_SIZE);
+		const speaker = result.speaker;
+		// Dev only, for tuning the thresholds against real voices: how close this line was to Gur's voiceprints, and what was decided.
 		if (process.env.NODE_ENV !== "production") {
-			console.info(`[osmo voice] ${speaker} score=${score.toFixed(3)} speech=${seconds.toFixed(1)}s carried=${this.state.owner && seconds < CARRY_OVER_SECONDS} "${message}"`);
+			console.info(`[osmo voice] ${speaker} verdict=${result.verdict} score=${score.toFixed(3)} threshold=${result.threshold} speech=${seconds.toFixed(1)}s "${message}"`);
 		}
 		return speaker;
 	}
@@ -435,6 +482,8 @@ export class VoiceEngine {
 		if (!speech) return;
 		const token = {};
 		this.speakingNow = token;
+		// His own reply coming out of the speakers must not wake him when it says his name.
+		this.selfNamed = /\bosmo\b/i.test(text);
 		let timed = false;
 		speech.onSpeechStart();
 		const cancelWait = this.deps.later(() => {

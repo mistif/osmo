@@ -16,6 +16,11 @@ function speakerModel(): ReturnType<typeof loadModel> {
 	return model;
 }
 
+// Starts the download now, so the first judgement doesn't wait for 29.6 MB. A failure is forgotten and retried on first use.
+export function warmSpeakerModel(): void {
+	speakerModel().catch(() => undefined);
+}
+
 // A voice embedding for 16 kHz samples on the -1..1 scale.
 export async function voiceEmbedding(samples: Float32Array): Promise<number[]> {
 	const { ort, session } = await speakerModel();

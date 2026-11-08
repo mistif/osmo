@@ -1,10 +1,12 @@
-// When a run of detector scores counts as hearing "Osmo". Strict to start with: raise `threshold` if he still wakes too often.
+// When a run of detector scores counts as hearing "Osmo". openWakeWord's own default is one frame at 0.5; this stays a
+// touch stricter (one frame at 0.6). Two frames at 0.7 was too strict for a real voice through a laptop mic: a quickly said
+// two-syllable word seldom gives two confident frames in a row. Raise `threshold` if he wakes too often.
 
 export const WAKE = {
 	// A frame this sure or more counts.
-	threshold: 0.7,
-	// This many counting frames in a row wake him (2 × 80 ms).
-	frames: 2,
+	threshold: 0.6,
+	// This many counting frames in a row wake him (80 ms each).
+	frames: 1,
 	// No second wake-up within this long.
 	cooldownMs: 2000,
 	// After waking, he goes back to sleep if no speech starts within this long.

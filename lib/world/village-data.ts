@@ -1,0 +1,99 @@
+// The village table (spec 4): one read per visit, an upsert per save, and Settings' "Clear the village". Rows are the
+// owner's only (RLS). The import is relative so the test can stand in for the client.
+import { supabase } from "../supabase";
+import { CASTLE_ROOMS } from "./blueprints/types";
+import { BUILDS } from "./flags";
+import { isVillageRow, saveRow, type RoomProgress, type VillageRow } from "./progress";
+
+// Sent on window once the rows are gone; the world drops what it holds and reads the village again. Other open tabs
+// hear it through localStorage (a "storage" event for CLEARED_KEY), so they stop saving their old counts too.
+export const VILLAGE_CLEARED = "osmo:village-cleared";
+export const CLEARED_KEY = "osmo-village-cleared";
+// While a clear runs no save starts, and the clear first waits for a save already on its way, so an old count can never
+// land after the rows are deleted. (The table's trigger guards updates only; a clear is a delete, so nothing stops it.)
+let clearing = false;
+let inFlight: Promise<unknown> = Promise.resolve();
+// A clear that never settles (a stalled fetch) must not hold every save of this tab: after this long it gives up, says
+// so once, and saves start again. (A delete that lands late is found by the world's re-read when the page is shown again.)
+export const CLEAR_TIMEOUT_MS = 10_000;
+// Postgres 42501 (no permission) and 42P01 / PostgREST PGRST205 (no such table).
+const GONE_OR_LOCKED: readonly string[] = ["42501", "42P01", "PGRST205"];
+
+// ok is false when it could not be read (a network error, or the table is not migrated yet): then he does not build
+// and nothing is saved this visit, rather than building on a count that may be wrong.
+export async function loadVillage(): Promise<{ rows: VillageRow[]; ok: boolean }> {
+	const r = await supabase.from("village").select("room,laid,started_at,finished_at");
+	if (r.error) return { rows: [], ok: false };
+	return { rows: ((r.data ?? []) as unknown[]).filter(isVillageRow), ok: true };
+}
+
+// user_id comes from the column default (auth.uid()), as the room's other upserts do. True when it was saved; false
+// when it failed or a clear is running.
+export async function saveRoom(p: RoomProgress): Promise<boolean> {
+	if (clearing) return false;
+	const run = Promise.resolve(supabase.from("village").upsert(saveRow(p), { onConflict: "user_id,room" }));
+	inFlight = run.catch(() => undefined);
+	const { error } = await run;
+	if (error) console.error("Could not save the village", error);
+	return !error;
+}
+
+// A save of the builds table (builds-data.ts) a clear must wait for, as it waits for the village's own saves.
+export function trackSave<T>(run: Promise<T>): Promise<T> {
+	inFlight = run.catch(() => undefined);
+	return run;
+}
+export const clearingNow = (): boolean => clearing;
+
+// Deletes every room of Gur's village. True when the rows are gone (also when there were none). With builds on (Clear
+// the world, spec 4.9), every build is deleted too, after the village rows, the castle's rooms included; the islands
+// (the world row) stay; a village that is read-only or gone counts as cleared.
+export async function clearVillage(opts: { builds?: boolean } = {}): Promise<boolean> {
+	if (clearing) return false;
+	const builds = opts.builds ?? BUILDS;
+	clearing = true;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	try {
+		const late = new Promise<"late">((resolve) => {
+			timer = setTimeout(() => resolve("late"), CLEAR_TIMEOUT_MS);
+		});
+		const gone = (async () => {
+			await inFlight;
+			// The village first: when its delete fails nothing is lost and a second try clears both. Builds last, so the
+			// castle rows builds holds (copied from village) are never gone while village rows that could come back stay.
+			const v = await supabase.from("village").delete().in("room", [...CASTLE_ROOMS]);
+			if (!builds) return v;
+			// No permission (main made village read-only) or no such table (main dropped it): the builds are what Clear the
+			// world clears. The old rows that stay are never carried back (state.ts castleCarry: builds then holds no copied row).
+			if (v.error && !GONE_OR_LOCKED.includes(v.error.code)) return v;
+			return await supabase.from("builds").delete().not("id", "is", null);
+		})();
+		gone.catch(() => undefined); // if the timer wins, a later failure of the delete is not an unhandled rejection
+		const result = await Promise.race([gone, late]);
+		if (result === "late") {
+			console.warn("[village] The village did not clear in time, so saving carries on.");
+			return false;
+		}
+		const { error } = result;
+		if (error) {
+			console.error("Could not clear the village", error);
+			return false;
+		}
+		// Before `clearing` ends, so the world has dropped its counts before any save can start again.
+		if (typeof window !== "undefined") {
+			window.dispatchEvent(new Event(VILLAGE_CLEARED));
+			try {
+				window.localStorage.setItem(CLEARED_KEY, new Date().toISOString());
+			} catch {
+				/* no storage: other tabs learn of it on their next visit */
+			}
+		}
+		return true;
+	} catch (err) {
+		console.error("Could not clear the village", err);
+		return false;
+	} finally {
+		clearTimeout(timer);
+		clearing = false;
+	}
+}

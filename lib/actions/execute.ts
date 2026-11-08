@@ -1,0 +1,43 @@
+// One run, no retry; the log row is written either way.
+import type { OwnerDb } from "../server/admin";
+import { type ActionStatus, writeAction } from "./log";
+import { crisisSince } from "./profile";
+import type { ActionOutcome, Def, RunCtx, RunResult, Surface } from "./types";
+
+export type Logger = (status: ActionStatus, summary: string, error?: string | null) => Promise<unknown>;
+
+export const logger =
+	(db: OwnerDb, def: Def, surface: Surface, pendingId: string | null = null): Logger =>
+	(status, summary, error = null) =>
+		writeAction(db, { surface, connector: def.connector, name: def.name, tier: def.tier, status, summary, error, pending_id: pendingId });
+
+// What the log says about a done run: the def's own line, else what was said. A throwing logLine falls back to describe.
+function logLine(def: Def, args: unknown, r: RunResult, rc: RunCtx): string {
+	if (!def.logLine) return r.say;
+	try {
+		return def.logLine(args, r, rc);
+	} catch {
+		return def.describe(args);
+	}
+}
+
+const STOPPED = "I stopped before doing that.";
+
+// A crisis recorded after rc.now (when this run began) stops it: before the def's run nothing is done and the log says
+// cancelled; after the run (its effect cannot be taken back) the log stays true, but no result for call 2 and no build ticket go on.
+export async function execute(def: Def, args: unknown, rc: RunCtx, log: Logger): Promise<ActionOutcome> {
+	try {
+		if (await crisisSince(rc.db, rc.now)) {
+			await log("cancelled", def.describe(args), "crisis");
+			return { kind: "failed", line: STOPPED };
+		}
+		const r = await def.run(args, rc);
+		const late = await crisisSince(rc.db, rc.now);
+		const logged = await log(r.ok ? "done" : "failed", r.ok ? logLine(def, args, r, rc) : def.describe(args), r.ok ? null : "run"); // a failed say can quote the user's words (a place, a note), so the log gets the def's text-free line
+		if (!r.ok) return { kind: "failed", line: r.say };
+		return { kind: "done", line: r.say, result: late ? null : r.result, ...(r.ticket && !late ? { ticket: { brief: r.ticket.brief, actionId: typeof logged === "number" ? logged : null } } : {}) };
+	} catch {
+		await log("failed", def.describe(args), "exception");
+		return { kind: "failed", line: "That did not work just now." };
+	}
+}

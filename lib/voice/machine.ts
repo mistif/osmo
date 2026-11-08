@@ -54,7 +54,8 @@ function rest(s: VoiceState, now: number): VoiceState {
 export const inConversation = (s: VoiceState) =>
 	s.mode === "awake" || s.mode === "thinking" || s.mode === "speaking" || s.mode === "followup";
 
-export const detectorOn = (s: VoiceState) => s.mode === "sleeping";
+// The detector also runs while he speaks, so saying his name interrupts him.
+export const detectorOn = (s: VoiceState) => s.mode === "sleeping" || s.mode === "speaking";
 export const recognizerOn = (s: VoiceState) => s.mode === "awake" || s.mode === "followup";
 // The microphone, and the listening line under the text box, are on exactly when one of them runs.
 // A guest is greeted again only after this long without one.
@@ -71,7 +72,7 @@ export function step(s: VoiceState, e: VoiceEvent): VoiceState {
 			return s.mode === "off" ? { ...s, listening: true, mode: "sleeping", since: e.now } : { ...s, listening: true };
 		}
 		case "wake":
-			return s.mode === "sleeping" ? { ...s, mode: "awake", since: e.now, heard: false } : s;
+			return s.mode === "sleeping" || s.mode === "speaking" ? { ...s, mode: "awake", since: e.now, heard: false } : s;
 		case "mic":
 			return s.mode === "off" || s.mode === "sleeping" || s.mode === "followup" ? { ...s, mode: "awake", since: e.now, heard: false } : s;
 		case "speech":

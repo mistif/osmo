@@ -1,0 +1,273 @@
+// Him (spec 3), pure. The world feeds him events and ticks and tells him where the next block is; he answers with
+// what he is doing and whether he laid a block this step. He never teleports: one tick moves him at most MAX_DT of
+// walking, and a hidden tab freezes him where he is.
+import { FOLLOW_UP_MS } from "../voice/machine";
+import { GROUND_Y, TILE } from "./blueprints/types";
+import type { BalloonPath, Ride } from "./map/types";
+import type { FaceId, FrameName, Gaze } from "./osmo-sprite";
+import { isNight } from "./sky";
+import { pathAt } from "./travel/travel";
+
+export { FOLLOW_UP_MS };
+export type ActorKind = "idle" | "walking" | "building" | "turning" | "facing" | "resting" | "riding";
+export type Talk = "quiet" | "listening" | "speaking";
+type Purpose = "build" | "rest" | "visit";
+export type Actor = {
+	kind: ActorKind;
+	x: number; // his feet's centre, world px
+	y: number; // his feet, world px: the top edge of the tile he stands on (the small world: its snow row)
+	island: number; // the island he is on (0 is home, the small world's only one)
+	ride: Ride | null; // the balloon trip he is on, while riding (T10)
+	dir: 1 | -1; // the way his profile faces
+	since: number; // when this kind began (ms); drives the animation
+	target: number | null;
+	purpose: Purpose | null;
+	toward: "viewer" | "work"; // which way a turn goes; "viewer" also while facing
+	talk: Talk;
+	quietSince: number; // the last message, or the end of his last reply
+	lastMessage: number | null;
+	nextAt: number; // the earliest he may start the next block
+	night: boolean;
+	hidden: boolean;
+};
+export type ActorEvent =
+	| { type: "message"; now: number }
+	| { type: "reply"; now: number }
+	| { type: "replyDone"; now: number }
+	| { type: "rest"; now: number }
+	| { type: "tick"; now: number; dt: number }
+	| { type: "hour"; now: number; hour: number }
+	| { type: "visible"; now: number }
+	| { type: "hidden"; now: number }
+	// The balloon takes him along `path` to `island` (free-will spec 4.6). Taken only while he is idle or walking; he
+	// then rides from path.from. While riding a message, a reply or the night do not turn him or stop him, a hidden tab
+	// freezes him in the air, and each tick moves him at most MAX_DT along the path. At the end he stands at path.to.
+	| { type: "ride"; now: number; path: BalloonPath; island: number };
+// What the world tells him on each step.
+export type ActorWorld = {
+	next: number | null; // where he stands to lay the next block (world px); null when nothing is left to build
+	restX: number; // where he sits at night (the hall's step, since phase 2)
+	speed: number; // world px per second (face.ts)
+	held: boolean; // the conversation is still open: the voice is in conversation, he is thinking, or speaking
+	visit?: number | null; // phase 2: the room whose panel is open (world px); he goes there and waits, even at night
+	yard?: number | null; // phase 2: where he waits when nothing is left to build (the yard before the hall)
+	// The big world (free-will spec 3.4). Without these three he keeps his height and island, as in the small world.
+	floor?: (x: number) => number | null; // the world px y of his feet at world px x; null over open sky (he stops short of it)
+	islandOf?: (x: number) => number | null; // the island under world px x; null over a deck or the sky (he keeps his island)
+	via?: number | null; // a waypoint on his island on the way to another: he walks there and stands; it comes after the open
+	// panel's room and the night's rest, and before the next block
+};
+export type Step = { actor: Actor; laid: boolean };
+
+export const TURN_MS = 300;
+export const LAY_MS = 1200;
+export const BLOCK_GAP_MS = 1800;
+export const PRESENT_MS = 10 * 60_000;
+export const MAX_DT = 250;
+
+export function newActor(x: number, now: number, hour: number, at: { y: number; island: number } = { y: GROUND_Y * TILE, island: 0 }): Actor {
+	return {
+		kind: "idle", x, y: at.y, island: at.island, ride: null, dir: 1, since: now, target: null, purpose: null, toward: "work", talk: "quiet",
+		quietSince: now, lastMessage: null, nextAt: now, night: isNight(hour), hidden: false,
+	};
+}
+
+export const facingViewer = (a: Actor): boolean => a.kind === "facing" || (a.kind === "turning" && a.toward === "viewer");
+const present = (a: Actor, now: number) => a.lastMessage !== null && now - a.lastMessage < PRESENT_MS;
+const turn = (a: Actor, toward: "viewer" | "work", now: number): Actor => ({ ...a, kind: "turning", toward, since: now, target: null, purpose: null });
+
+export function step(a: Actor, e: ActorEvent, w: ActorWorld): Step {
+	const to = (actor: Actor): Step => ({ actor, laid: false });
+	if (e.type === "hour") return to({ ...a, night: isNight(e.hour) });
+	if (e.type === "visible") return to({ ...a, hidden: false, since: e.now, nextAt: e.now + BLOCK_GAP_MS, quietSince: e.now });
+	if (a.hidden) return to(a);
+	switch (e.type) {
+		case "hidden":
+			return to({ ...a, kind: a.kind === "resting" || a.kind === "riding" ? a.kind : "idle", hidden: true, since: e.now, target: null, purpose: null, toward: "work", talk: "quiet" });
+		case "ride":
+			return to(
+				a.kind === "idle" || a.kind === "walking"
+					? {
+							...a, kind: "riding", since: e.now, target: null, purpose: null, ride: { path: e.path, t: 0, island: e.island },
+							x: e.path.from.x, y: e.path.from.y, dir: e.path.to.x >= e.path.from.x ? 1 : -1,
+						}
+					: a,
+			);
+		case "message": {
+			const talk: Talk = a.talk === "speaking" ? "speaking" : "listening";
+			const heard: Actor = { ...a, talk, quietSince: e.now, lastMessage: e.now };
+			return to(facingViewer(a) || a.kind === "riding" ? heard : turn(heard, "viewer", e.now));
+		}
+		case "reply": {
+			const speaking: Actor = { ...a, talk: "speaking", quietSince: e.now };
+			return to(facingViewer(a) || a.kind === "riding" ? speaking : turn(speaking, "viewer", e.now));
+		}
+		case "replyDone":
+			return to({ ...a, talk: "quiet", quietSince: e.now });
+		case "rest":
+			return to(facingViewer(a) && a.talk !== "speaking" && !w.held ? turn({ ...a, talk: "quiet" }, "work", e.now) : a);
+		case "tick":
+			return tick(a, e.now, Number.isFinite(e.dt) ? Math.min(MAX_DT, Math.max(0, e.dt)) : 0, w);
+	}
+}
+
+// Where he wants to be and why, in this order: the room Gur opened, the bench at night, the waypoint toward another island
+// (big world), the next block (once the gap after the last one has passed, unless he is already on his way), or the yard
+// when nothing is left to build.
+function want(a: Actor, now: number, w: ActorWorld, onTheWay: boolean): { goal: number; purpose: Purpose } | null {
+	if (w.visit != null) return { goal: w.visit, purpose: "visit" };
+	if (a.night && !present(a, now)) return { goal: w.restX, purpose: "rest" };
+	if (w.via != null) return { goal: w.via, purpose: "visit" };
+	if (w.next !== null) return onTheWay || now >= a.nextAt ? { goal: w.next, purpose: "build" } : null;
+	return w.yard != null ? { goal: w.yard, purpose: "visit" } : null;
+}
+
+function tick(a: Actor, now: number, dt: number, w: ActorWorld): Step {
+	const to = (actor: Actor, laid = false): Step => ({ actor, laid });
+	const idle = (x: Actor): Actor => ({ ...x, kind: "idle", since: now, target: null, purpose: null, toward: "work" });
+	const restWanted = a.night && !present(a, now);
+	const visiting = w.visit != null;
+	// Arriving: kneel at a block, sit at the bench, or just stand at a room or in the yard. In the big world his feet go to
+	// the floor and the island there; with no floor under the goal he stops where he is instead.
+	const arrive = (x: Actor, goal: number, purpose: Purpose): Actor => {
+		const fy = w.floor ? w.floor(goal) : x.y;
+		if (fy === null) return idle(x);
+		const there: Actor = { ...x, x: goal, y: fy, island: w.islandOf?.(goal) ?? x.island };
+		return purpose === "visit" ? idle(there) : { ...there, kind: purpose === "rest" ? "resting" : "building", since: now, target: null, purpose: null };
+	};
+	switch (a.kind) {
+		case "turning":
+			if (now - a.since < TURN_MS) return to(a);
+			return to(a.toward === "viewer" ? { ...a, kind: "facing", since: now } : { ...idle(a), nextAt: now });
+		case "facing":
+			if (a.talk === "speaking" || w.held || now - a.quietSince < FOLLOW_UP_MS) return to(a);
+			return to(turn({ ...a, talk: "quiet" }, "work", now));
+		case "resting":
+			return to(restWanted && !visiting ? a : idle(a));
+		case "idle": {
+			const g = want(a, now, w, false);
+			if (g === null) return to(a);
+			if (Math.abs(g.goal - a.x) < 0.5) return to(g.purpose === "visit" ? a : arrive(a, g.goal, g.purpose));
+			return to({ ...a, kind: "walking", since: now, target: g.goal, purpose: g.purpose, dir: g.goal > a.x ? 1 : -1 });
+		}
+		case "walking": {
+			// The goal may change under him (the next block, another room, nightfall): follow it while the reason is the
+			// same, or stop where he is and choose again on the next tick.
+			const g = want(a, now, w, true);
+			if (g === null || g.purpose !== a.purpose) return to(idle(a));
+			const stride = (w.speed * dt) / 1000;
+			const gap = g.goal - a.x;
+			if (Math.abs(gap) <= stride) return to(arrive(a, g.goal, g.purpose));
+			const nx = a.x + Math.sign(gap) * stride;
+			const fy = w.floor ? w.floor(nx) : a.y;
+			if (fy === null) return to(idle(a)); // the island ends here: he never walks into the sky
+			return to({ ...a, x: nx, y: fy, island: w.islandOf?.(nx) ?? a.island, target: g.goal, dir: gap > 0 ? 1 : -1 });
+		}
+		case "building":
+			if (visiting || restWanted || w.next === null || Math.abs(w.next - a.x) >= 0.5) return to(idle(a));
+			if (now - a.since < LAY_MS) return to(a);
+			return to({ ...idle(a), nextAt: now + BLOCK_GAP_MS }, true);
+		case "riding": {
+			// The balloon's clock is the ticks' (each at most MAX_DT), never the wall clock, so a sleeping laptop does not
+			// fling him across the world.
+			const r = a.ride;
+			if (!r) return to(idle(a));
+			const t = r.t + dt;
+			const p = pathAt(r.path, t);
+			const dir: 1 | -1 = r.path.to.x >= r.path.from.x ? 1 : -1;
+			if (p.done) return to({ ...idle(a), x: r.path.to.x, y: r.path.to.y, island: r.island, ride: null, dir });
+			return to({ ...a, x: p.x, y: p.y, ride: { ...r, t }, dir });
+		}
+	}
+}
+
+// blink: his eyes are shut this frame (the face's blink cell). trail: which of the scarf's two trailing cells streams
+// behind him (walking only), or null.
+export type Look = { frame: FrameName; flip: boolean; face: FaceId | null; gaze: Gaze; blink: boolean; trail: 0 | 1 | null };
+const WALK: readonly FrameName[] = ["walk-1", "walk-2", "walk-3", "walk-4", "walk-5", "walk-6"];
+const BUILD: readonly FrameName[] = ["build-1", "build-2", "build-3", "build-4"];
+const TURN: readonly FrameName[] = ["turn-1", "turn-2", "turn-3"];
+// While he speaks his eyes go slightly off Gur and back: 600 ms away in every 2.4 s.
+const speakingGaze = (t: number): Gaze => (Math.floor(t / 600) % 4 === 1 ? 1 : 0);
+
+// The polish pass: he breathes and blinks, and his scarf trails as he walks. Breathing in (idle-2 and face-2, the
+// shoulders a pixel up) lasts BREATH_IN_MS at the end of every BREATH_MS. A blink shuts his eyes for BLINK_MS once in
+// every BLINK_WINDOW_MS, at an offset in its first BLINK_SPREAD_MS taken from a fixed hash of the window's number, so
+// two blinks are always 3 to 6 s apart and every run blinks the same. The scarf's two trailing cells swap every
+// TRAIL_MS, out of step with his 100 ms stride so it flutters.
+export const BREATH_MS = 3200;
+export const BREATH_IN_MS = 700;
+export const BLINK_WINDOW_MS = 4500;
+export const BLINK_SPREAD_MS = 1500;
+export const BLINK_MS = 140;
+export const TRAIL_MS = 160;
+const blinkOffset = (n: number): number => {
+	let h = Math.imul(n + 1, 0x9e3779b1) >>> 0;
+	h = Math.imul(h ^ (h >>> 16), 0x85ebca6b) >>> 0;
+	return ((h ^ (h >>> 13)) >>> 0) % BLINK_SPREAD_MS;
+};
+const blinkStart = (n: number): number => n * BLINK_WINDOW_MS + blinkOffset(n);
+// True while a blink is on at this clock time (ms).
+export function blinking(now: number): boolean {
+	if (!Number.isFinite(now)) return false;
+	const t = now - blinkStart(Math.floor(now / BLINK_WINDOW_MS));
+	return t >= 0 && t < BLINK_MS;
+}
+const breathingIn = (t: number): boolean => t % BREATH_MS >= BREATH_MS - BREATH_IN_MS;
+
+// The frame to draw now. `face` comes from his mood (face.ts) and shows only toward the viewer. motion is false under
+// reduced motion: no breathing and no blink, so a still frame stays still.
+export function look(a: Actor, now: number, face: FaceId, motion = true): Look {
+	const t = Math.max(0, now - a.since);
+	const flip = a.dir < 0;
+	const still = { blink: false, trail: null };
+	const cycle = (names: readonly FrameName[], ms: number) => names[Math.floor(t / ms) % names.length];
+	switch (a.kind) {
+		case "walking":
+			return { frame: cycle(WALK, 100), flip, face: null, gaze: 0, blink: false, trail: Math.floor(t / TRAIL_MS) % 2 === 0 ? 0 : 1 };
+		case "building":
+			return { frame: cycle(BUILD, LAY_MS / BUILD.length), flip, face: null, gaze: 0, ...still };
+		case "resting":
+			return { frame: "sit-1", flip: false, face: null, gaze: 0, ...still };
+		case "riding":
+			return { frame: "idle-1", flip: a.dir < 0, face: null, gaze: 0, blink: false, trail: null };
+		case "turning": {
+			const order = a.toward === "viewer" ? TURN : [...TURN].reverse();
+			const frame = order[Math.min(2, Math.floor(t / (TURN_MS / 3)))];
+			return { frame, flip, face: frame === "turn-3" ? face : null, gaze: 0, ...still };
+		}
+		case "facing":
+			return {
+				frame: motion && breathingIn(t) ? "face-2" : "face-1", flip: false, face, gaze: a.talk === "speaking" ? speakingGaze(t) : 0,
+				blink: motion && blinking(now), trail: null,
+			};
+		default:
+			return { frame: motion && breathingIn(t) ? "idle-2" : "idle-1", flip, face: null, gaze: 0, ...still };
+	}
+}
+
+// How long until his look changes by itself while he stands (a breath, a blink), so the loop can wake for it instead
+// of drawing frames; null when nothing of him moves on its own (or under reduced motion, or hidden). Walking,
+// building, turning and speaking already run at frame pace.
+export function nextLookIn(a: Actor, now: number, motion = true): number | null {
+	if (!motion || a.hidden || (a.kind !== "idle" && a.kind !== "facing")) return null;
+	const into = Math.max(0, now - a.since) % BREATH_MS;
+	const edge = BREATH_MS - BREATH_IN_MS;
+	let ms = into < edge ? edge - into : BREATH_MS - into;
+	if (a.kind === "facing" && Number.isFinite(now)) {
+		const n = Math.floor(now / BLINK_WINDOW_MS);
+		const start = blinkStart(n);
+		const blinkEdge = now < start ? start - now : now < start + BLINK_MS ? start + BLINK_MS - now : blinkStart(n + 1) - now;
+		ms = Math.min(ms, blinkEdge);
+	}
+	return Math.max(1, Math.ceil(ms));
+}
+
+// A still pose of any state, for /dev/world.
+export function pose(kind: ActorKind, x: number, now: number, hour = 12): Actor {
+	const a = newActor(x, now, hour);
+	if (kind === "walking") return { ...a, kind, target: x + 64, purpose: "build" };
+	if (kind === "turning") return { ...a, kind, toward: "viewer" };
+	if (kind === "facing") return { ...a, kind, toward: "viewer", talk: "speaking" };
+	return { ...a, kind };
+}

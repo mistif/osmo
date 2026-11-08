@@ -1,0 +1,347 @@
+/* The thing beside Osmo (thing-panel.tsx): drawn in as the source arrives, then the live frame. Spec 6.
+   Colours, --pulse and --build-progress come from the room's stage; --build-blocks is set on the panel.
+   data-built on the stage (1.6 s after a build renders) triggers the settle. */
+
+.panel {
+	--line: color-mix(in oklab, var(--aura-a) 85%, white);
+	display: flex;
+	flex-direction: column;
+	gap: 0.6rem;
+	min-width: 0;
+	padding: 0.75rem;
+	color: var(--bone);
+	background: color-mix(in oklab, var(--aura-a) 14%, var(--base));
+	border: 1px solid color-mix(in oklab, var(--aura-a) 40%, transparent);
+	border-radius: 1.1rem;
+	box-shadow: 0 0 1rem color-mix(in oklab, var(--aura-a) 22%, transparent);
+	animation: arrive 0.4s ease-out both;
+}
+
+/* Phones and narrow windows: a card above the composer, about a third of the screen high. */
+.panel {
+	flex: none;
+	max-height: 34svh;
+	overflow: hidden;
+}
+
+/* Wide screens: to the right of the conversation, in the space beside his aura. */
+@media (min-width: 80rem) {
+	.panel {
+		position: fixed;
+		z-index: 1;
+		right: 2rem;
+		top: 7rem;
+		width: min(26rem, calc((100vw - 40rem) / 2 - 3rem));
+		max-height: 70svh;
+	}
+}
+
+.head {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+}
+.title {
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+	font-size: 1rem;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tool {
+	flex: none;
+	font: inherit;
+	font-size: 0.85rem;
+	color: var(--bone);
+	opacity: 0.65;
+	background: none;
+	border: 0;
+	padding: 0.15rem 0.1rem;
+	cursor: pointer;
+}
+.tool:hover {
+	opacity: 1;
+}
+.tool:focus-visible,
+.tap:focus-visible {
+	outline: 2px solid var(--aura-a);
+	outline-offset: 3px;
+}
+
+.note {
+	margin: 0;
+	font-size: 0.9rem;
+	line-height: 1.4;
+	color: color-mix(in oklab, var(--bone) 85%, transparent);
+}
+
+.bar {
+	flex: none;
+	display: flex;
+	gap: 1rem;
+}
+
+/* ---------- the outline: twelve strokes that draw in as the source arrives ---------- */
+.sketch {
+	position: relative;
+	width: 100%;
+	aspect-ratio: 3 / 2;
+	max-height: 22svh;
+	overflow: hidden;
+	border-radius: 0.6rem;
+}
+.sketch svg {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+.slot {
+	fill: none;
+	stroke: var(--line);
+	stroke-width: 1.5;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	stroke-dasharray: 1 2;
+	/* --build-blocks counts the elements written so far; slot i is whole once it reaches i + 1. */
+	stroke-dashoffset: clamp(0, calc(1.05 - (var(--build-blocks, 0) - var(--i))), 1.05);
+	transition: stroke-dashoffset 400ms ease;
+}
+
+/* A wash of his colour rises from the bottom: nothing before 0.2, full at 1, smoothed. */
+.wash {
+	--p: clamp(0, calc((var(--build-progress, 0) - 0.2) / 0.8), 1);
+	--eased: calc(var(--p) * var(--p) * (3 - 2 * var(--p)));
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(to top, color-mix(in oklab, var(--aura-a) 60%, transparent), transparent 90%);
+	transform-origin: 50% 100%;
+	transform: scaleY(var(--eased));
+	opacity: calc(var(--eased) * 0.7);
+	transition:
+		transform 160ms linear,
+		opacity 160ms linear;
+}
+
+/* A soft highlight crosses the sketch once per pulse. */
+.sweep {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 0;
+	width: 35%;
+	background: linear-gradient(100deg, transparent, color-mix(in oklab, white 20%, transparent), transparent);
+	animation: sweep var(--pulse, 3s) ease-in-out infinite;
+}
+
+.progress {
+	width: 100%;
+	height: 0.4rem;
+	accent-color: var(--aura-a);
+}
+
+/* Building: the panel's glow breathes with the same --pulse as the orbs and his heart. */
+.panel[data-thing-state="building"] {
+	animation:
+		arrive 0.4s ease-out both,
+		glow var(--pulse, 3s) ease-in-out 0.4s infinite;
+}
+
+/* The settle: one slow swell, and the sketch dissolves into the live frame. */
+/* arrive stays in the list in every state, so it never restarts when the others come and go. */
+[data-built] .panel[data-thing-state="ready"] {
+	animation:
+		arrive 0.4s ease-out both,
+		swell calc(var(--pulse, 3s) / 2) ease-in-out 1;
+}
+.dissolve {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	animation: dissolve 500ms ease forwards;
+}
+.dissolve .sketch {
+	position: absolute;
+	inset: 0;
+	max-height: none;
+	aspect-ratio: auto;
+	background: color-mix(in oklab, var(--aura-a) 14%, var(--base));
+}
+
+/* ---------- the live frame ---------- */
+.frameWrap {
+	position: relative;
+	min-height: 6rem;
+	max-height: 26svh;
+	overflow: hidden;
+	border-radius: 0.6rem;
+}
+.frameWrap iframe {
+	pointer-events: none;
+	display: block;
+}
+/* On a phone the card is a button: a tap opens the thing full screen. */
+.tap {
+	position: absolute;
+	inset: 0;
+	background: none;
+	border: 0;
+	cursor: pointer;
+}
+@media (min-width: 80rem) {
+	.frameWrap {
+		max-height: 56svh;
+		overflow: auto;
+	}
+	.frameWrap iframe {
+		pointer-events: auto;
+	}
+	.tap {
+		display: none;
+	}
+}
+
+.chip {
+	display: inline-block;
+	max-width: 14rem;
+	padding: 0.25rem 0.7rem;
+	font-size: 0.85rem;
+	color: var(--bone);
+	background: color-mix(in oklab, var(--aura-a) 20%, var(--base));
+	border: 1px solid color-mix(in oklab, var(--aura-a) 40%, transparent);
+	border-radius: 999px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.chipSlot {
+	flex: none;
+}
+@media (min-width: 80rem) {
+	.chipSlot {
+		position: fixed;
+		z-index: 1;
+		right: 1.5rem;
+		top: 6rem;
+	}
+}
+
+.floating {
+	margin: 0;
+	font-size: 0.9rem;
+	color: color-mix(in oklab, var(--bone) 80%, transparent);
+}
+
+/* ---------- full screen ---------- */
+.overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 20;
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+	padding: 1rem;
+	background: var(--base);
+	color: var(--bone);
+	animation: arrive 0.25s ease-out both;
+}
+.overlayBody {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+}
+.overlayBody iframe {
+	pointer-events: auto;
+	display: block;
+}
+
+.sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+	border: 0;
+}
+
+@keyframes arrive {
+	from {
+		opacity: 0;
+		translate: 0 0.4rem;
+	}
+	to {
+		opacity: 1;
+		translate: 0 0;
+	}
+}
+@keyframes glow {
+	0%,
+	100% {
+		box-shadow: 0 0 0.6rem color-mix(in oklab, var(--aura-a) 18%, transparent);
+	}
+	50% {
+		box-shadow: 0 0 1.7rem color-mix(in oklab, var(--aura-a) 48%, transparent);
+	}
+}
+@keyframes sweep {
+	from {
+		translate: -100% 0;
+	}
+	to {
+		translate: 300% 0;
+	}
+}
+@keyframes swell {
+	0%,
+	100% {
+		scale: 1;
+	}
+	50% {
+		scale: 1.03;
+	}
+}
+@keyframes dissolve {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0;
+		visibility: hidden;
+	}
+}
+@keyframes fade {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+/* Reduced motion: no drawing, no pulse, no swell. A still outline while it builds, a plain fade when it is ready. */
+@media (prefers-reduced-motion: reduce) {
+	.panel,
+	.panel[data-thing-state="building"],
+	[data-built] .panel[data-thing-state="ready"],
+	.overlay {
+		animation: fade 0.2s linear both;
+	}
+	.slot {
+		stroke-dashoffset: 0;
+		opacity: 0.35;
+		transition: none;
+	}
+	.wash,
+	.sweep,
+	.dissolve {
+		display: none;
+	}
+}

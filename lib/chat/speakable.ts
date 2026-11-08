@@ -39,8 +39,12 @@ const SAYABLE = /[\p{L}\p{N}]/u;
 // ("**Crisis.**"), or the all-uppercase word stands alone ("CRISIS I'm sorry…").
 // "Crisis management is a field…" is neither.
 export function isCrisisFlag(raw: string): boolean {
-	return raw.replace(/\P{L}/gu, "").toLowerCase() === "crisis" || CRISIS_WORD.test(raw);
+	return spellsCrisis(raw) || hasCrisisWord(raw);
 }
+// The reply's letters alone spell CRISIS, in any case.
+export const spellsCrisis = (raw: string): boolean => raw.replace(/\P{L}/gu, "").toLowerCase() === "crisis";
+// The all-uppercase word CRISIS stands alone somewhere in the text.
+export const hasCrisisWord = (raw: string): boolean => CRISIS_WORD.test(raw);
 
 // Where each sentence of the text ends, as offsets just past its closing marks.
 function sentenceEnds(text: string): number[] {
@@ -104,6 +108,12 @@ function fitted(text: string): string {
 		if (kept.length <= MAX_REPLY_CHARS) return kept;
 	}
 	return cutAtWord(text.slice(0, cuts[0]));
+}
+
+// Whether speakable keeps all of the text: no sentence dropped and none cut to fit what Osmo says.
+export function saidWhole(raw: string): boolean {
+	const text = plain(raw);
+	return fitted(text) === text;
 }
 
 // The reply as Osmo says it, or "" when nothing speakable is left.

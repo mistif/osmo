@@ -5,7 +5,7 @@ describe("vary", () => {
 	it("rotates words from its sets by turn, keeping capitals", () => {
 		expect(vary("That sounds difficult.", 0)).toBe("That sounds difficult.");
 		expect(vary("That sounds difficult.", 1)).toBe("That sounds hard.");
-		expect(vary("Understood. What's next?", 1)).toBe("Noted. What's next?");
+		expect(vary("Understood. What is next?", 1)).toBe("Very well. What is next?");
 		expect(vary("I'm glad you're feeling good.", 1)).toBe("I'm pleased you're feeling good.");
 	});
 

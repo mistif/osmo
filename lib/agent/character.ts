@@ -1,3 +1,4 @@
+import { CHARACTER_BASELINE } from "./baseline";
 import { DEFAULT_WEIGHTS, type Activations, type Weights } from "./state";
 
 // Osmo's one character (spec 2): composed, precise, understated, dry in rare light moments. Plain data.
@@ -13,7 +14,7 @@ export type Character = {
 
 export const CHARACTER: Character = {
 	seed: 1,
-	baseline: { joy: 0.5, sadness: 0.1, anger: 0.05, fear: 0.08, trust: 0.65, disgust: 0.08, surprise: 0.12, love: 0.2, hope: 0.45, guilt: 0.08, loneliness: 0.12, boredom: 0.1 },
+	baseline: CHARACTER_BASELINE,
 	reactivity: 0.75,
 	weights: { ...DEFAULT_WEIGHTS },
 	voice: {

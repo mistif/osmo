@@ -10,7 +10,7 @@ const ctx = () => ({ now: 1_000_000, lastAt: null, uuid: () => "id" });
 const say = (text: string, state: AgentState = defaultState(), session: Session = newSession()) =>
 	processTurn(state, session, text, ctx());
 const PET_NAMES = /\b(squirt|kiddo|little one|sweetheart|darling|dear|sir|madam|boss|buddy|mate|dude|champ)\b/i;
-const JUST_MET_GU = "Nice to meet you, Gu! I'll remember that.";
+const JUST_MET_GU = "Good to meet you, Gu.";
 
 describe("the Supabase chat log, replayed", () => {
 	it("never talks down to the user", () => {
@@ -93,7 +93,7 @@ describe("the Supabase chat log, replayed", () => {
 	it("finds a name the user already gave earlier in the chat", () => {
 		const log = [
 			{ role: "user" as const, text: "whats my name" },
-			{ role: "agent" as const, text: "I don't know your name yet. What should I call you?" },
+			{ role: "agent" as const, text: "I do not know your name yet. What should I call you?" },
 			{ role: "user" as const, text: "its Gur" },
 			{ role: "agent" as const, text: "Lol, you lost me. Run that by me again?" },
 		];

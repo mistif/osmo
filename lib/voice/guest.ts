@@ -13,8 +13,8 @@ export type SendOptions = { via: Via; speaker: Speaker; greet?: boolean };
 // A guest's turn sees no memory. Never mutated.
 export const GUEST_MEMORY: MemoryFact[] = [];
 
-export const GUEST_GREETING = "Hello. I don't believe we've met.";
-export const GUEST_PRIVATE = "That's between me and the person I belong to.";
+export const GUEST_GREETING = "Hello. I do not believe we have met.";
+export const GUEST_PRIVATE = "That is between me and the person I belong to.";
 export const GUEST_DILEMMA = "I keep my dilemmas for the person I belong to.";
 
 // Gur's own conversation: everything except guests' lines and Osmo's replies to them.

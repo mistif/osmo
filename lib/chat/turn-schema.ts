@@ -2,9 +2,9 @@
 // The descriptions are the only place JSON mode says what a field means (the intensity scale above all), so they stay short and
 // carry no limit keywords: the code enforces the limits (3.1).
 
-export const TURN_TONES = ["neutral", "happy", "excited", "grateful", "playful", "sad", "worried", "angry", "tired", "lonely"] as const;
-export const TURN_ABOUT = ["gur", "someone_close", "osmo", "other"] as const;
-export const TURN_WANTS = ["listen", "advice", "distraction", "nothing"] as const;
+const TURN_TONES = ["neutral", "happy", "excited", "grateful", "playful", "sad", "worried", "angry", "tired", "lonely"] as const;
+const TURN_ABOUT = ["gur", "someone_close", "osmo", "other"] as const;
+const TURN_WANTS = ["listen", "advice", "distraction", "nothing"] as const;
 export const TURN_FORMAT = {
 	type: "json_schema",
 	name: "osmo_turn",
@@ -24,3 +24,11 @@ export const TURN_FORMAT = {
 		},
 	},
 } as const;
+
+// With no action on this is TURN_FORMAT itself, so the request is the one it always was; with one on, the same schema plus a required
+// action that is null or one of the names (its args travel as JSON text, since strict mode wants a fixed shape).
+export function turnFormat(names: readonly string[]) {
+	if (names.length === 0) return TURN_FORMAT;
+	const action = { anyOf: [{ type: "null" }, { type: "object", additionalProperties: false, required: ["name", "args"], properties: { name: { type: "string", enum: [...names] }, args: { type: "string", description: "The action's arguments as JSON text." } } }] };
+	return { ...TURN_FORMAT, schema: { ...TURN_FORMAT.schema, required: [...TURN_FORMAT.schema.required, "action"], properties: { ...TURN_FORMAT.schema.properties, action } } };
+}

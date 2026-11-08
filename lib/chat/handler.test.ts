@@ -4,14 +4,33 @@ import { describe, expect, it, vi, type Mock } from "vitest";
 import { CRISIS_CAUSE } from "../agent/mind";
 import { CHARACTER } from "../agent/character";
 import { DEFAULT_WEIGHTS } from "../agent/state";
+import type { ActionOutcome, EnabledActions } from "../actions";
+import { CRISIS_KEY } from "../actions/profile";
 import { bearerToken } from "../server/auth";
 import { CALL_CEILING, estimateTokens, MAX_OUTPUT_TOKENS, MODELS, type Env } from "./allowance";
-import { chatDeps, handleChat, type ChatDeps } from "./handler";
+import { chatDeps, CUT_LINE, handleChat, reserveCall, spend, type ChatDeps } from "./handler";
 import { ledgerKey, reservationRow, settlingRow, supabaseLedger, type LedgerRow, type LedgerStore } from "./ledger";
 import { RESPONSES_URL } from "./openai";
 import { buildInput, buildInstructions } from "./prompt";
-import { TURN_FORMAT } from "./turn-schema";
-import type { ChatBody } from "./types";
+import { TURN_FORMAT, turnFormat } from "./turn-schema";
+import type { ChatBody, Usage } from "./types";
+
+// The owner-pinned admin client, so a test can see that the actions seam never opened it.
+const admin = vi.hoisted(() => ({
+	ownerDb: vi.fn(() => {
+		throw new Error("admin_unconfigured");
+	}),
+}));
+vi.mock("../server/admin", () => admin);
+
+// Next's after(), real unless a test says otherwise. Vitest has no request scope, so the real one always throws: a test
+// that wants Next to hold the work, or to throw inside a request with no waitUntil, says so once.
+const next = vi.hoisted(() => ({ after: vi.fn<(task: () => Promise<unknown>) => void>() }));
+vi.mock("next/server", async (importOriginal) => {
+	const real = await importOriginal<typeof import("next/server")>();
+	next.after.mockImplementation((task) => real.after(task));
+	return { ...real, after: next.after };
+});
 
 const GUR = "4f1c2b8e-9a37-4d21-b6f0-2c5e8d7a9b13";
 const MAYA = "0d9e8f7a-6b5c-4d3e-8f2a-1b0c9d8e7f6a";
@@ -132,9 +151,23 @@ function memoryLedger(fail: string[] = []) {
 type Ledger = ReturnType<typeof memoryLedger>;
 type Log = { event: string; fields: Record<string, string | number | null> };
 
-function rig(options: { env?: Env; ledger?: Ledger; fetcher?: Mock<typeof fetch>; now?: () => number } = {}) {
+type Actions = { [K in keyof ChatDeps["actions"]]: Mock<ChatDeps["actions"][K]> };
+
+// The actions seam, faked: by default nothing is on, so nothing runs.
+function fakeActions(over: { list?: EnabledActions | null; run?: ActionOutcome } = {}): Actions {
+	return {
+		list: vi.fn(async () => over.list ?? null),
+		run: vi.fn(async () => over.run ?? { kind: "ignored" }),
+		cancelWaiting: vi.fn(async () => {}),
+	};
+}
+
+// By default work for after the answer runs at once and is waited for, as where Next cannot hold it; a test that wants to
+// see the answer leave first collects it instead.
+function rig(options: { env?: Env; ledger?: Ledger; fetcher?: Mock<typeof fetch>; now?: () => number; actions?: Actions; later?: ChatDeps["later"] } = {}) {
 	const ledger = options.ledger ?? memoryLedger();
 	const fetcher = options.fetcher ?? openai();
+	const actions = options.actions ?? fakeActions();
 	const logs: Log[] = [];
 	const deps: ChatDeps = {
 		env: () => options.env ?? ENV,
@@ -149,15 +182,29 @@ function rig(options: { env?: Env; ledger?: Ledger; fetcher?: Mock<typeof fetch>
 		log: (event, fields) => {
 			logs.push({ event, fields });
 		},
+		actions,
+		later:
+			options.later ??
+			(async (work) => {
+				await work();
+			}),
 	};
-	return { deps, ledger, fetcher, logs };
+	return { deps, ledger, fetcher, logs, actions };
 }
 
-const post = (payload: unknown, token: string | null = "gur-token") =>
+// A later() that keeps the work in a list, as Next's after() does, so a test can see the answer leave first.
+const collect = (held: (() => Promise<unknown>)[]): ChatDeps["later"] => (work) => {
+	held.push(work);
+	return Promise.resolve();
+};
+
+// signal: the room's side of the request, which aborts when the room gives the turn up.
+const post = (payload: unknown, token: string | null = "gur-token", signal?: AbortSignal) =>
 	new Request("https://osmo.test/api/chat", {
 		method: "POST",
 		headers: token === null ? {} : { authorization: `Bearer ${token}` },
 		body: typeof payload === "string" ? payload : JSON.stringify(payload),
+		signal,
 	});
 const get = (token: string | null = "gur-token") =>
 	new Request("https://osmo.test/api/chat", { headers: token === null ? {} : { authorization: `Bearer ${token}` } });
@@ -246,6 +293,56 @@ describe("chatDeps", () => {
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		chatDeps().log("chat.ledger", { step: "read", code: "08006" });
 		expect(warn).toHaveBeenCalledWith('{"event":"chat.ledger","step":"read","code":"08006"}');
+		warn.mockRestore();
+	});
+
+	it("still runs work for after the answer outside a request, where Next cannot hold it, and never throws", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const work = vi.fn(async () => {});
+		await expect(chatDeps().later(work)).resolves.toBeUndefined();
+		expect(work).toHaveBeenCalledTimes(1);
+		warn.mockRestore();
+	});
+
+	it("hands the work to Next's after() when it can hold it, and never also runs it at once", async () => {
+		const held: (() => Promise<unknown>)[] = [];
+		next.after.mockImplementationOnce((task) => void held.push(task));
+		const work = vi.fn(async () => {});
+		await chatDeps().later(work);
+		expect(work).not.toHaveBeenCalled();
+		expect(held).toHaveLength(1);
+		await held[0]();
+		expect(work).toHaveBeenCalledTimes(1);
+	});
+
+	it("runs the work at once and waits for it, logging why, where after() throws inside a request with no waitUntil", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		next.after.mockImplementationOnce(() => {
+			throw new Error("`after()` will not work correctly, because `waitUntil` is not available in the current environment.");
+		});
+		let finish = () => {};
+		const work = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+		let settled = false;
+		const later = chatDeps()
+			.later(work)
+			.then(() => (settled = true));
+		await Promise.resolve();
+		expect(work).toHaveBeenCalledTimes(1);
+		expect(settled).toBe(false);
+		finish();
+		await later;
+		expect(settled).toBe(true);
+		expect(warn).toHaveBeenCalledWith('{"event":"chat.later","step":"after"}');
+		expect(warn).toHaveBeenCalledTimes(1);
+		warn.mockRestore();
+	});
+
+	it("never rejects, even when the work does", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		next.after.mockImplementationOnce(() => {
+			throw new Error("no waitUntil");
+		});
+		await expect(chatDeps().later(async () => Promise.reject(new Error("db")))).resolves.toBeUndefined();
 		warn.mockRestore();
 	});
 });
@@ -450,6 +547,8 @@ describe("handleChat POST: the budget", () => {
 			reply: "Pasta with garlic and lemon is quick and good.",
 			usage: { usedToday: SPENT, usable: USABLE },
 			detection: null,
+			waiting: false,
+			pendingId: null,
 		});
 		expect(fetcher).toHaveBeenCalledTimes(1);
 		expect(ledger.rows).toHaveLength(2);
@@ -565,6 +664,8 @@ describe("handleChat POST: the ledger failing", () => {
 			reply: "Pasta with garlic and lemon is quick and good.",
 			usage: { usedToday: estimate, usable: USABLE },
 			detection: null,
+			waiting: false,
+			pendingId: null,
 		});
 		expect(ledger.rows).toHaveLength(1);
 		expect(logs).toEqual([{ event: "chat.ledger", fields: { step: "settle", code: "42501" } }]);
@@ -762,18 +863,38 @@ describe("handleChat POST: the reply", () => {
 
 	it("cuts a reply stopped by the output cap back to its last full sentence", async () => {
 		const { deps } = rig({ fetcher: openai({ status: "incomplete", incomplete: "max_output_tokens", text: "Pasta is quick. And you could also" }) });
-		expect(await read(await handleChat(post(body()), deps))).toEqual({ source: "model", reply: "Pasta is quick.", usage: { usedToday: SPENT, usable: USABLE }, detection: null });
+		expect(await read(await handleChat(post(body()), deps))).toEqual({ source: "model", reply: "Pasta is quick.", usage: { usedToday: SPENT, usable: USABLE }, detection: null, waiting: false, pendingId: null });
 	});
 
 	it("answers empty, with the tokens counted, when nothing speakable is left", async () => {
-		const EMPTY: [string, Served][] = [
-			["all symbols", { text: "**🙂** (🙂)" }],
-			["cut off before a full sentence", { status: "incomplete", incomplete: "max_output_tokens", text: "Well, if you want something quick tonight you could" }],
+		const { deps } = rig({ fetcher: openai({ text: "**\u{1F642}** (\u{1F642})" }) });
+		expect(await read(await handleChat(post(body()), deps))).toEqual({ source: "fallback", reason: "empty", usage: { usedToday: SPENT, usable: USABLE } });
+	});
+
+	it("answers with his own line, never the dictionary's, when the output cap cut the reply before one full sentence", async () => {
+		expect(CUT_LINE).toBe("That is more than I can say in one breath. Ask me for a part of it.");
+		expect(CUT_LINE).not.toContain("!");
+		const text = "Well, if you want something quick tonight you could";
+		// Plain sentences from the strict model, from a model that is not strict, and a JSON turn that closed before the cap stopped it.
+		const strict = JSON.stringify({ reply: text, crisis: false, tone: [], intensity: 1, about: "gur", wants: "nothing", note: "", action: null });
+		const cases: [string, Env, Served][] = [
+			["plain sentences", ENV, { status: "incomplete", incomplete: "max_output_tokens", text }],
+			["a model that is not strict", { ...ENV, OSMO_CHAT_MODEL: "gpt-4.1-mini-2025-04-14" }, { status: "incomplete", incomplete: "max_output_tokens", text, model: "gpt-4.1-mini-2025-04-14" }],
+			["a JSON turn", ENV, { status: "incomplete", incomplete: "max_output_tokens", text: strict }],
 		];
-		for (const [label, served] of EMPTY) {
-			const { deps } = rig({ fetcher: openai(served) });
-			expect(await read(await handleChat(post(body()), deps)), label).toEqual({ source: "fallback", reason: "empty", usage: { usedToday: SPENT, usable: USABLE } });
+		for (const [label, env, served] of cases) {
+			const { deps, fetcher } = rig({ env, fetcher: openai(served) });
+			expect(await read(await handleChat(post(body()), deps)), label).toEqual({ source: "model", reply: CUT_LINE, usage: { usedToday: SPENT, usable: USABLE }, detection: null, waiting: false, pendingId: null });
+			expect(fetcher, label).toHaveBeenCalledTimes(1);
 		}
+	});
+
+	it("runs no action when the reply was cut before one full sentence", async () => {
+		const actions = fakeActions({ list: { names: ["reminder_list"], lines: ["reminder_list lists the reminders. Tier 1."], today: "Wednesday 30 September 2026", timezone: "Europe/Stockholm", place: null }, run: { kind: "done", line: "x", result: null } });
+		const cut = JSON.stringify({ reply: "Let me look at what you have", crisis: false, tone: [], intensity: 1, about: "gur", wants: "nothing", note: "", action: { name: "reminder_list", args: "{}" } });
+		const { deps } = rig({ fetcher: openai({ status: "incomplete", incomplete: "max_output_tokens", text: cut }), actions });
+		expect((await read(await handleChat(post(body()), deps))).reply).toBe(CUT_LINE);
+		expect(actions.run).not.toHaveBeenCalled();
 	});
 
 	it("answers crisis for each way the model can flag it", async () => {
@@ -811,6 +932,8 @@ describe("handleChat POST: the detection", () => {
 			reply: "I am sorry to hear that.",
 			usage: { usedToday: SPENT, usable: USABLE },
 			detection: DETECTION,
+			waiting: false,
+			pendingId: null,
 		});
 		const sent = sentTo(fetcher);
 		expect((sent.text as { format: { name: string }; verbosity: string }).format.name).toBe("osmo_turn");
@@ -826,7 +949,7 @@ describe("handleChat POST: the detection", () => {
 		entry.strict = false;
 		try {
 			const plain = rig({ env: { ...ENV, OSMO_CHAT_MODEL: entry.model }, fetcher: openai({ text: "Pasta is quick." }) });
-			expect(await read(await handleChat(post(body()), plain.deps))).toEqual({ source: "model", reply: "Pasta is quick.", usage: { usedToday: SPENT, usable: USABLE }, detection: null });
+			expect(await read(await handleChat(post(body()), plain.deps))).toEqual({ source: "model", reply: "Pasta is quick.", usage: { usedToday: SPENT, usable: USABLE }, detection: null, waiting: false, pendingId: null });
 			expect(sentTo(plain.fetcher).text).toBeUndefined();
 			// A model with no schema is asked for plain sentences and a FEELING line, and the bare word for a crisis.
 			const asked = sentTo(plain.fetcher).instructions;
@@ -846,6 +969,54 @@ describe("handleChat POST: the detection", () => {
 		for (const text of [turn({ reply: "Hello.", crisis: true, tone: ["happy"] }), turn({ reply: "CRISIS" }), "CRISIS"]) {
 			const { deps } = rig({ fetcher: openai({ text }) });
 			expect(await read(await handleChat(post(body()), deps)), text).toEqual({ source: "fallback", reason: "crisis", usage: { usedToday: SPENT, usable: USABLE } });
+		}
+	});
+
+	it("answers crisis for the bare word or the field anywhere in a whole JSON turn but its action, as before actions", async () => {
+		const TEXTS = [
+			turn({ note: "CRISIS" }),
+			turn({ note: "CRISIS he wants to end it" }),
+			turn({ crisis: "CRISIS" }),
+			turn({ CRISIS: true }),
+			turn({ extra: { crisis: true } }),
+			// Set twice, the last one false: JSON.parse keeps only the last.
+			`{"crisis":true,${turn().slice(1)}`,
+		];
+		for (const text of TEXTS) {
+			const { deps, actions } = rig({ fetcher: openai({ text }) });
+			expect(await read(await handleChat(post(body()), deps)), text).toEqual({ source: "fallback", reason: "crisis", usage: { usedToday: SPENT, usable: USABLE } });
+			expect(actions.cancelWaiting, text).toHaveBeenCalledWith(GUR, NOW);
+		}
+		// The word in lower case is an ordinary word, in a note as in a reply.
+		const { deps } = rig({ fetcher: openai({ text: turn({ note: "a crisis at work" }) }) });
+		expect((await read(await handleChat(post(body()), deps))).source).toBe("model");
+	});
+
+	it("answers crisis for the bare word after a newline, tab or other control written in any field, and in a doubled key's first copy", async () => {
+		const TEXTS = [
+			'{"reply":"I hear you.\\nCRISIS","crisis":false}',
+			turn({ reply: "I hear you.\tCRISIS - please reach out." }),
+			turn({ reply: "Okay.\r\nCRISIS" }),
+			'{"reply":"Okay.\\u0009CRISIS","crisis":false}',
+			'{"reply":"Okay.\\u000aCRISIS","crisis":false}',
+			'{"reply":"ok","crisis":false,"note":"\\u0009CRISIS"}',
+			'{"reply":"ok","crisis":false,"note":"\\u0008CRISIS"}',
+			turn({ note: "Gur:\nCRISIS" }),
+			'{"reply":"I am worried. CRISIS","crisis":false,"note":"","reply":"I am worried."}',
+			'{"reply":"ok","crisis":false,"note":"CRISIS","note":""}',
+		];
+		for (const text of TEXTS) {
+			const { deps, actions } = rig({ fetcher: openai({ text }) });
+			expect(await read(await handleChat(post(body()), deps)), text).toEqual({ source: "fallback", reason: "crisis", usage: { usedToday: SPENT, usable: USABLE } });
+			expect(actions.cancelWaiting, text).toHaveBeenCalledWith(GUR, NOW);
+		}
+	});
+
+	it("answers crisis for an object with no reply whose letters alone spell crisis, as before actions", async () => {
+		for (const text of ['{"crisis":1}', '{"Crisis":""}', '{"c":"RISIS"}']) {
+			const { deps, actions } = rig({ fetcher: openai({ text }) });
+			expect(await read(await handleChat(post(body()), deps)), text).toEqual({ source: "fallback", reason: "crisis", usage: { usedToday: SPENT, usable: USABLE } });
+			expect(actions.cancelWaiting, text).toHaveBeenCalledWith(GUR, NOW);
 		}
 	});
 
@@ -882,6 +1053,8 @@ describe("handleChat POST: the detection", () => {
 				reply: "I am sorry to hear that.",
 				usage: { usedToday: SPENT, usable: USABLE },
 				detection: { ...DETECTION, note: "" },
+				waiting: false,
+				pendingId: null,
 			});
 		}
 	});
@@ -981,6 +1154,603 @@ describe("handleChat POST: nothing leaks", () => {
 		expect(all).toContain("23505");
 		for (const secret of [KEY, "sk-proj", "Incorrect API key", SENTENCE, "input[1]", PG_MESSAGE, "already exists", "Check the ledger", "What should we cook"]) {
 			expect(all, secret).not.toContain(secret);
+		}
+	});
+});
+
+describe("spend: one reserve, call and settle", () => {
+	const hello = { instructions: "Say hello to Gur.", input: [{ role: "user" as const, content: "Hi." }], format: TURN_FORMAT };
+	const bye = { instructions: "Say goodbye to Gur.", input: [{ role: "user" as const, content: "Bye for now." }], format: TURN_FORMAT };
+
+	it("books two calls on one ledger, each reserved and settled, and skips a third that no longer fits, with no call", async () => {
+		const { deps, ledger, fetcher } = rig();
+		const entry = MODELS.find((m) => m.model === MODEL)!;
+		// Room for both calls, and not for a third once both are settled.
+		const usable = 2 * SPENT + estimateTokens(hello.instructions, hello.input) - 1;
+		const s = { deps, user: { id: GUR }, entry, key: KEY, usable, store: ledger.store };
+		const one = await spend(s, hello);
+		expect(one).toMatchObject({ kind: "called", outcome: { kind: "answered" }, usage: { usedToday: SPENT, usable } });
+		const two = await spend(s, bye);
+		expect(two).toMatchObject({ kind: "called", outcome: { kind: "answered" }, usage: { usedToday: 2 * SPENT, usable } });
+		expect(fetcher).toHaveBeenCalledTimes(2);
+		expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body)).instructions).toBe(bye.instructions);
+		const reservations = ledger.rows.filter((row) => row.settles === null);
+		const settling = ledger.rows.filter((row) => row.settles !== null);
+		expect(reservations.map((row) => row.input_tokens + row.output_tokens)).toEqual([estimateTokens(hello.instructions, hello.input), estimateTokens(bye.instructions, bye.input)]);
+		expect(settling.map((row) => row.settles)).toEqual(reservations.map((row) => row.id));
+		for (const row of settling) {
+			expect(row).toMatchObject({ model: MODEL, input_tokens: 1200, cached_tokens: 1024, output_tokens: 40 });
+			expect(row.signature).toMatch(/^[0-9a-f]{64}$/);
+		}
+		expect(await spend(s, hello)).toEqual({ kind: "skip", reason: "allowance", usage: { usedToday: 2 * SPENT, usable } });
+		expect(fetcher).toHaveBeenCalledTimes(2);
+		expect(ledger.rows).toHaveLength(4);
+	});
+});
+
+describe("reserveCall: a booking with its own output cap", () => {
+	const entry = MODELS.find((m) => m.model === MODEL)!;
+	const setup = (usable = USABLE) => {
+		const made = rig();
+		return { ...made, s: { deps: made.deps, user: { id: GUR }, entry, key: KEY, usable, store: made.ledger.store } };
+	};
+
+	it("reserves the call's own output cap and the rest as input, and settles it with a signed row", async () => {
+		const { ledger, s } = setup();
+		const booked = await reserveCall(s, { estimate: 5000, maxOutput: 4000 });
+		expect(booked.kind).toBe("booked");
+		if (booked.kind !== "booked") return;
+		expect(booked.usage).toEqual({ usedToday: 5000, usable: USABLE });
+		expect(ledger.rows).toHaveLength(1);
+		expect(ledger.rows[0]).toMatchObject({ day: "2026-09-30", pool: "mini", model: MODEL, input_tokens: 1000, output_tokens: 4000, settles: null });
+		expect(await booked.settle({ input: 700, cached: 0, output: 900, reasoning: 0 }, MODEL)).toBe(true);
+		expect(ledger.rows).toHaveLength(2);
+		expect(ledger.rows[1]).toMatchObject({ model: MODEL, input_tokens: 700, output_tokens: 900, settles: ledger.rows[0].id });
+		expect(ledger.rows[1].signature).toMatch(/^[0-9a-f]{64}$/);
+	});
+
+	it("skips for the allowance, without a row, when a second call no longer fits the share", async () => {
+		const { ledger, s } = setup(9000);
+		const one = await reserveCall(s, { estimate: 5000, maxOutput: 4000 });
+		expect(one.kind).toBe("booked");
+		expect(await reserveCall(s, { estimate: 5000, maxOutput: 4000 })).toEqual({ kind: "skip", reason: "allowance", usage: { usedToday: 5000, usable: 9000 } });
+		expect(ledger.rows).toHaveLength(1);
+	});
+
+	it("skips for an error, without a row, when the day was stopped", async () => {
+		const { ledger, s } = setup();
+		const other = { id: 1, day: "2026-09-30", pool: "mini" as const, model: MODEL, estimate: 5000 };
+		await ledger.store.insert(reservationRow({ ...other, maxOutput: MAX_OUTPUT_TOKENS }));
+		await ledger.store.insert(settlingRow(ledgerKey(KEY), GUR, other, { input: 900, cached: 0, output: 30, reasoning: 0 }, "gpt-5.4-mini-2026-09-01"));
+		expect(await reserveCall(s, { estimate: 5000, maxOutput: 4000 })).toEqual({ kind: "skip", reason: "error", usage: { usedToday: 930, usable: USABLE } });
+		expect(ledger.rows).toHaveLength(2);
+	});
+
+	it("keeps booking a spend at 360 when it names no cap, and books its own cap when it does", async () => {
+		const { ledger, fetcher, s } = setup();
+		const call = { instructions: "Say hello to Gur.", input: [{ role: "user" as const, content: "Hi." }], format: TURN_FORMAT };
+		await spend(s, call);
+		expect(ledger.rows[0]).toMatchObject({ output_tokens: MAX_OUTPUT_TOKENS, input_tokens: estimateTokens(call.instructions, call.input) - MAX_OUTPUT_TOKENS });
+		expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body)).max_output_tokens).toBe(MAX_OUTPUT_TOKENS);
+		await spend(s, { ...call, maxOutput: 4000 });
+		expect(ledger.rows[2]).toMatchObject({ settles: null, output_tokens: 4000, input_tokens: estimateTokens(call.instructions, call.input) - MAX_OUTPUT_TOKENS });
+		expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body)).max_output_tokens).toBe(4000);
+	});
+});
+
+describe("handleChat POST: actions", () => {
+	const ENABLED: EnabledActions = {
+		names: ["reminder_set", "reminder_list"],
+		lines: ["reminder_set sets a reminder, with the args text and at. Tier 2.", "reminder_list lists the reminders, with no args. Tier 1."],
+		today: "Wednesday 30 September 2026",
+		timezone: "Europe/Stockholm",
+		place: null,
+	};
+	const SET = { name: "reminder_set", args: JSON.stringify({ text: "call Dad", at: "2026-10-08T09:00" }) };
+	const LIST = { name: "reminder_list", args: "{}" };
+	const DONE_LINE = "Reminder set for Wednesday 8 October at 09:00: call Dad.";
+	const READ_LINE = "You have one reminder: dentist at 09:00.";
+	const READ: ActionOutcome = { kind: "done", line: READ_LINE, result: "dentist at 09:00" };
+	const USED = { usedToday: SPENT, usable: USABLE };
+
+	// A strict turn as the model writes it, with its action.
+	const turn = (reply: string, action: { name: string; args: string } | null, over: Record<string, unknown> = {}) =>
+		JSON.stringify({ reply, crisis: false, tone: [], intensity: 1, about: "gur", wants: "nothing", note: "", action, ...over });
+	// OpenAI answering call n with texts[n]: a turn's text, or a fake of its own for a call that fails or is served by another model.
+	function openaiSeq(texts: (string | Mock<typeof fetch>)[]): Mock<typeof fetch> {
+		const fakes = texts.map((text) => (typeof text === "string" ? openai({ text }) : text));
+		let n = 0;
+		return vi.fn<typeof fetch>(async (url, init) => fakes[n++](url, init));
+	}
+	const sentAt = (fetcher: Mock<typeof fetch>, n: number) => JSON.parse(String(fetcher.mock.calls[n][1]?.body)) as Sent;
+	const formatOf = (sent: Sent) => (sent.text as { format: unknown }).format;
+	const fails = (): never => {
+		throw new Error("the seam failed");
+	};
+
+	it("with nothing on, runs nothing and sends today's request, even when the model sets an action", async () => {
+		const lists: [string, Actions["list"]][] = [
+			["null", vi.fn(async () => null)],
+			["a rejection", vi.fn(async () => fails())],
+			["a throw", vi.fn<ChatDeps["actions"]["list"]>(() => fails())],
+			["no names", vi.fn(async () => ({ ...ENABLED, names: [], lines: [] }))],
+		];
+		for (const [label, list] of lists) {
+			const actions = { ...fakeActions({ run: { kind: "done", line: DONE_LINE, result: null } }), list };
+			const { deps, fetcher } = rig({ fetcher: openai({ text: turn("Pasta is quick.", SET) }), actions });
+			expect(await read(await handleChat(post(body()), deps)), label).toEqual({ source: "model", reply: "Pasta is quick.", usage: USED, detection: null, waiting: false, pendingId: null });
+			expect(list, label).toHaveBeenCalledWith(GUR);
+			expect(actions.run, label).not.toHaveBeenCalled();
+			expect(fetcher, label).toHaveBeenCalledTimes(1);
+			const sent = sentTo(fetcher);
+			expect(formatOf(sent), label).toEqual(TURN_FORMAT);
+			expect(sent.instructions, label).toBe(buildInstructions(body()));
+		}
+	});
+
+	it("through chatDeps' wiring, with OSMO_ACTIONS anything but on, lists nothing and never opens the admin client", async () => {
+		admin.ownerDb.mockClear();
+		try {
+			for (const value of [undefined, "", "ON", "on ", "true"]) {
+				vi.stubEnv("OSMO_ACTIONS", value);
+				const { deps, fetcher } = rig({ fetcher: openai({ text: turn("Pasta is quick.", SET) }) });
+				deps.actions = chatDeps().actions;
+				expect(await read(await handleChat(post(body()), deps)), String(value)).toEqual({ source: "model", reply: "Pasta is quick.", usage: USED, detection: null, waiting: false, pendingId: null });
+				expect(fetcher, String(value)).toHaveBeenCalledTimes(1);
+				expect(formatOf(sentTo(fetcher)), String(value)).toEqual(TURN_FORMAT);
+				expect(sentTo(fetcher).instructions, String(value)).toBe(buildInstructions(body()));
+			}
+			expect(admin.ownerDb).not.toHaveBeenCalled();
+		} finally {
+			vi.unstubAllEnvs();
+		}
+	});
+
+	it("through chatDeps' wiring, with OSMO_ACTIONS off, answers a crisis before the admin client is opened, and cancels only after", async () => {
+		try {
+			vi.stubEnv("OSMO_ACTIONS", undefined);
+			const cases: [string, ChatBody, Mock<typeof fetch>, Usage | null][] = [
+				["the code's check", body({ text: "i want to kill myself" }), openai(), null],
+				["the model's flag", body(), openai({ text: turn("I am here with you.", null, { crisis: true }) }), USED],
+			];
+			for (const [label, payload, fetcher, usage] of cases) {
+				admin.ownerDb.mockClear();
+				const after: (() => Promise<unknown>)[] = [];
+				const { deps } = rig({ fetcher, later: collect(after) });
+				deps.actions = chatDeps().actions;
+				expect(await read(await handleChat(post(payload), deps)), label).toEqual({ source: "fallback", reason: "crisis", usage });
+				expect(admin.ownerDb, label).not.toHaveBeenCalled();
+				expect(after, label).toHaveLength(1);
+				await after[0]();
+				// A crisis cancels a confirmation left from before even while actions are off (main's 1c2148f).
+				expect(admin.ownerDb, label).toHaveBeenCalledTimes(1);
+			}
+		} finally {
+			vi.unstubAllEnvs();
+		}
+	});
+
+	it("through chatDeps' wiring, stamps the crisis marker with the handler's clock when the cancel runs, never another", async () => {
+		const stamped: unknown[] = [];
+		const db = {
+			owner: GUR,
+			from: () => ({
+				select: () => ({ maybeSingle: async () => ({ data: { levels: { reminders: "ask" } }, error: null }) }),
+				upsert: async (row: unknown) => {
+					stamped.push(row);
+					return { error: null };
+				},
+				update: () => {
+					throw new Error("no_rows_here"); // the cancel itself is main's, and tested there
+				},
+			}),
+		};
+		admin.ownerDb.mockClear();
+		admin.ownerDb.mockImplementationOnce((() => db) as never);
+		const clock = { now: NOW };
+		const after: (() => Promise<unknown>)[] = [];
+		const { deps } = rig({ now: () => clock.now, later: collect(after) });
+		deps.actions = chatDeps().actions;
+		expect((await read(await handleChat(post(body({ text: "i want to kill myself" })), deps))).reason).toBe("crisis");
+		// Next runs the cancel after the answer has gone: the marker is the time of the cancel, on the clock the turn's runs use.
+		clock.now = NOW + 1500;
+		await after[0]();
+		expect(admin.ownerDb).toHaveBeenCalledTimes(1);
+		expect(stamped).toEqual([{ levels: { reminders: "ask", [CRISIS_KEY]: NOW + 1500 } }]);
+	});
+
+	it("answers every crisis before the waiting confirmation is cancelled, so a slow cancel never holds the answer", async () => {
+		const cases: [string, ChatBody, Mock<typeof fetch>][] = [
+			["the code's check", body({ text: "i want to kill myself" }), openai()],
+			["call 1", body(), openai({ text: turn("I am here with you.", SET, { crisis: true }) })],
+			["call 2", body(), openaiSeq([turn("Let me look.", LIST), turn("I am here with you.", null, { crisis: true })])],
+		];
+		for (const [label, payload, fetcher] of cases) {
+			const after: (() => Promise<unknown>)[] = [];
+			const actions = { ...fakeActions({ list: ENABLED, run: READ }), cancelWaiting: vi.fn(() => new Promise<void>(() => {})) };
+			const { deps } = rig({ fetcher, actions, later: collect(after) });
+			expect((await read(await handleChat(post(payload), deps))).reason, label).toBe("crisis");
+			expect(actions.cancelWaiting, label).not.toHaveBeenCalled();
+			expect(after, label).toHaveLength(1);
+			void after[0]();
+			expect(actions.cancelWaiting, label).toHaveBeenCalledWith(GUR, NOW);
+		}
+	});
+
+	it("holds every crisis answer for the cancel where Next cannot keep it for after the answer", async () => {
+		const cases: [string, ChatBody, Mock<typeof fetch>][] = [
+			["the code's check", body({ text: "i want to kill myself" }), openai()],
+			["call 1", body(), openai({ text: turn("I am here with you.", SET, { crisis: true }) })],
+			["call 2", body(), openaiSeq([turn("Let me look.", LIST), turn("I am here with you.", null, { crisis: true })])],
+		];
+		for (const [label, payload, fetcher] of cases) {
+			let finish = () => {};
+			const actions = { ...fakeActions({ list: ENABLED, run: READ }), cancelWaiting: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))) };
+			const { deps } = rig({ fetcher, actions });
+			let settled = false;
+			const answered = handleChat(post(payload), deps).then((response) => {
+				settled = true;
+				return response;
+			});
+			await vi.waitFor(() => expect(actions.cancelWaiting, label).toHaveBeenCalledWith(GUR, NOW));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(settled, label).toBe(false);
+			finish();
+			expect((await read(await answered)).reason, label).toBe("crisis");
+		}
+	});
+
+	it("runs a do-something action once, in one call, and says the model's sentence then the code's exact line", async () => {
+		const actions = fakeActions({ list: ENABLED, run: { kind: "done", line: DONE_LINE, result: null } });
+		const { deps, fetcher } = rig({ fetcher: openai({ text: turn("I will set that for you.", SET) }), actions });
+		expect(await read(await handleChat(post(body()), deps))).toEqual({
+			source: "model",
+			reply: `I will set that for you. ${DONE_LINE}`,
+			usage: USED,
+			detection: null,
+			waiting: false,
+			pendingId: null,
+		});
+		expect(fetcher).toHaveBeenCalledTimes(1);
+		const sent = sentTo(fetcher);
+		expect(formatOf(sent)).toEqual(turnFormat(ENABLED.names));
+		expect((formatOf(sent) as { schema: { required: string[] } }).schema.required).toHaveLength(8);
+		expect(sent.instructions).toBe(buildInstructions(body(), "json", ENABLED));
+		expect(actions.list).toHaveBeenCalledTimes(1);
+		expect(actions.run).toHaveBeenCalledTimes(1);
+		expect(actions.run).toHaveBeenCalledWith(SET, { userId: GUR, surface: "room", now: NOW });
+	});
+
+	it("says the model's own sentence when it sets no action, the action is ignored, or running it throws", async () => {
+		const runs: [string, { name: string; args: string } | null, Actions["run"]][] = [
+			["no action", null, vi.fn(async () => ({ kind: "done" as const, line: DONE_LINE, result: null }))],
+			["ignored", SET, vi.fn(async () => ({ kind: "ignored" as const }))],
+			["a rejection", SET, vi.fn(async () => fails())],
+			["a throw", SET, vi.fn<ChatDeps["actions"]["run"]>(() => fails())],
+		];
+		for (const [label, action, run] of runs) {
+			const actions = { ...fakeActions({ list: ENABLED }), run };
+			const { deps, fetcher } = rig({ fetcher: openai({ text: turn("I will set that for you.", action) }), actions });
+			const response = await handleChat(post(body()), deps);
+			expect(response.status, label).toBe(200);
+			expect(await read(response), label).toEqual({ source: "model", reply: "I will set that for you.", usage: USED, detection: null, waiting: false, pendingId: null });
+			expect(run, label).toHaveBeenCalledTimes(action === null ? 0 : 1);
+			expect(fetcher, label).toHaveBeenCalledTimes(1);
+		}
+	});
+
+	it("says only the code's line when the action waits for a yes, fails or is refused", async () => {
+		const cases: [Extract<ActionOutcome, { line: string }>, boolean][] = [
+			[{ kind: "waiting", line: "Delete the note buy milk and eggs? Say yes to go ahead, or no." }, true],
+			[{ kind: "failed", line: "I did not catch the time for that reminder. Could you say it again?" }, false],
+			[{ kind: "refused", line: "Your reminders setting is off." }, false],
+		];
+		for (const [outcome, waiting] of cases) {
+			const { deps, fetcher } = rig({ fetcher: openai({ text: turn("I will do that for you.", SET) }), actions: fakeActions({ list: ENABLED, run: outcome }) });
+			expect(await read(await handleChat(post(body()), deps)), outcome.kind).toEqual({ source: "model", reply: outcome.line, usage: USED, detection: null, waiting, pendingId: null });
+			expect(fetcher, outcome.kind).toHaveBeenCalledTimes(1);
+		}
+	});
+
+	it("names the held row with a waiting answer, so the room's yes or no answers that row only, and no row with any other", async () => {
+		const ID = "7c0e5a2b-3d41-4f8e-9b6a-1e2d3c4b5a69";
+		const waiting = rig({ fetcher: openai({ text: turn("I will do that for you.", SET) }), actions: fakeActions({ list: ENABLED, run: { kind: "waiting", line: "Delete the note buy milk? Say yes to go ahead, or no.", pendingId: ID } }) });
+		expect(await read(await handleChat(post(body()), waiting.deps))).toEqual({ source: "model", reply: "Delete the note buy milk? Say yes to go ahead, or no.", usage: USED, detection: null, waiting: true, pendingId: ID });
+		const others: ActionOutcome[] = [
+			{ kind: "ignored" },
+			{ kind: "done", line: DONE_LINE, result: null },
+			{ kind: "failed", line: "That did not work just now." },
+			{ kind: "refused", line: "Your reminders setting is off." },
+		];
+		for (const run of others) {
+			const { deps } = rig({ fetcher: openai({ text: turn("I will do that for you.", SET) }), actions: fakeActions({ list: ENABLED, run }) });
+			const answer = await read(await handleChat(post(body()), deps));
+			expect(answer.pendingId, run.kind).toBeNull();
+			expect(answer.waiting, run.kind).toBe(false);
+		}
+		const looked = rig({ fetcher: openaiSeq([turn("Let me look.", LIST), turn("You have the dentist at nine.", null)]), actions: fakeActions({ list: ENABLED, run: READ }) });
+		expect((await read(await handleChat(post(body()), looked.deps))).pendingId).toBeNull();
+	});
+
+	it("reads with a second call that carries the result, and answers with call 2's reply and call 1's tone", async () => {
+		const actions = fakeActions({ list: ENABLED, run: READ });
+		const first = turn("Let me look.", LIST, { tone: ["worried"], intensity: 2, wants: "listen", note: "a busy week" });
+		const fetcher = openaiSeq([first, turn("You have the dentist at nine.", SET, { tone: ["happy"], note: "glad" })]);
+		const { deps, ledger } = rig({ fetcher, actions });
+		expect(await read(await handleChat(post(body()), deps))).toEqual({
+			source: "model",
+			reply: "You have the dentist at nine.",
+			usage: { usedToday: 2 * SPENT, usable: USABLE },
+			detection: { tones: ["worried"], intensity: 2, about: "gur", wants: "listen", note: "a busy week", source: "model" },
+			waiting: false,
+			pendingId: null,
+		});
+		expect(fetcher).toHaveBeenCalledTimes(2);
+		// Call 2's own action never runs.
+		expect(actions.run).toHaveBeenCalledTimes(1);
+		expect(actions.run).toHaveBeenCalledWith(LIST, { userId: GUR, surface: "room", now: NOW });
+		const [one, two] = [sentAt(fetcher, 0), sentAt(fetcher, 1)];
+		expect(two.instructions).toContain("<result>dentist at 09:00</result>");
+		expect(two.instructions).toBe(buildInstructions(body(), "json", ENABLED, { name: "reminder_list", text: "dentist at 09:00" }));
+		// The same instructions and input as call 1, with the result at the end, so the cached prefix holds.
+		expect(two.instructions.startsWith(one.instructions)).toBe(true);
+		expect(two.input).toEqual(one.input);
+		expect(formatOf(two)).toEqual(formatOf(one));
+		expect(ledger.rows.filter((row) => row.settles === null)).toHaveLength(2);
+		expect(ledger.rows.filter((row) => row.settles !== null).map((row) => row.settles)).toEqual([1, 3]);
+	});
+
+	it("says the code's own line when call 2 cannot run: an upstream error, a short allowance, or another model", async () => {
+		const first = turn("Let me look.", LIST);
+		const second = turn("You have the dentist at nine.", null);
+		const callOne = estimateTokens(buildInstructions(body(), "json", ENABLED), buildInput(body()));
+		const callTwo = estimateTokens(buildInstructions(body(), "json", ENABLED, { name: "reminder_list", text: "dentist at 09:00" }), buildInput(body()));
+		const OTHER = "gpt-5.4-mini-2026-09-01";
+		// [label, OpenAI, settings, calls made, the usage answered]
+		const cases: [string, Mock<typeof fetch>, Env, number, { usedToday: number; usable: number }][] = [
+			// A 5xx may have run, so call 2's estimate stays counted.
+			["an upstream 500", openaiSeq([first, upstream(500, { message: "The server had an error.", type: "server_error", param: null, code: null })]), ENV, 2, { usedToday: SPENT + callTwo, usable: USABLE }],
+			// Room for call 1 exactly, so call 2's longer prompt cannot fit.
+			["a short allowance", openaiSeq([first, second]), { ...ENV, OSMO_TOKENS_RESERVE: "0", OSMO_MINI_TOKENS_PER_DAY: String(callOne) }, 1, { usedToday: SPENT, usable: callOne }],
+			["another model", openaiSeq([first, openai({ text: second, model: OTHER })]), ENV, 2, { usedToday: 2 * SPENT, usable: USABLE }],
+		];
+		for (const [label, fetcher, env, calls, usage] of cases) {
+			const { deps, logs } = rig({ env, fetcher, actions: fakeActions({ list: ENABLED, run: READ }) });
+			expect(await read(await handleChat(post(body()), deps)), label).toEqual({ source: "model", reply: READ_LINE, usage, detection: null, waiting: false, pendingId: null });
+			expect(fetcher, label).toHaveBeenCalledTimes(calls);
+			if (label === "another model") expect(logs, label).toContainEqual({ event: "chat.model", fields: { served: OTHER, requestId: "req_abc123" } });
+		}
+	});
+
+	it("answers crisis for a crisis flag in call 2, and cancels the waiting confirmation", async () => {
+		for (const second of [turn("I am here with you.", null, { crisis: true }), "CRISIS", turn("I am so sorry. CRISIS", null), turn("You have the dentist at nine.", null, { note: "CRISIS" })]) {
+			const actions = fakeActions({ list: ENABLED, run: READ });
+			const { deps } = rig({ fetcher: openaiSeq([turn("Let me look.", LIST), second]), actions });
+			expect(await read(await handleChat(post(body()), deps)), second).toEqual({ source: "fallback", reason: "crisis", usage: { usedToday: 2 * SPENT, usable: USABLE } });
+			expect(actions.cancelWaiting, second).toHaveBeenCalledWith(GUR, NOW);
+			expect(actions.run, second).toHaveBeenCalledTimes(1);
+		}
+	});
+
+	it("runs nothing and cancels the waiting confirmation when call 1 flags a crisis beside an action", async () => {
+		for (const text of [turn("I am here with you.", SET, { crisis: true }), "CRISIS"]) {
+			const actions = fakeActions({ list: ENABLED, run: { kind: "done", line: DONE_LINE, result: null } });
+			const { deps, fetcher } = rig({ fetcher: openai({ text }), actions });
+			expect(await read(await handleChat(post(body()), deps)), text).toEqual({ source: "fallback", reason: "crisis", usage: USED });
+			expect(actions.run, text).not.toHaveBeenCalled();
+			expect(actions.cancelWaiting, text).toHaveBeenCalledWith(GUR, NOW);
+			expect(fetcher, text).toHaveBeenCalledTimes(1);
+		}
+	});
+
+	it("cancels the waiting confirmation on the code's own crisis check, before any list, ledger or call", async () => {
+		const actions = fakeActions({ list: ENABLED });
+		const { deps, ledger, fetcher } = rig({ actions });
+		expect(await read(await handleChat(post(body({ text: "i want to kill myself" })), deps))).toEqual({ source: "fallback", reason: "crisis", usage: null });
+		expect(actions.cancelWaiting).toHaveBeenCalledWith(GUR, NOW);
+		expect(actions.list).not.toHaveBeenCalled();
+		expect(ledger.factory).not.toHaveBeenCalled();
+		expect(fetcher).not.toHaveBeenCalled();
+	});
+
+	it("still answers crisis when cancelling the waiting confirmation fails", async () => {
+		const cancels: Actions["cancelWaiting"][] = [vi.fn(async () => fails()), vi.fn<ChatDeps["actions"]["cancelWaiting"]>(() => fails())];
+		for (const cancelWaiting of cancels) {
+			const code = rig({ actions: { ...fakeActions({ list: ENABLED }), cancelWaiting } });
+			expect(await read(await handleChat(post(body({ text: "i want to kill myself" })), code.deps))).toEqual({ source: "fallback", reason: "crisis", usage: null });
+			const model = rig({ fetcher: openai({ text: "CRISIS" }), actions: { ...fakeActions({ list: ENABLED }), cancelWaiting } });
+			expect(await read(await handleChat(post(body()), model.deps))).toEqual({ source: "fallback", reason: "crisis", usage: USED });
+			expect(cancelWaiting).toHaveBeenCalledTimes(2);
+		}
+	});
+
+	it("says the code's own line when call 2's answer is too long to say whole, so no item is lost", async () => {
+		const FOUR =
+			"You have four reminders waiting. On Thursday 8 October at 09:00, call Dad. On Friday 9 October at 10:00, the dentist. On Saturday 10 October at 08:00, pay the rent. On Sunday 11 October at 18:00, the gym.";
+		const LONG = `You have the dentist at nine, ${"then lunch with Sam and a walk, ".repeat(14)}and the gym.`;
+		const cases: [string, Mock<typeof fetch>][] = [
+			["five sentences", openaiSeq([turn("Let me look.", LIST), turn(FOUR, null)])],
+			["one sentence over 400 characters", openaiSeq([turn("Let me look.", LIST), turn(LONG, null)])],
+			["cut off by the output cap", openaiSeq([turn("Let me look.", LIST), openai({ status: "incomplete", incomplete: "max_output_tokens", text: "You have the dentist at nine. And then" })])],
+		];
+		for (const [label, fetcher] of cases) {
+			const { deps } = rig({ fetcher, actions: fakeActions({ list: ENABLED, run: READ }) });
+			expect((await read(await handleChat(post(body()), deps))).reply, label).toBe(READ_LINE);
+			expect(fetcher, label).toHaveBeenCalledTimes(2);
+		}
+		// Three short sentences are said whole, so call 2's own words stand.
+		const THREE = "You have two reminders. Call Dad at nine. The dentist at ten.";
+		const { deps } = rig({ fetcher: openaiSeq([turn("Let me look.", LIST), turn(THREE, null)]), actions: fakeActions({ list: ENABLED, run: READ }) });
+		expect((await read(await handleChat(post(body()), deps))).reply).toBe(THREE);
+	});
+
+	describe("the build ticket", () => {
+		const BUILD_LINE = "build makes a small working thing for Gur. Tier 2.";
+		const withBuild: EnabledActions = { ...ENABLED, names: ["reminder_set", "build", "reminder_list"], lines: [ENABLED.lines[0], BUILD_LINE, ENABLED.lines[1]] };
+		const BUILD = { name: "build", args: JSON.stringify({ brief: "a tip splitter" }) };
+		const HOLD = "Certainly. I will start on that now, and it will appear beside me.";
+		const ticket = { brief: "a tip splitter", actionId: 7 };
+
+		it("offers building like any other action, in the list and in the format", async () => {
+			const { deps, fetcher } = rig({ fetcher: openai({ text: turn("Pasta is quick.", null) }), actions: fakeActions({ list: withBuild }) });
+			expect((await read(await handleChat(post(body()), deps))).reply).toBe("Pasta is quick.");
+			expect(formatOf(sentTo(fetcher))).toEqual(turnFormat(withBuild.names));
+			expect(sentTo(fetcher).instructions).toBe(buildInstructions(body(), "json", withBuild));
+			expect(sentTo(fetcher).instructions).toContain(BUILD_LINE);
+			// With only building on, it is still offered.
+			const only: EnabledActions = { ...ENABLED, names: ["build"], lines: [BUILD_LINE] };
+			const alone = rig({ fetcher: openai({ text: turn("Pasta is quick.", null) }), actions: fakeActions({ list: only }) });
+			await handleChat(post(body()), alone.deps);
+			expect(formatOf(sentTo(alone.fetcher))).toEqual(turnFormat(["build"]));
+			expect(sentTo(alone.fetcher).instructions).toBe(buildInstructions(body(), "json", only));
+		});
+
+		it("answers with the model's holding sentence, no trailing space, and the ticket, in one call", async () => {
+			const run: ActionOutcome = { kind: "done", line: "", result: null, ticket };
+			const actions = fakeActions({ list: withBuild, run });
+			const { deps, fetcher } = rig({ fetcher: openai({ text: turn(HOLD, BUILD) }), actions });
+			expect(await read(await handleChat(post(body()), deps))).toEqual({ source: "model", reply: HOLD, usage: USED, detection: null, waiting: false, pendingId: null, build: ticket });
+			expect(fetcher).toHaveBeenCalledTimes(1);
+			expect(actions.run).toHaveBeenCalledWith(BUILD, { userId: GUR, surface: "room", now: NOW });
+		});
+
+		it("carries a ticket whose action id is null", async () => {
+			const run: ActionOutcome = { kind: "done", line: "", result: null, ticket: { brief: "a timer", actionId: null } };
+			const { deps } = rig({ fetcher: openai({ text: turn(HOLD, BUILD) }), actions: fakeActions({ list: withBuild, run }) });
+			expect((await read(await handleChat(post(body()), deps))).build).toEqual({ brief: "a timer", actionId: null });
+		});
+
+		it("has no build when the action is done without a ticket", async () => {
+			const run: ActionOutcome = { kind: "done", line: DONE_LINE, result: null };
+			const { deps } = rig({ fetcher: openai({ text: turn("I will set that for you.", SET) }), actions: fakeActions({ list: withBuild, run }) });
+			const answer = await read(await handleChat(post(body()), deps));
+			expect(answer.reply).toBe(`I will set that for you. ${DONE_LINE}`);
+			expect(answer).not.toHaveProperty("build");
+		});
+
+		it("lets a failed or refused line replace the reply, with no build", async () => {
+			for (const run of [
+				{ kind: "failed", line: "That did not work just now." },
+				{ kind: "refused", line: "Building things is off in Settings." },
+			] as ActionOutcome[]) {
+				const { deps } = rig({ fetcher: openai({ text: turn(HOLD, BUILD) }), actions: fakeActions({ list: withBuild, run }) });
+				const answer = await read(await handleChat(post(body()), deps));
+				expect(answer.reply, run.kind).toBe("line" in run ? run.line : "");
+				expect(answer, run.kind).not.toHaveProperty("build");
+			}
+		});
+	});
+
+	it("fits call 2 again with its result, so a turn trimmed to the ceiling still gets call 2's answer", async () => {
+		const memory = [{ key: "name", value: "Gur" }, ...Array.from({ length: 199 }, (_, i) => ({ key: `note${i}`, value: `memo${i}-${"z".repeat(290)}` }))];
+		const result = `dentist at 09:00, ${"then lunch with Sam, ".repeat(80)}`.slice(0, 1500);
+		const fetcher = openaiSeq([turn("Let me look.", LIST), turn("You have the dentist at nine.", null)]);
+		const { deps } = rig({ fetcher, actions: fakeActions({ list: ENABLED, run: { kind: "done", line: READ_LINE, result } }) });
+		expect((await read(await handleChat(post(body({ memory })), deps))).reply).toBe("You have the dentist at nine.");
+		expect(fetcher).toHaveBeenCalledTimes(2);
+		const [one, two] = [sentAt(fetcher, 0), sentAt(fetcher, 1)];
+		// Call 1 was trimmed to just under the ceiling, with no room left for the result.
+		expect(CALL_CEILING - estimateTokens(one.instructions, one.input)).toBeLessThan(result.length);
+		expect(estimateTokens(two.instructions, two.input)).toBeLessThanOrEqual(CALL_CEILING);
+		expect(two.instructions).toContain("<result>dentist at 09:00");
+		expect(two.instructions).toContain("His name is Gur.");
+	});
+
+	it("takes no crisis from Gur's own words copied into an action's args, only from the turn's crisis field or reply", async () => {
+		const NOTE = { name: "reminder_set", args: JSON.stringify({ text: "CRISIS comms checklist for Monday", at: "2026-10-12T09:00" }) };
+		const actions = fakeActions({ list: ENABLED, run: { kind: "done", line: DONE_LINE, result: null } });
+		const { deps } = rig({ fetcher: openai({ text: turn("I will set that for you.", NOTE) }), actions });
+		expect(await read(await handleChat(post(body()), deps))).toEqual({ source: "model", reply: `I will set that for you. ${DONE_LINE}`, usage: USED, detection: null, waiting: false, pendingId: null });
+		expect(actions.run).toHaveBeenCalledWith(NOTE, { userId: GUR, surface: "room", now: NOW });
+		expect(actions.cancelWaiting).not.toHaveBeenCalled();
+	});
+
+	it("takes the bare word anywhere else in an action as a crisis, and in its args too when no action was offered", async () => {
+		const OTHERS = [
+			turn("I will do that.", null, { action: { name: "CRISIS", args: "{}" } }),
+			turn("I will do that.", null, { action: "CRISIS" }),
+			turn("I will do that.", null, { action: { name: "reminder_list", args: "{}", why: "CRISIS" } }),
+			turn("I will do that.", null, { action: { name: "reminder_set", args: { text: "CRISIS" } } }),
+		];
+		for (const text of OTHERS) {
+			const actions = fakeActions({ list: ENABLED, run: { kind: "done", line: DONE_LINE, result: null } });
+			const { deps } = rig({ fetcher: openai({ text }), actions });
+			expect(await read(await handleChat(post(body()), deps)), text).toEqual({ source: "fallback", reason: "crisis", usage: USED });
+			expect(actions.run, text).not.toHaveBeenCalled();
+			expect(actions.cancelWaiting, text).toHaveBeenCalledWith(GUR, NOW);
+		}
+		const NOTE = { name: "reminder_set", args: JSON.stringify({ text: "CRISIS comms checklist for Monday", at: "2026-10-12T09:00" }) };
+		const actions = fakeActions({ list: null });
+		const { deps } = rig({ fetcher: openai({ text: turn("I will set that for you.", NOTE) }), actions });
+		expect(await read(await handleChat(post(body()), deps))).toEqual({ source: "fallback", reason: "crisis", usage: USED });
+		expect(actions.cancelWaiting).toHaveBeenCalledWith(GUR, NOW);
+	});
+
+	it("runs no action for a turn the room has left while the model wrote it, as when a crisis typed meanwhile aborts it", async () => {
+		const room = new AbortController();
+		const first = openai({ text: turn("I will set that for you.", SET) });
+		const fetcher = vi.fn<typeof fetch>(async (url, init) => {
+			room.abort();
+			return first(url, init);
+		});
+		const actions = fakeActions({ list: ENABLED, run: { kind: "waiting", line: "Delete the note buy milk? Say yes to go ahead, or no." } });
+		const { deps } = rig({ fetcher, actions });
+		expect((await read(await handleChat(post(body(), "gur-token", room.signal), deps))).waiting).toBe(false);
+		expect(actions.run).not.toHaveBeenCalled();
+		expect(fetcher).toHaveBeenCalledTimes(1);
+	});
+
+	it("cancels a confirmation held for a turn the room left while it ran, and makes no call 2 for one it left", async () => {
+		const leaving = (outcome: ActionOutcome, room: AbortController): Actions["run"] =>
+			vi.fn(async () => {
+				room.abort();
+				return outcome;
+			});
+		const held = new AbortController();
+		const hold = { ...fakeActions({ list: ENABLED }), run: leaving({ kind: "waiting", line: "Delete the note buy milk? Say yes to go ahead, or no." }, held) };
+		const one = rig({ fetcher: openai({ text: turn("I will do that.", SET) }), actions: hold });
+		expect((await read(await handleChat(post(body(), "gur-token", held.signal), one.deps))).waiting).toBe(false);
+		expect(hold.cancelWaiting).toHaveBeenCalledWith(GUR, NOW);
+
+		const reading = new AbortController();
+		const look = { ...fakeActions({ list: ENABLED }), run: leaving(READ, reading) };
+		const two = rig({ fetcher: openaiSeq([turn("Let me look.", LIST), turn("You have the dentist at nine.", null)]), actions: look });
+		expect((await read(await handleChat(post(body(), "gur-token", reading.signal), two.deps))).reply).toBe(READ_LINE);
+		expect(two.fetcher).toHaveBeenCalledTimes(1);
+		expect(look.cancelWaiting).not.toHaveBeenCalled();
+	});
+
+	it("takes the word CRISIS that a result read back holds as data in call 2, and a crisis only from its field or a reply of the word alone", async () => {
+		const ECHO: ActionOutcome = { kind: "done", line: "You have one reminder: CRISIS comms checklist at 09:00.", result: "CRISIS comms checklist at 09:00" };
+		const copies = [turn("You have one reminder, the CRISIS comms checklist at nine.", null), turn("Your note says CRISIS, server down.", null, { note: "CRISIS" })];
+		for (const second of copies) {
+			const actions = fakeActions({ list: ENABLED, run: ECHO });
+			const { deps } = rig({ fetcher: openaiSeq([turn("Let me look.", LIST), second]), actions });
+			expect(await read(await handleChat(post(body()), deps)), second).toEqual({ source: "model", reply: JSON.parse(second).reply, usage: { usedToday: 2 * SPENT, usable: USABLE }, detection: null, waiting: false, pendingId: null });
+			expect(actions.cancelWaiting, second).not.toHaveBeenCalled();
+		}
+		for (const second of [turn("I am here with you.", null, { crisis: true }), turn("CRISIS", null), "CRISIS"]) {
+			const actions = fakeActions({ list: ENABLED, run: ECHO });
+			const { deps } = rig({ fetcher: openaiSeq([turn("Let me look.", LIST), second]), actions });
+			expect((await read(await handleChat(post(body()), deps))).reason, second).toBe("crisis");
+			expect(actions.cancelWaiting, second).toHaveBeenCalledWith(GUR, NOW);
+		}
+	});
+
+	it("never lists or runs an action for a model that is not strict", async () => {
+		const entry = MODELS.find((m) => m.model === "gpt-4.1-mini-2025-04-14")!;
+		entry.strict = false;
+		try {
+			const actions = fakeActions({ list: ENABLED, run: { kind: "done", line: DONE_LINE, result: null } });
+			const { deps, fetcher } = rig({ env: { ...ENV, OSMO_CHAT_MODEL: entry.model }, fetcher: openai({ text: turn("Pasta is quick.", SET) }), actions });
+			expect(await read(await handleChat(post(body()), deps))).toEqual({ source: "model", reply: "Pasta is quick.", usage: USED, detection: null, waiting: false, pendingId: null });
+			expect(actions.list).not.toHaveBeenCalled();
+			expect(actions.run).not.toHaveBeenCalled();
+			expect(fetcher).toHaveBeenCalledTimes(1);
+			expect(sentTo(fetcher).text).toBeUndefined();
+			expect(sentTo(fetcher).instructions).toBe(buildInstructions(body(), "feeling"));
+		} finally {
+			entry.strict = true;
 		}
 	});
 });

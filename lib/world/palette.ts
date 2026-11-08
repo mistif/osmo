@@ -1,0 +1,103 @@
+// The village palette (spec 2026-10-09-osmo-village-design.md section 2). Every tile, frame and face is a grid of
+// these letters, one letter per pixel, and "." is transparent. Each ramp below runs from darkest to lightest.
+//
+// The light rule. Light comes from the top left, on every tile and every frame:
+// - the top row and the left column of a lit surface take the ramp's light or highlight step;
+// - the bottom row and the right column take its shadow step, and the ramp's darkest step outlines the bottom and
+//   right edges of each separate object (a stone, a brick, a plank, a shingle row, his body);
+// - the base step fills the rest; at most one small highlight cluster per surface, left of and above its centre;
+// - nothing is lit from the right or from below, and cast shadows fall down and to the right.
+export const PALETTE = {
+	// stone, for the island and the castle: outline, shadow, base, light, highlight
+	a: "#23262f",
+	b: "#3d4250",
+	c: "#5d6475",
+	d: "#868ea0",
+	e: "#b9c0cd",
+	// roof, terracotta: outline, shadow, base, highlight
+	f: "#4a2320",
+	g: "#7c3a2c",
+	h: "#a9533a",
+	i: "#d27a52",
+	// wood: outline, shadow, base, highlight
+	j: "#2e1d14",
+	k: "#55361f",
+	l: "#7d5530",
+	m: "#a8794a",
+	// snow: shadow, base, highlight (p is also the stars)
+	n: "#93a7bd",
+	o: "#d3dee9",
+	p: "#f7fbff",
+	// glass: dark, base, glint
+	q: "#16243a",
+	r: "#2f5683",
+	s: "#86b8e0",
+	// lamp light: warm light, flame, core
+	t: "#ffcf6e",
+	u: "#f08a3c",
+	v: "#fff4cc",
+	// banner cloth, deep teal: shadow, base, highlight
+	w: "#1f4d4a",
+	x: "#2f7a72",
+	y: "#6fbfae",
+	// roots and earth: outline, base, highlight
+	z: "#1c120c",
+	A: "#3e2a1c",
+	B: "#6a4a30",
+	// grass: shadow, base, highlight
+	C: "#234a2a",
+	D: "#3f7a3c",
+	E: "#79b85a",
+	// cloud: shadow, base (its highlight is p)
+	F: "#9aa6bf",
+	G: "#d6dcea",
+	// Osmo: outline and hair, skin, skin shadow, coat base, coat light, coat shadow, shirt and eye whites (Bone),
+	// hair highlight, pupils, boots
+	H: "#1a1726",
+	I: "#f0c7a0",
+	J: "#c9926c",
+	K: "#2c3f66",
+	L: "#4462a0",
+	M: "#1b2744",
+	N: "#f3efe8",
+	O: "#3b3350",
+	P: "#0d0b14",
+	Q: "#8a5a3c",
+	// added in the art pass, for the tiles only: stone mid (between c and d), warm stone base and light, deep snow
+	// shadow, roof glint, wood grain light, cloud mid, snow mid (between n and o)
+	R: "#737b8d",
+	S: "#6a6570",
+	T: "#938c90",
+	U: "#62779c",
+	V: "#eca079",
+	W: "#c8965e",
+	X: "#b6bfd4",
+	Y: "#b3c3d6",
+	// his scarf: at runtime it takes the mood's first aura colour (raster overrides); this is its dev colour
+	Z: "#3aa597",
+	// Added in the polish pass. No letter was free, so these keys are digits: the brick's grout (darker than the stone
+	// outline a), his eye glint, his trousers' base and shadow (apart from his outline H and his coat), and the lit
+	// edge of his coat.
+	"0": "#15171d",
+	"1": "#fffaf0",
+	"2": "#56546a",
+	"3": "#3a3949",
+	"4": "#7d9ad8",
+	// Added for the free-will tiles (spec 2026-10-11 section 4.5). No letter or digit was free, so these keys are other
+	// printable ASCII characters (never space, ".", ",", '"' or "\\"): straw, water, leaves, flowers, cloth, bronze, rope,
+	// greenhouse glass, new timber and dressed stone.
+	"5": "#e8d9a8", "6": "#c9a95c", "7": "#8f7236", "8": "#5c4721", // straw: highlight, light, base, shadow
+	"9": "#2d6e8e", "!": "#3f8fb3", "#": "#7cc3dc", $: "#c8eef5", // water: deep, base, light, glint
+	"%": "#1f5a2a", "&": "#2f7d36", "'": "#5aa845", "(": "#9bd36a", // leaves: deep, base, light, highlight
+	")": "#c23a3a", "*": "#f2d04b", "+": "#e88fb4", // flowers and fruit: red, yellow, pink
+	"-": "#f5f1e6", "/": "#c9b98f", ":": "#b33a2f", ";": "#7a2420", // cloth: cream, cream shadow, red, red shadow
+	"<": "#9c6a2f", "=": "#d8a64a", ">": "#5a3a17", // bronze: base, light, shadow
+	"?": "#cbb27a", "@": "#8c7444", // rope: light, base
+	"[": "#a9d8c8", "]": "#5e9e8c", "^": "#2c5a50", // greenhouse glass: light, base, dark
+	_: "#b8794a", "`": "#e3c08a", // new timber: warm light, highlight
+	"{": "#c7c2b8", "|": "#9d978c", "}": "#6f6a61", "~": "#4a463f", // dressed stone: light, base, shadow, outline
+} as const;
+
+export type Letter = keyof typeof PALETTE;
+export const TRANSPARENT = ".";
+export const SCARF: Letter = "Z";

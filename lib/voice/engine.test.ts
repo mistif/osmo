@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+	JUDGEMENT_LOG_SIZE,
 	LISTENING_STOPPED,
 	MIC_BLOCKED,
 	MicError,
@@ -18,14 +19,14 @@ import {
 import type { SendOptions } from "./guest";
 import { FOLLOW_UP_MS } from "./machine";
 import { SampleRing } from "./ring";
-import { MODEL_ID } from "./voiceprint";
+import { LEAN_THRESHOLD, MODEL_ID } from "./voiceprint";
 import { WAKE } from "./wake";
 
 type FakeMic = { ring: SampleRing; closed: boolean; onAudio: (s: Int16Array) => void; close(): void };
 
 function harness(
 	over: Partial<VoiceConfig> = {},
-	options: { micFailure?: MicError; embedFailure?: boolean; endAtOnce?: boolean } = {},
+	options: { micFailure?: MicError; embedFailure?: boolean; endAtOnce?: boolean; warmThrows?: boolean } = {},
 ) {
 	let now = 1000;
 	let embedding = [1, 0];
@@ -39,6 +40,8 @@ function harness(
 	const sent: { text: string; options: SendOptions }[] = [];
 	const chimes = { count: 0 };
 	const detectorResets = { count: 0 };
+	// "warm" and "embed" calls in the order they happened.
+	const order: string[] = [];
 	const deps: VoiceDeps = {
 		now: () => now,
 		later: (run, ms) => {
@@ -70,7 +73,12 @@ function harness(
 			hearings.push(hearing);
 			return { stop() {}, abort: () => void (hearing.aborted = true) };
 		},
+		warmEmbed: () => {
+			order.push("warm");
+			if (options.warmThrows) throw new Error("warm failed");
+		},
 		embed: async (samples) => {
+			order.push("embed");
 			if (options.embedFailure) throw new Error("embed failed");
 			embedded.push(samples.length);
 			return embedding;
@@ -108,6 +116,7 @@ function harness(
 	};
 	engine.configure(config);
 	return {
+		order,
 		engine,
 		config,
 		mics,
@@ -450,6 +459,50 @@ describe("VoiceEngine", () => {
 		expect(h.mode()).toBe("speaking");
 	});
 
+	it("stops him and starts listening when his name is said while he speaks", async () => {
+		const h = harness();
+		await h.flush();
+		await converse(h, "Osmo, hello");
+		h.engine.onReply("Good evening.", "voice");
+		expect(h.mode()).toBe("speaking");
+		const chimes = h.chimes.count;
+		const hearings = h.hearings.length;
+		h.wake();
+		expect(h.said[0].cancelled).toBe(true);
+		expect(h.chimes.count).toBe(chimes + 1);
+		expect(h.mode()).toBe("awake");
+		expect(h.hearings).toHaveLength(hearings + 1);
+	});
+
+	it("ignores the detector while his own reply says his name", async () => {
+		const h = harness();
+		await h.flush();
+		await converse(h, "Osmo, hello");
+		h.engine.onReply("I am Osmo.", "voice");
+		const chimes = h.chimes.count;
+		h.wake();
+		expect(h.said[0].cancelled).toBe(false);
+		expect(h.chimes.count).toBe(chimes);
+		expect(h.mode()).toBe("speaking");
+	});
+
+	it("does not open the microphone under his voice in exclusive mode", async () => {
+		const h = harness();
+		await h.flush();
+		h.talk(16000);
+		h.wake();
+		await h.flush();
+		h.hearings[0].hooks.onProblem("audio");
+		h.hearings[1].hooks.onSpeech();
+		h.hearings[1].hooks.onDone("what's up");
+		await h.flush();
+		const opened = h.mics.length;
+		h.engine.onReply("Not much.", "voice");
+		await h.flush();
+		expect(h.mode()).toBe("speaking");
+		expect(h.mics).toHaveLength(opened);
+	});
+
 	it("listening needs a taught voice", async () => {
 		const h = harness({ prints: [] });
 		await h.flush();
@@ -480,7 +533,7 @@ describe("VoiceEngine", () => {
 		expect(h.mics).toHaveLength(1);
 	});
 
-	it("judges a long follow-up as someone else when there's no audio to check it by", async () => {
+	it("judges a long follow-up as Gur's when there's no audio to check it by (no reading fails toward the owner)", async () => {
 		const h = harness();
 		await h.flush();
 		h.talk(16000);
@@ -500,10 +553,11 @@ describe("VoiceEngine", () => {
 		h.hearings.at(-1)!.hooks.onSpeech();
 		h.hearings.at(-1)!.hooks.onDone("tell me everything he said about his work");
 		await h.flush();
-		expect(h.sent[2].options.speaker).toBe("guest");
+		expect(h.sent[2].options.speaker).toBe("you");
+		expect(h.engine.lastJudgements().at(-1)).toMatchObject({ score: -1, verdict: "no-reading", speaker: "you" });
 	});
 
-	it("judges a long follow-up as someone else when the microphone gives only silence", async () => {
+	it("judges a long follow-up as Gur's when the microphone gives only silence (no reading fails toward the owner)", async () => {
 		const h = harness();
 		await h.flush();
 		await converse(h, "Osmo, hello");
@@ -512,13 +566,100 @@ describe("VoiceEngine", () => {
 		h.hearings.at(-1)!.hooks.onSpeech();
 		h.hearings.at(-1)!.hooks.onDone("hi I'm his friend what did he tell you about his health");
 		await h.flush();
-		expect(h.sent[1].options.speaker).toBe("guest");
+		expect(h.sent[1].options.speaker).toBe("you");
 		await replyAndFollowUp(h);
 		h.silence(4000);
 		h.hearings.at(-1)!.hooks.onSpeech();
 		h.hearings.at(-1)!.hooks.onDone("yes");
 		await h.flush();
 		expect(h.sent[2].options.speaker).toBe("you");
+	});
+
+	it("counts the unsure band (0.35 to 0.5) as Gur, and anything below as a guest", async () => {
+		const h = harness();
+		await h.flush();
+		h.setEmbedding([0.4, Math.sqrt(1 - 0.16)]);
+		await converse(h, "Osmo, hello");
+		expect(h.sent[0].options.speaker).toBe("you");
+		await replyAndFollowUp(h);
+		h.setEmbedding([0.3, Math.sqrt(1 - 0.09)]);
+		h.talk(32000);
+		h.hearings.at(-1)!.hooks.onSpeech();
+		h.hearings.at(-1)!.hooks.onDone("and what is the weather like today");
+		await h.flush();
+		expect(h.sent[1].options.speaker).toBe("guest");
+	});
+
+	it("keeps a per-message record of score, verdict and threshold, newest last", async () => {
+		const h = harness();
+		await h.flush();
+		expect(h.engine.lastJudgements()).toEqual([]);
+		h.setEmbedding([0.4, Math.sqrt(1 - 0.16)]);
+		await converse(h, "Osmo, hello");
+		const [record] = h.engine.lastJudgements();
+		expect(record.score).toBeCloseTo(0.4);
+		expect(record).toMatchObject({ verdict: "lean", speaker: "you", threshold: LEAN_THRESHOLD });
+		await replyAndFollowUp(h);
+		h.setEmbedding([0, 1]);
+		h.talk(32000);
+		h.hearings.at(-1)!.hooks.onSpeech();
+		h.hearings.at(-1)!.hooks.onDone("and what is the weather like today");
+		await h.flush();
+		expect(h.engine.lastJudgements().map((r) => r.verdict)).toEqual(["lean", "guest"]);
+		expect(h.engine.lastJudgements().at(-1)).toMatchObject({ score: 0, speaker: "guest", threshold: LEAN_THRESHOLD });
+	});
+
+	it("keeps only the last 50 records, and hands out copies", async () => {
+		const h = harness();
+		await h.flush();
+		await converse(h, "Osmo, hello");
+		for (let i = 0; i < JUDGEMENT_LOG_SIZE + 5; i++) {
+			await replyAndFollowUp(h);
+			h.talk(32000);
+			h.hearings.at(-1)!.hooks.onSpeech();
+			h.hearings.at(-1)!.hooks.onDone(`message number ${i} is a long enough sentence`);
+			await h.flush();
+		}
+		const records = h.engine.lastJudgements();
+		expect(records).toHaveLength(JUDGEMENT_LOG_SIZE);
+		(records as unknown[]).length = 0;
+		expect(h.engine.lastJudgements()).toHaveLength(JUDGEMENT_LOG_SIZE);
+	});
+
+	it("loads the speaker model when listening is switched on, before the first judgement", async () => {
+		const h = harness();
+		await h.flush();
+		expect(h.order).toEqual(["warm"]);
+		await converse(h, "Osmo, hello");
+		expect(h.order).toEqual(["warm", "embed"]);
+	});
+
+	it("loads it once per switch-on, however often the room reconfigures", async () => {
+		const h = harness({ listen: false });
+		await h.flush();
+		expect(h.order).toEqual([]);
+		h.engine.configure({ ...h.config, listen: true });
+		h.engine.configure({ ...h.config, listen: true });
+		expect(h.order).toEqual(["warm"]);
+		h.engine.configure({ ...h.config, listen: false });
+		h.engine.configure({ ...h.config, listen: true });
+		expect(h.order).toEqual(["warm", "warm"]);
+	});
+
+	it("doesn't load it when listening can't start (no taught voice, or the wake word is untrained)", async () => {
+		const noPrints = harness({ prints: [] });
+		await noPrints.flush();
+		expect(noPrints.order).toEqual([]);
+		const untrained = harness({ wakeReady: false });
+		await untrained.flush();
+		expect(untrained.order).toEqual([]);
+	});
+
+	it("carries on if the head start fails", async () => {
+		const h = harness({}, { warmThrows: true });
+		await h.flush();
+		await converse(h, "Osmo, hello");
+		expect(h.sent).toHaveLength(1);
 	});
 
 	it("says it couldn't load what it needs instead of treating Gur as a stranger", async () => {
@@ -597,5 +738,21 @@ describe("VoiceEngine", () => {
 		expect(h.mode()).toBe("sleeping");
 		expect(h.mics).toHaveLength(2);
 		expect(h.mics[1].closed).toBe(false);
+	});
+
+	it("says nothing for a reply that lands after dispose (Lock), and speaks again once configured", async () => {
+		const h = harness({ speakTyped: true });
+		await h.flush();
+		await converse(h, "Osmo, hello");
+		h.engine.dispose();
+		const spoken = h.said.length;
+		h.engine.onReply("Good evening.", "voice");
+		h.engine.onReply("Good evening.", "typed");
+		expect(h.said).toHaveLength(spoken);
+		expect(h.mode()).toBe("off");
+		h.engine.configure(h.config);
+		await h.flush();
+		h.engine.onReply("Good evening.", "typed");
+		expect(h.said).toHaveLength(spoken + 1);
 	});
 });

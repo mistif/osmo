@@ -131,6 +131,12 @@ describe("checkBody refuses", () => {
 		}
 	});
 
+	// A guest can neither propose nor confirm an action (spec 4.3, 9.2); any other speaker, or none, is Gur's turn.
+	it("a guest's turn, and still takes Gur's with a speaker or without one", () => {
+		expect(checkBody({ ...valid(), speaker: "guest" })).toEqual({ ok: false });
+		for (const raw of [{ ...valid(), speaker: "you" }, valid()]) expect(checkBody(raw)).toEqual({ ok: true, crisis: false, body: valid() });
+	});
+
 	it("each malformed field", () => {
 		const b = valid();
 		const cases: [string, unknown][] = [
@@ -296,7 +302,7 @@ describe("checkBody's crisis defence", () => {
 	it("drops a history line that gives the crisis cause as Osmo's reason", () => {
 		const history = [
 			{ role: "user", text: "how are you feeling" },
-			{ role: "agent", text: `I'm feeling sad. I believe it's because ${CRISIS_CAUSE}. Thank you for asking.` },
+			{ role: "agent", text: `I am feeling sad. I believe it is because ${CRISIS_CAUSE}. Thank you for asking.` },
 			{ role: "user", text: "ok" },
 		];
 		const checked = checkBody({ ...valid(), history });

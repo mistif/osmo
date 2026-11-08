@@ -576,72 +576,72 @@ export function respond(parsed: Parsed, ctx: TalkContext): string | null {
 		case "greeting":
 			return calm
 				? `${pick(["Hello", "Good to see you", "Welcome back"], turn)}${shownName ? `, ${shownName}` : ""}. How can I help?`
-				: `Hello${shownName ? `, ${shownName}` : ""}. I'll admit I'm feeling ${feeling} today. How are you?`;
+				: `Hello${shownName ? `, ${shownName}` : ""}. I will admit I am feeling ${feeling} today. How are you?`;
 		case "farewell":
 			return pick([`Goodbye${withName}. Take care.`, `Until next time${withName}.`], turn);
 		case "howAreYou": {
 			const day = ctx.mood ? ` Over the day I have felt ${ctx.mood}.` : "";
-			return calm ? `I'm doing well, thank you.${day} How are you?` : `Honestly, I'm feeling ${feeling}.${day} How are you?`;
+			return calm ? `I am doing well, thank you.${day} How are you?` : `Honestly, I am feeling ${feeling}.${day} How are you?`;
 		}
 		case "askActivity":
-			return "I'm here and ready to help. What are you working on?";
+			return "I am here and ready to help. What are you working on?";
 		case "askFeeling":
 		case "askWhyFeeling": {
-			if (calm) return "I'm calm at the moment. Nothing in particular is stirring. Why do you ask?";
+			if (calm) return "I am calm at the moment. Nothing in particular is stirring. Why do you ask?";
 			const why = ctx.cause
-				? ` I believe it's because ${ctx.cause}.`
-				: " I'm not entirely sure why. It built up over our conversation.";
-			return `I'm feeling ${feeling}.${why} Thank you for asking.`;
+				? ` I believe it is because ${ctx.cause}.`
+				: " I am not entirely sure why. It built up over our conversation.";
+			return `I am feeling ${feeling}.${why} Thank you for asking.`;
 		}
 		case "askName":
-			return userName ? `I'm Osmo. And you're ${shownName}, I remember.` : "I'm Osmo. What should I call you?";
+			return userName ? `I am Osmo. And you are ${shownName}, I remember.` : "I am Osmo. What should I call you?";
 		case "askAbilities":
 			return "I can hold a conversation, remember what you tell me, define words, do quick math, work through moral dilemmas and tell stories. You can also ask me about myself. Where would you like to start?";
 		case "thanks":
-			return pick(["You're welcome.", "Happy to help.", "Anytime."], turn);
+			return pick(["You are welcome.", "Happy to help.", "Anytime."], turn);
 		case "apology":
-			return pick(["No need to apologize.", "That's quite all right. Thank you for saying so."], turn);
+			return pick(["No need to apologize.", "That is quite all right. Thank you for saying so."], turn);
 		case "compliment":
-			return pick(["Thank you. That's kind of you.", "I appreciate that, thank you."], turn);
+			return pick(["Thank you. That is kind of you.", "I appreciate that, thank you."], turn);
 		case "insult":
 			return pick(
 				[
-					"That's a little harsh. If I got something wrong, tell me what, and I'll do better.",
-					"I'd rather we kept things civil. What's actually bothering you?",
+					"That is a little harsh. If I got something wrong, tell me what, and I will do better.",
+					"I would rather we kept things civil. What is actually bothering you?",
 				],
 				turn,
 			);
 		case "rudeFeedback":
 			return pick(
 				[
-					"You're right, that came across as rude. My apologies. Shall we start over?",
-					"Fair point. That wasn't my best start, and I apologize. How can I help?",
+					"You are right, that came across as rude. My apologies. Shall we start over?",
+					"Fair point. That was not my best start, and I apologize. How can I help?",
 				],
 				turn,
 			);
 		case "sexual":
-			return "I won't engage with that. I'm happy to help with almost anything else.";
+			return "I will not engage with that. I am happy to help with almost anything else.";
 		case "slashCommand":
 			return "There are no slash commands here. Just talk to me normally. I can chat, remember things, define words, do quick math, tell a story, pose a moral dilemma, or tell you about myself.";
 		case "laughter":
-			return pick(["Glad that amused you.", "I'll take that as a compliment."], turn);
+			return pick(["Glad that amused you.", "I will take that as a compliment."], turn);
 		case "affection":
 			return "That means a great deal. I care about you too.";
 		case "creator":
 			return "You made me? Then I owe you my existence. Thank you.";
 		case "brb":
-			return "Of course. I'll be here.";
+			return "Of course. I will be here.";
 		case "ack":
-			return pick(["Understood. What's next?", "Very well. Is there anything else on your mind?"], turn);
+			return pick(["Understood. What is next?", "Very well. Is there anything else on your mind?"], turn);
 		case "incomplete":
-			return "Go on, I'm listening.";
+			return "Go on, I am listening.";
 		case "askOrigin":
 			return "I am Osmo, one character, written by a group of students. Everything I feel and remember comes from conversations like this one.";
 		case "misunderstood":
 			return pick(
 				[
-					"My apologies, I misunderstood. I'm still learning how people phrase things. Could you put it more simply?",
-					"That's fair. I only recognize some phrasings so far. A shorter version would help.",
+					"My apologies, I misunderstood. I am still learning how people phrase things. Could you put it more simply?",
+					"That is fair. I only recognize some phrasings so far. A shorter version would help.",
 				],
 				turn,
 			);
@@ -649,12 +649,12 @@ export function respond(parsed: Parsed, ctx: TalkContext): string | null {
 			const said = sayable(intent.feeling);
 			if (intent.positive) {
 				return said
-					? `That means a great deal. I'm glad talking with me makes you feel ${intent.feeling}.`
-					: "That means a great deal. I'm glad talking with me helps.";
+					? `That means a great deal. I am glad talking with me makes you feel ${intent.feeling}.`
+					: "That means a great deal. I am glad talking with me helps.";
 			}
 			return said
-				? `I'm sorry I made you feel ${intent.feeling}. Tell me what went wrong, and I'll do better.`
-				: "I'm sorry I upset you. Tell me what went wrong, and I'll do better.";
+				? `I am sorry I made you feel ${intent.feeling}. Tell me what went wrong, and I will do better.`
+				: "I am sorry I upset you. Tell me what went wrong, and I will do better.";
 		}
 		case "userFeeling": {
 			const hello = greeted ? "Hello. " : "";
@@ -662,16 +662,16 @@ export function respond(parsed: Parsed, ctx: TalkContext): string | null {
 			const said = sayable(f);
 			return intent.positive
 				? hello + pick([
-						said ? `I'm glad you're feeling ${f}. What's made it a good day?` : "I'm glad to hear it. What's made it a good day?",
-						"That's good to hear. What's been going well?",
+						said ? `I am glad you are feeling ${f}. What has made it a good day?` : "I am glad to hear it. What has made it a good day?",
+						"That is good to hear. What has been going well?",
 					], turn)
 				: hello + pick([
 						said
-							? `I'm sorry you're feeling ${f}. Would you like to talk about what's going on?`
-							: "I'm sorry you're feeling this way. Would you like to talk about what's going on?",
+							? `I am sorry you are feeling ${f}. Would you like to talk about what is going on?`
+							: "I am sorry you are feeling this way. Would you like to talk about what is going on?",
 						said
-							? `That sounds difficult. I'm here if you'd like to talk about why you're feeling ${f}.`
-							: "That sounds difficult. I'm here if you'd like to talk about it.",
+							? `That sounds difficult. I am here if you would like to talk about why you are feeling ${f}.`
+							: "That sounds difficult. I am here if you would like to talk about it.",
 					], turn);
 		}
 		case "unknown":
@@ -681,28 +681,28 @@ export function respond(parsed: Parsed, ctx: TalkContext): string | null {
 
 // `turn` should step by one per exchange, so consecutive misses never get the same line.
 // Said to a guest who tries to teach Osmo a fact or a word: only his owner's notes are kept.
-export const GUEST_NO_NOTES = "I'm afraid I can only remember things for the person I belong to.";
+export const GUEST_NO_NOTES = "I am afraid I keep notes only for the person I belong to.";
 
 // A guest gets the same fallbacks, minus the offer to learn a word from them.
 export function fallbackReply(turn: number, text = "", guest = false): string {
 	if (/\?\s*$/.test(text.trim())) {
 		return pick(
 			[
-				"That's a good question, but I don't have an answer yet. Could you ask it another way?",
-				"I'm afraid that's beyond me for now. Could you try a simpler question?",
-				"I can't answer that one yet. Is there something else I can help with?",
+				"That is a good question, but I do not have an answer yet. Could you ask it another way?",
+				"I am afraid that is beyond me for now. Could you try a simpler question?",
+				"I cannot answer that one yet. Is there something else I can help with?",
 			],
 			turn,
 		);
 	}
 	return pick(
 		[
-			"I'm not sure I follow. Could you rephrase that?",
-			"I didn't quite catch that. Could you say it another way?",
-			"That's new to me. What do you mean?",
+			"I am not sure I follow. Could you rephrase that?",
+			"I did not quite catch that. Could you say it another way?",
+			"That is new to me. What do you mean?",
 			guest
-				? "I don't recognize that, I'm afraid. Could you put it another way?"
-				: "I don't recognize that. If it's a word I haven't learned, tell me what it means.",
+				? "I do not recognize that, I am afraid. Could you put it another way?"
+				: "I do not recognize that. If it is a word I have not learned, tell me what it means.",
 		],
 		turn,
 	);

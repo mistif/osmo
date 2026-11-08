@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import type { VoiceControls } from "./use-voice";
+import { showChatNote } from "@/lib/room/chatbox";
+import { WORLD } from "@/lib/shell/flag";
 import { VoiceTeaching } from "./voice-teaching";
 import styles from "./panels.module.css";
 
-const UNREACHABLE = "I can't reach my memory right now. Try again in a moment.";
-const FORGET_FAILED = "Couldn't save that. Try again.";
+const UNREACHABLE = "I cannot reach my memory right now. Try again in a moment.";
+const FORGET_FAILED = "I could not save that. Try again.";
 
 function Switch({ label, on, onChange, disabled }: { label: string; on: boolean; onChange(on: boolean): void; disabled?: boolean }) {
 	return (
@@ -22,7 +24,7 @@ function Switch({ label, on, onChange, disabled }: { label: string; on: boolean;
 function voiceLine(name: string | null | undefined, natural: boolean): string {
 	if (natural) return "I speak with my natural voice.";
 	if (name === undefined) return "Checking my voice…";
-	if (name === null) return "This device has no English voice, so I'll only write.";
+	if (name === null) return "This device has no English voice, so I will only write.";
 	return `I speak with ${name} on this device.`;
 }
 
@@ -49,7 +51,7 @@ export function VoiceSettings({ voice }: { voice: VoiceControls }) {
 			<Switch label="Natural voice" on={voice.naturalVoice} onChange={voice.setNaturalVoice} />
 			<p className={styles.note}>
 				{voice.naturalVoice
-					? "The words I say are sent to OpenAI to be spoken. What you say to me isn't, and neither is your voice."
+					? "The words I say are sent to OpenAI to be spoken. What you say to me is not sent, and neither is your voice."
 					: "A warmer, more human voice. It sends the words I say to OpenAI to be spoken; your own words and your voice stay on this device."}
 			</p>
 
@@ -58,14 +60,9 @@ export function VoiceSettings({ voice }: { voice: VoiceControls }) {
 			{voice.listenSupported && voice.wakeReady === false && <p className={styles.note}>His wake word isn&apos;t trained yet.</p>}
 
 			<Switch label="Show the conversation as text" on={voice.showChat} onChange={voice.setShowChat} />
-			<p className={styles.note}>
-				{voice.showChat
-					? "You can type to me, and everything we say stays on screen."
-					: voice.listenSupported
-						? "The room is just me and the mic. Turn this on to type instead."
-						: "This browser can't listen, so the conversation stays on screen here."}
-			</p>
-			{voice.showChat && <Switch label="Speak typed replies too" on={voice.speakTyped} onChange={voice.setSpeakTyped} disabled={voice.voiceName === null} />}
+			<p className={styles.note}>{showChatNote({ world: WORLD, showChat: voice.showChat, listenSupported: voice.listenSupported })}</p>
+			{/* With the village on the owner can always type, so this switch is always there. */}
+			{(WORLD || voice.showChat) && <Switch label="Speak typed replies too" on={voice.speakTyped} onChange={voice.setSpeakTyped} disabled={voice.voiceName === null} />}
 			<Switch label="Fade my words after I say them" on={voice.fadeSaid} onChange={voice.setFadeSaid} />
 
 			{voice.teaching ? (
